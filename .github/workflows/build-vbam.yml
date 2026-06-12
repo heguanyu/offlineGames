@@ -1,0 +1,89 @@
+name: Build vbam core
+
+# Builds the VBA-M (vbam) libretro core to WebAssembly using EmulatorJS's
+# build pipeline, on a GitHub-hosted Linux runner. Results + full logs are
+# committed to the `core-build` branch for retrieval (no gh CLI needed).
+# Re-trigger by pushing a change to this file, or via the Actions tab.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-vbam.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-vbam:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Heartbeat — signal start on core-build branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B core-build
+          rm -rf core-build-artifacts
+          mkdir -p core-build-artifacts
+          echo "STARTED $(date -u) run=${GITHUB_RUN_ID}" > core-build-artifacts/STATUS.txt
+          git add -A core-build-artifacts
+          git commit -m "vbam build: started [skip ci]"
+          git push -f origin core-build
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full binutils-mips-linux-gnu build-essential \
+            pkgconf python3 git zip libsdl2-dev jq wget curl patch cmake
+
+      - name: Install Emscripten 3.1.74
+        run: |
+          cd "$HOME"
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install 3.1.74
+          ./emsdk activate 3.1.74
+
+      - name: Build vbam
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          source "$HOME/emsdk/emsdk_env.sh"
+          cd "$HOME"
+          git clone --depth 1 https://github.com/EmulatorJS/build.git ejs-build
+          cd ejs-build
+          # Add a vbam core entry (mirrors mgba's; vbam's libretro Makefile
+          # lives in src/libretro and has an emscripten platform branch).
+          jq '. += [{"name":"vbam","extensions":["gb","gbc","gba"],"makeoptions":{"buildpath":"src/libretro","makescript":"Makefile","arguments":[]},"options":{},"save":"srm","license":"doc/License.txt","repo":"https://github.com/libretro/vbam-libretro"}]' cores.json > cores.tmp && mv cores.tmp cores.json
+          echo "=== vbam cores.json entry ==="
+          jq '.[] | select(.name=="vbam")' cores.json
+          echo "=== starting build ==="
+          bash build.sh --core=vbam 2>&1 | tee "$HOME/vbam-build.log"
+          echo "BUILD_EXIT=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+          exit 0
+
+      - name: Collect results to core-build branch
+        if: always()
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p core-build-artifacts/output
+          cp -r "$HOME"/ejs-build/output/* core-build-artifacts/output/ 2>/dev/null || true
+          cp "$HOME"/vbam-build.log core-build-artifacts/ 2>/dev/null || true
+          {
+            echo "FINISHED $(date -u) run=${GITHUB_RUN_ID}"
+            echo "build exit code: ${BUILD_EXIT:-unknown}"
+            echo ""
+            echo "=== output files ==="
+            (cd core-build-artifacts && find output -type f 2>/dev/null | sort) || echo "(none)"
+            echo ""
+            echo "=== last 80 log lines ==="
+            tail -80 "$HOME/vbam-build.log" 2>/dev/null || echo "(no log)"
+          } > core-build-artifacts/STATUS.txt
+          git add -A core-build-artifacts
+          git commit -m "vbam build: results (exit ${BUILD_EXIT:-?}) [skip ci]" || echo "nothing to commit"
+          git push -f origin core-build
