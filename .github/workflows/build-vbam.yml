@@ -61,8 +61,19 @@ jobs:
           # NOT the older/divergent libretro/vbam-libretro fork. Its libretro
           # Makefile is also at src/libretro with an emscripten branch.
           jq '. += [{"name":"vbam","extensions":["gb","gbc","gba"],"makeoptions":{"buildpath":"src/libretro","makescript":"Makefile","arguments":[]},"options":{},"save":"srm","license":"doc/License.txt","repo":"https://github.com/visualboyadvance-m/visualboyadvance-m"}]' cores.json > cores.tmp && mv cores.tmp cores.json
-          echo "=== building vbam from visualboyadvance-m ==="
+          echo "=== build 1: clone + build vbam (unpatched) ==="
           bash build.sh --core=vbam 2>&1 | tee "$HOME/vbam-build.log"
+          # Force 64K flash. The Emerald 386 bootleg declares FLASH1M_ (128K),
+          # so auto-detect picks 128K and the in-game save fails — but it saves
+          # correctly as 64K (matches the user's working VBA-M Flash Size=64K).
+          # Patch the FLASH1M branch of flashDetectSaveType to use 64K.
+          FLASH="compile/RetroArch/emulatorjs/vbam/src/core/gba/gbaFlash.cpp"
+          echo "=== patching flash size 0x20000 -> 0x10000 in $FLASH ===" | tee -a "$HOME/vbam-build.log"
+          grep -n "flashSize = 0x20000" "$FLASH" | tee -a "$HOME/vbam-build.log" || echo "PATTERN NOT FOUND" | tee -a "$HOME/vbam-build.log"
+          sed -i 's/flashSize = 0x20000;/flashSize = 0x10000;/' "$FLASH"
+          grep -n "flashSize = 0x10000" "$FLASH" | tee -a "$HOME/vbam-build.log"
+          echo "=== build 2: rebuild vbam with forced-64K patch ==="
+          bash build.sh --core=vbam 2>&1 | tee -a "$HOME/vbam-build.log"
           echo "BUILD_EXIT=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
           exit 0
 
