@@ -67,11 +67,15 @@ jobs:
           # so auto-detect picks 128K and the in-game save fails — but it saves
           # correctly as 64K (matches the user's working VBA-M Flash Size=64K).
           # Patch the FLASH1M branch of flashDetectSaveType to use 64K.
-          FLASH="compile/RetroArch/emulatorjs/vbam/src/core/gba/gbaFlash.cpp"
-          echo "=== patching flash size 0x20000 -> 0x10000 in $FLASH ===" | tee -a "$HOME/vbam-build.log"
-          grep -n "flashSize = 0x20000" "$FLASH" | tee -a "$HOME/vbam-build.log" || echo "PATTERN NOT FOUND" | tee -a "$HOME/vbam-build.log"
-          sed -i 's/flashSize = 0x20000;/flashSize = 0x10000;/' "$FLASH"
-          grep -n "flashSize = 0x10000" "$FLASH" | tee -a "$HOME/vbam-build.log"
+          FLASH=$(find "$HOME/ejs-build/compile" -name gbaFlash.cpp 2>/dev/null | head -1)
+          echo "=== gbaFlash.cpp located at: $FLASH ===" | tee -a "$HOME/vbam-build.log"
+          if [ -n "$FLASH" ]; then
+            echo "before:" | tee -a "$HOME/vbam-build.log"; grep -n "flashSize = 0x20000" "$FLASH" | tee -a "$HOME/vbam-build.log"
+            sed -i 's/flashSize = 0x20000;/flashSize = 0x10000;/' "$FLASH"
+            echo "after:" | tee -a "$HOME/vbam-build.log"; grep -n "flashSize = 0x10000" "$FLASH" | tee -a "$HOME/vbam-build.log"
+          else
+            echo "!!! gbaFlash.cpp NOT FOUND under compile/ !!!" | tee -a "$HOME/vbam-build.log"
+          fi
           echo "=== build 2: rebuild vbam with forced-64K patch ==="
           bash build.sh --core=vbam 2>&1 | tee -a "$HOME/vbam-build.log"
           echo "BUILD_EXIT=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
