@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.0.13';
+const CACHE = 'offline-games-0.0.14';
 
 const ASSETS = [
   './',
@@ -30,8 +30,11 @@ const ASSETS = [
   './emulatorjs/data/cores/melonds-wasm.data',
   './emulatorjs/data/cores/melonds-thread-legacy-wasm.data',
   './emulatorjs/data/cores/melonds-thread-wasm.data',
+  './emulatorjs/data/cores/vbam-wasm.data',
+  './emulatorjs/data/cores/vbam-legacy-wasm.data',
   './emulatorjs/data/cores/reports/mgba.json',
   './emulatorjs/data/cores/reports/melonds.json',
+  './emulatorjs/data/cores/reports/vbam.json',
   './emulatorjs/data/localization/af-FR.json',
   './emulatorjs/data/localization/ar-AR.json',
   './emulatorjs/data/localization/ben-BEN.json',

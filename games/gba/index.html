@@ -52,6 +52,10 @@
   .rom:active { background: #0f3460; }
   .rom .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rom .size { color: #8a8aa3; font-size: 0.8rem; margin: 0 12px; }
+  .rom .core-sel {
+    background: #0f3460; color: #eaeaea; border: 1px solid #2c3a63;
+    border-radius: 6px; padding: 4px 6px; font-size: 0.8rem; margin-right: 10px;
+  }
   .rom .del {
     background: none; border: none; color: #e94560;
     font-size: 1.1rem; cursor: pointer; padding: 4px 8px;
@@ -72,7 +76,9 @@
     <p class="hint">
       Add .gba or .zip ROM files once — they are stored in the browser and playable
       offline. In game: RT = quick save, LT = quick load, hold R3 = fast
-      forward (rebind in the settings gear &rarr; Control Settings).
+      forward (rebind in the settings gear &rarr; Control Settings). Core defaults
+      to mGBA; switch a ROM to VBA-M if its in-game saving fails under mGBA
+      (e.g. some Chinese bootleg hacks).
     </p>
     <label class="add">+ Add ROMs
       <input type="file" id="rom-input" multiple>
@@ -133,6 +139,22 @@
         const size = document.createElement('span');
         size.className = 'size';
         size.textContent = fmtSize(rom.data.size != null ? rom.data.size : rom.data.byteLength);
+        const coreSel = document.createElement('select');
+        coreSel.className = 'core-sel';
+        coreSel.title = 'Emulator core';
+        for (const [val, label] of [['mgba', 'mGBA'], ['vbam', 'VBA-M']]) {
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.textContent = label;
+          if ((rom.core || 'mgba') === val) opt.selected = true;
+          coreSel.appendChild(opt);
+        }
+        coreSel.onclick = (e) => e.stopPropagation();
+        coreSel.onchange = async (e) => {
+          e.stopPropagation();
+          rom.core = coreSel.value;
+          await tx(db, 'readwrite', (s) => s.put(rom));
+        };
         const del = document.createElement('button');
         del.className = 'del';
         del.textContent = '✕';
@@ -141,7 +163,7 @@
           await tx(db, 'readwrite', (s) => s.delete(rom.name));
           refreshList();
         };
-        row.append(name, size, del);
+        row.append(name, size, coreSel, del);
         row.onclick = () => play(rom);
         listEl.appendChild(row);
       }
@@ -181,7 +203,12 @@
       document.getElementById('game-wrap').hidden = false;
 
       window.EJS_player = '#game';
-      window.EJS_core = 'gba';
+      // mGBA by default (fast, full fast-forward). VBA-M (vbam) is selectable
+      // per-ROM for bootleg hacks whose in-game saving only works under VBA.
+      window.EJS_core = rom.core === 'vbam' ? 'vbam' : 'gba';
+      // Force the GBA control scheme so the on-screen touch gamepad and the
+      // physical controller map identically regardless of which core is used.
+      window.EJS_controlScheme = 'gba';
       window.EJS_pathtodata = '../../emulatorjs/data/';
       window.EJS_DEBUG_XX = true; // self-hosting unminified src files
       const romBlob = rom.data instanceof Blob ? rom.data : new Blob([rom.data]);
