@@ -1,0 +1,614 @@
+Cloning into 'RetroArch'...
+Updating files:  91% (10225/11154)Updating files:  92% (10262/11154)Updating files:  93% (10374/11154)Updating files:  94% (10485/11154)Updating files:  95% (10597/11154)Updating files:  96% (10708/11154)Updating files:  97% (10820/11154)Updating files:  98% (10931/11154)Updating files:  99% (11043/11154)Updating files: 100% (11154/11154)Updating files: 100% (11154/11154), done.
+Already up to date.
+Already up to date.
+Core: vbam
+Repo: https://github.com/visualboyadvance-m/visualboyadvance-m
+Branch: null
+License: doc/License.txt
+Build path: src/libretro
+Make script: Makefile
+Arguments: INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+Initial memory: INITIAL_HEAP=268435456
+Options: {}
+Require threads: false
+Requires WebGL2: false
+Custom: null
+Build command: null
+Build RetroArch command: null
+---------------------------------------
+Building core vbam
+Working dir /home/runner/ejs-build/compile
+Cloning into 'vbam'...
+Submodule 'third_party/googletest' (https://github.com/google/googletest.git) registered for path 'third_party/googletest'
+Submodule 'win32-deps' (https://github.com/visualboyadvance-m/win32-deps.git) registered for path 'win32-deps'
+Cloning into '/home/runner/ejs-build/compile/vbam/third_party/googletest'...
+Cloning into '/home/runner/ejs-build/compile/vbam/win32-deps'...
+make: make -f Makefile clean
+make: make -j4 -f Makefile platform=emscripten INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+shared:INFO: (Emscripten: Running sanity checks)
+make: make -f Makefile clean
+make: make -j4 -f Makefile platform=emscripten EMULATORJS_LEGACY=1 INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+make: make -f Makefile clean
+make: make -j4 -f Makefile platform=emscripten EMULATORJS_THREADS=1 INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+make: make -f Makefile clean
+make: make -j4 -f Makefile platform=emscripten EMULATORJS_THREADS=1 EMULATORJS_LEGACY=1 INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+License file: vbam/doc/License.txt
+Building wasm's for core vbam
+make: ./build-emulatorjs.sh --clean
+ports:INFO: retrieving port: zlib from https://github.com/madler/zlib/archive/refs/tags/v1.2.13.tar.gz
+ports:INFO: unpacking port: zlib
+cache:INFO: generating port: sysroot/lib/wasm32-emscripten/libz.a... (this will be cached in "/home/runner/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/libz.a" for subsequent builds)
+system_libs:INFO: compiled 15 inputs in 1.13s
+cache:INFO:  - ok
+retroarch.c:6238:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 6238 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+runloop.c:8593:12: warning: address of stack memory associated with local variable 'rv' returned [-Wreturn-stack-address]
+ 8593 |     return rv;
+      |            ^~
+1 warning generated.
+1 warning generated.
+tasks/task_save.c:1846:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1846 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1852:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1852 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1858:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1858 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1861:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1861 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+4 warnings generated.
+input/drivers/emulatorjs_input.c:574:13: warning: unused function 'rwebinput_key_pressed' [-Wunused-function]
+  574 | static bool rwebinput_key_pressed(rwebinput_input_t *rwebinput, int key)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+gfx/gfx_widgets.c:1138:13: warning: unused function 'gfx_widgets_draw_task_msg' [-Wunused-function]
+ 1138 | static void gfx_widgets_draw_task_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+gfx/gfx_widgets.c:1371:13: warning: unused function 'gfx_widgets_draw_regular_msg' [-Wunused-function]
+ 1371 | static void gfx_widgets_draw_regular_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+libretro-common/formats/libchdr/libchdr_chd.c:663:20: warning: unused function 'map_assemble' [-Wunused-function]
+  663 | static INLINE void map_assemble(uint8_t *base, map_entry *entry)
+      |                    ^~~~~~~~~~~~
+1 warning generated.
+mv: cannot stat 'libretro_emscripten.bc': No such file or directory
+cache:INFO: generating system asset: symbol_lists/0331d67329f0bbaf41c2fde2ed95721b3526d08a.json... (this will be cached in "/home/runner/emsdk/upstream/emscripten/cache/symbol_lists/0331d67329f0bbaf41c2fde2ed95721b3526d08a.json" for subsequent builds)
+cache:INFO:  - ok
+make: ./build-emulatorjs.sh --clean --legacy
+retroarch.c:6238:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 6238 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+runloop.c:8593:12: warning: address of stack memory associated with local variable 'rv' returned [-Wreturn-stack-address]
+ 8593 |     return rv;
+      |            ^~
+1 warning generated.
+1 warning generated.
+tasks/task_save.c:1846:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1846 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1852:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1852 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1858:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1858 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1861:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1861 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+4 warnings generated.
+input/drivers/emulatorjs_input.c:574:13: warning: unused function 'rwebinput_key_pressed' [-Wunused-function]
+  574 | static bool rwebinput_key_pressed(rwebinput_input_t *rwebinput, int key)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+gfx/gfx_widgets.c:1138:13: warning: unused function 'gfx_widgets_draw_task_msg' [-Wunused-function]
+ 1138 | static void gfx_widgets_draw_task_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+gfx/gfx_widgets.c:1371:13: warning: unused function 'gfx_widgets_draw_regular_msg' [-Wunused-function]
+ 1371 | static void gfx_widgets_draw_regular_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+libretro-common/formats/libchdr/libchdr_chd.c:663:20: warning: unused function 'map_assemble' [-Wunused-function]
+  663 | static INLINE void map_assemble(uint8_t *base, map_entry *entry)
+      |                    ^~~~~~~~~~~~
+1 warning generated.
+mv: cannot stat 'libretro_emscripten.bc': No such file or directory
+cache:INFO: generating system asset: symbol_lists/22acd6af12732821eeeb061592e0cab1e1e9c999.json... (this will be cached in "/home/runner/emsdk/upstream/emscripten/cache/symbol_lists/22acd6af12732821eeeb061592e0cab1e1e9c999.json" for subsequent builds)
+cache:INFO:  - ok
+make: ./build-emulatorjs.sh --clean --threads
+retroarch.c:6238:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 6238 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+runloop.c:8593:12: warning: address of stack memory associated with local variable 'rv' returned [-Wreturn-stack-address]
+ 8593 |     return rv;
+      |            ^~
+1 warning generated.
+1 warning generated.
+tasks/task_save.c:1846:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1846 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1852:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1852 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1858:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1858 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1861:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1861 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+4 warnings generated.
+input/drivers/emulatorjs_input.c:574:13: warning: unused function 'rwebinput_key_pressed' [-Wunused-function]
+  574 | static bool rwebinput_key_pressed(rwebinput_input_t *rwebinput, int key)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+gfx/gfx_widgets.c:1138:13: warning: unused function 'gfx_widgets_draw_task_msg' [-Wunused-function]
+ 1138 | static void gfx_widgets_draw_task_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+gfx/gfx_widgets.c:1371:13: warning: unused function 'gfx_widgets_draw_regular_msg' [-Wunused-function]
+ 1371 | static void gfx_widgets_draw_regular_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+libretro-common/formats/libchdr/libchdr_chd.c:663:20: warning: unused function 'map_assemble' [-Wunused-function]
+  663 | static INLINE void map_assemble(uint8_t *base, map_entry *entry)
+      |                    ^~~~~~~~~~~~
+1 warning generated.
+mv: cannot stat 'libretro_emscripten.bc': No such file or directory
+emcc: warning: -pthread + ALLOW_MEMORY_GROWTH may run non-wasm code slowly, see https://github.com/WebAssembly/design/issues/1271 [-Wpthreads-mem-growth]
+cache:INFO: generating system asset: symbol_lists/bd44c4439358299698b2f0ed7309adc912fe8d6e.json... (this will be cached in "/home/runner/emsdk/upstream/emscripten/cache/symbol_lists/bd44c4439358299698b2f0ed7309adc912fe8d6e.json" for subsequent builds)
+cache:INFO:  - ok
+make: ./build-emulatorjs.sh --clean --threads --legacy
+retroarch.c:6238:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 6238 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+runloop.c:8593:12: warning: address of stack memory associated with local variable 'rv' returned [-Wreturn-stack-address]
+ 8593 |     return rv;
+      |            ^~
+1 warning generated.
+1 warning generated.
+tasks/task_save.c:1846:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1846 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1852:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1852 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1858:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1858 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1861:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1861 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+4 warnings generated.
+input/drivers/emulatorjs_input.c:574:13: warning: unused function 'rwebinput_key_pressed' [-Wunused-function]
+  574 | static bool rwebinput_key_pressed(rwebinput_input_t *rwebinput, int key)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+gfx/gfx_widgets.c:1138:13: warning: unused function 'gfx_widgets_draw_task_msg' [-Wunused-function]
+ 1138 | static void gfx_widgets_draw_task_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+gfx/gfx_widgets.c:1371:13: warning: unused function 'gfx_widgets_draw_regular_msg' [-Wunused-function]
+ 1371 | static void gfx_widgets_draw_regular_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+libretro-common/formats/libchdr/libchdr_chd.c:663:20: warning: unused function 'map_assemble' [-Wunused-function]
+  663 | static INLINE void map_assemble(uint8_t *base, map_entry *entry)
+      |                    ^~~~~~~~~~~~
+1 warning generated.
+mv: cannot stat 'libretro_emscripten.bc': No such file or directory
+emcc: warning: -pthread + ALLOW_MEMORY_GROWTH may run non-wasm code slowly, see https://github.com/WebAssembly/design/issues/1271 [-Wpthreads-mem-growth]
+cache:INFO: generating system asset: symbol_lists/6c2eff66a20ddcd1f21657e0992342465e128367.json... (this will be cached in "/home/runner/emsdk/upstream/emscripten/cache/symbol_lists/6c2eff66a20ddcd1f21657e0992342465e128367.json" for subsequent builds)
+cache:INFO:  - ok
+Packing core information for vbam
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-wasm.data
+Type = 7z
+Physical Size = 796945
+Headers Size = 200
+Method = LZMA2:22
+Solid = +
+Blocks = 1
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-wasm.data
+
+Keep old data in archive: 2 files, 3506798 bytes (3425 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 797879 bytes (780 KiB)
+Everything is Ok
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-legacy-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-legacy-wasm.data
+Type = 7z
+Physical Size = 797799
+Headers Size = 200
+Method = LZMA2:22
+Solid = +
+Blocks = 1
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-legacy-wasm.data
+
+Keep old data in archive: 2 files, 3508901 bytes (3427 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 798733 bytes (781 KiB)
+Everything is Ok
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-thread-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-thread-wasm.data
+Type = 7z
+Physical Size = 814713
+Headers Size = 199
+Method = LZMA2:22
+Solid = +
+Blocks = 1
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-thread-wasm.data
+
+Keep old data in archive: 2 files, 3602028 bytes (3518 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 815648 bytes (797 KiB)
+Everything is Ok
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-thread-legacy-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-thread-legacy-wasm.data
+Type = 7z
+Physical Size = 813647
+Headers Size = 200
+Method = LZMA2:22
+Solid = +
+Blocks = 1
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-thread-legacy-wasm.data
+
+Keep old data in archive: 2 files, 3598851 bytes (3515 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 814582 bytes (796 KiB)
+Everything is Ok
+  adding: vbam-thread-legacy-wasm.data (deflated 0%)
+  adding: vbam-thread-wasm.data (deflated 0%)
+  adding: vbam-wasm.data (deflated 0%)
+  adding: vbam-legacy-wasm.data (deflated 0%)
+Not deleting build path
+=== libretro.cpp located at: /home/runner/ejs-build/compile/vbam/src/libretro/libretro.cpp ===
+before:
+954:            saveSize = SIZE_FLASH1M;
+after:
+931:                saveSize = SIZE_FLASH512;
+954:            saveSize = SIZE_FLASH512;
+963:            saveSize = SIZE_FLASH512;
+Already up to date.
+Already up to date.
+Core: vbam
+Repo: https://github.com/visualboyadvance-m/visualboyadvance-m
+Branch: null
+License: doc/License.txt
+Build path: src/libretro
+Make script: Makefile
+Arguments: INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+Initial memory: INITIAL_HEAP=268435456
+Options: {}
+Require threads: false
+Requires WebGL2: false
+Custom: null
+Build command: null
+Build RetroArch command: null
+---------------------------------------
+Building core vbam
+Working dir /home/runner/ejs-build/compile
+make: make -f Makefile clean
+make: make -j4 -f Makefile platform=emscripten INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+make: make -f Makefile clean
+make: make -j4 -f Makefile platform=emscripten EMULATORJS_LEGACY=1 INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+make: make -f Makefile clean
+make: make -j4 -f Makefile platform=emscripten EMULATORJS_THREADS=1 INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+make: make -f Makefile clean
+make: make -j4 -f Makefile platform=emscripten EMULATORJS_THREADS=1 EMULATORJS_LEGACY=1 INITIAL_HEAP=268435456 AUTO_MEMORY_GROWTH=1
+License file: vbam/doc/License.txt
+Building wasm's for core vbam
+make: ./build-emulatorjs.sh --clean
+retroarch.c:6238:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 6238 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+runloop.c:8593:12: warning: address of stack memory associated with local variable 'rv' returned [-Wreturn-stack-address]
+ 8593 |     return rv;
+      |            ^~
+1 warning generated.
+1 warning generated.
+tasks/task_save.c:1846:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1846 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1852:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1852 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1858:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1858 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1861:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1861 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+4 warnings generated.
+input/drivers/emulatorjs_input.c:574:13: warning: unused function 'rwebinput_key_pressed' [-Wunused-function]
+  574 | static bool rwebinput_key_pressed(rwebinput_input_t *rwebinput, int key)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+gfx/gfx_widgets.c:1138:13: warning: unused function 'gfx_widgets_draw_task_msg' [-Wunused-function]
+ 1138 | static void gfx_widgets_draw_task_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+gfx/gfx_widgets.c:1371:13: warning: unused function 'gfx_widgets_draw_regular_msg' [-Wunused-function]
+ 1371 | static void gfx_widgets_draw_regular_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+libretro-common/formats/libchdr/libchdr_chd.c:663:20: warning: unused function 'map_assemble' [-Wunused-function]
+  663 | static INLINE void map_assemble(uint8_t *base, map_entry *entry)
+      |                    ^~~~~~~~~~~~
+1 warning generated.
+mv: cannot stat 'libretro_emscripten.bc': No such file or directory
+make: ./build-emulatorjs.sh --clean --legacy
+retroarch.c:6238:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 6238 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+runloop.c:8593:12: warning: address of stack memory associated with local variable 'rv' returned [-Wreturn-stack-address]
+ 8593 |     return rv;
+      |            ^~
+1 warning generated.
+1 warning generated.
+tasks/task_save.c:1846:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1846 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1852:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1852 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1858:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1858 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1861:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1861 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+4 warnings generated.
+input/drivers/emulatorjs_input.c:574:13: warning: unused function 'rwebinput_key_pressed' [-Wunused-function]
+  574 | static bool rwebinput_key_pressed(rwebinput_input_t *rwebinput, int key)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+gfx/gfx_widgets.c:1138:13: warning: unused function 'gfx_widgets_draw_task_msg' [-Wunused-function]
+ 1138 | static void gfx_widgets_draw_task_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+gfx/gfx_widgets.c:1371:13: warning: unused function 'gfx_widgets_draw_regular_msg' [-Wunused-function]
+ 1371 | static void gfx_widgets_draw_regular_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+libretro-common/formats/libchdr/libchdr_chd.c:663:20: warning: unused function 'map_assemble' [-Wunused-function]
+  663 | static INLINE void map_assemble(uint8_t *base, map_entry *entry)
+      |                    ^~~~~~~~~~~~
+1 warning generated.
+mv: cannot stat 'libretro_emscripten.bc': No such file or directory
+make: ./build-emulatorjs.sh --clean --threads
+retroarch.c:6238:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 6238 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+runloop.c:8593:12: warning: address of stack memory associated with local variable 'rv' returned [-Wreturn-stack-address]
+ 8593 |     return rv;
+      |            ^~
+1 warning generated.
+1 warning generated.
+tasks/task_save.c:1846:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1846 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1852:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1852 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1858:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1858 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1861:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1861 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+4 warnings generated.
+input/drivers/emulatorjs_input.c:574:13: warning: unused function 'rwebinput_key_pressed' [-Wunused-function]
+  574 | static bool rwebinput_key_pressed(rwebinput_input_t *rwebinput, int key)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+gfx/gfx_widgets.c:1138:13: warning: unused function 'gfx_widgets_draw_task_msg' [-Wunused-function]
+ 1138 | static void gfx_widgets_draw_task_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+gfx/gfx_widgets.c:1371:13: warning: unused function 'gfx_widgets_draw_regular_msg' [-Wunused-function]
+ 1371 | static void gfx_widgets_draw_regular_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+libretro-common/formats/libchdr/libchdr_chd.c:663:20: warning: unused function 'map_assemble' [-Wunused-function]
+  663 | static INLINE void map_assemble(uint8_t *base, map_entry *entry)
+      |                    ^~~~~~~~~~~~
+1 warning generated.
+mv: cannot stat 'libretro_emscripten.bc': No such file or directory
+emcc: warning: -pthread + ALLOW_MEMORY_GROWTH may run non-wasm code slowly, see https://github.com/WebAssembly/design/issues/1271 [-Wpthreads-mem-growth]
+make: ./build-emulatorjs.sh --clean --threads --legacy
+retroarch.c:6238:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 6238 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+runloop.c:8593:12: warning: address of stack memory associated with local variable 'rv' returned [-Wreturn-stack-address]
+ 8593 |     return rv;
+      |            ^~
+1 warning generated.
+1 warning generated.
+tasks/task_save.c:1846:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1846 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1852:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1852 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1858:14: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1858 |       return state_data;
+      |              ^~~~~~~~~~
+tasks/task_save.c:1861:11: warning: address of stack memory associated with local variable 'state_data' returned [-Wreturn-stack-address]
+ 1861 |    return state_data; // This must be freed by the JavaScript side!
+      |           ^~~~~~~~~~
+4 warnings generated.
+input/drivers/emulatorjs_input.c:574:13: warning: unused function 'rwebinput_key_pressed' [-Wunused-function]
+  574 | static bool rwebinput_key_pressed(rwebinput_input_t *rwebinput, int key)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+gfx/gfx_widgets.c:1138:13: warning: unused function 'gfx_widgets_draw_task_msg' [-Wunused-function]
+ 1138 | static void gfx_widgets_draw_task_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+gfx/gfx_widgets.c:1371:13: warning: unused function 'gfx_widgets_draw_regular_msg' [-Wunused-function]
+ 1371 | static void gfx_widgets_draw_regular_msg(
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+libretro-common/formats/libchdr/libchdr_chd.c:663:20: warning: unused function 'map_assemble' [-Wunused-function]
+  663 | static INLINE void map_assemble(uint8_t *base, map_entry *entry)
+      |                    ^~~~~~~~~~~~
+1 warning generated.
+mv: cannot stat 'libretro_emscripten.bc': No such file or directory
+emcc: warning: -pthread + ALLOW_MEMORY_GROWTH may run non-wasm code slowly, see https://github.com/WebAssembly/design/issues/1271 [-Wpthreads-mem-growth]
+Packing core information for vbam
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-wasm.data
+Type = 7z
+Physical Size = 797970
+Headers Size = 266
+Method = LZMA2:22
+Solid = +
+Blocks = 2
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-wasm.data
+
+Keep old data in archive: 2 files, 3506798 bytes (3425 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 797974 bytes (780 KiB)
+Everything is Ok
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-legacy-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-legacy-wasm.data
+Type = 7z
+Physical Size = 797930
+Headers Size = 266
+Method = LZMA2:22
+Solid = +
+Blocks = 2
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-legacy-wasm.data
+
+Keep old data in archive: 2 files, 3508901 bytes (3427 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 797934 bytes (780 KiB)
+Everything is Ok
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-thread-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-thread-wasm.data
+Type = 7z
+Physical Size = 815719
+Headers Size = 267
+Method = LZMA2:22
+Solid = +
+Blocks = 2
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-thread-wasm.data
+
+Keep old data in archive: 2 files, 3602028 bytes (3518 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 815724 bytes (797 KiB)
+Everything is Ok
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-thread-legacy-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-thread-legacy-wasm.data
+Type = 7z
+Physical Size = 815435
+Headers Size = 267
+Method = LZMA2:22
+Solid = +
+Blocks = 2
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-thread-legacy-wasm.data
+
+Keep old data in archive: 2 files, 3598851 bytes (3515 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 815439 bytes (797 KiB)
+Everything is Ok
+updating: vbam-thread-legacy-wasm.data (deflated 0%)
+updating: vbam-thread-wasm.data (deflated 0%)
+updating: vbam-wasm.data (deflated 0%)
+updating: vbam-legacy-wasm.data (deflated 0%)
+Not deleting build path

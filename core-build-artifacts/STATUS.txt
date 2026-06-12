@@ -1,1 +1,95 @@
-STARTED Fri Jun 12 22:37:44 UTC 2026 run=27447084576
+FINISHED Fri Jun 12 22:45:32 UTC 2026 run=27447084576
+build exit code: 0
+
+=== output files ===
+output/cores.json
+output/logs/vbam-compile.log
+output/logs/vbam-emake.log
+output/reports/vbam.json
+output/vbam-legacy-wasm.data
+output/vbam-thread-legacy-wasm.data
+output/vbam-thread-wasm.data
+output/vbam-wasm.data
+output/vbam.zip
+
+=== last 80 log lines ===
+
+Open archive: EmulatorJS/data/cores/vbam-legacy-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-legacy-wasm.data
+Type = 7z
+Physical Size = 797930
+Headers Size = 266
+Method = LZMA2:22
+Solid = +
+Blocks = 2
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-legacy-wasm.data
+
+Keep old data in archive: 2 files, 3508901 bytes (3427 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 797934 bytes (780 KiB)
+Everything is Ok
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-thread-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-thread-wasm.data
+Type = 7z
+Physical Size = 815719
+Headers Size = 267
+Method = LZMA2:22
+Solid = +
+Blocks = 2
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-thread-wasm.data
+
+Keep old data in archive: 2 files, 3602028 bytes (3518 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 815724 bytes (797 KiB)
+Everything is Ok
+
+7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+ 64-bit locale=C.UTF-8 Threads:4 OPEN_MAX:65536
+
+Open archive: EmulatorJS/data/cores/vbam-thread-legacy-wasm.data
+--
+Path = EmulatorJS/data/cores/vbam-thread-legacy-wasm.data
+Type = 7z
+Physical Size = 815435
+Headers Size = 267
+Method = LZMA2:22
+Solid = +
+Blocks = 2
+
+Scanning the drive:
+3 files, 1530 bytes (2 KiB)
+
+Updating archive: EmulatorJS/data/cores/vbam-thread-legacy-wasm.data
+
+Keep old data in archive: 2 files, 3598851 bytes (3515 KiB)
+Add new data to archive: 3 files, 1530 bytes (2 KiB)
+
+
+Files read from disk: 3
+Archive size: 815439 bytes (797 KiB)
+Everything is Ok
+updating: vbam-thread-legacy-wasm.data (deflated 0%)
+updating: vbam-thread-wasm.data (deflated 0%)
+updating: vbam-wasm.data (deflated 0%)
+updating: vbam-legacy-wasm.data (deflated 0%)
+Not deleting build path
