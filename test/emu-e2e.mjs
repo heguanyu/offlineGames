@@ -49,6 +49,18 @@ try {
   });
 
   await page.goto(`http://localhost:${PORT}/games/${SYSTEM}/`, { waitUntil: 'load' });
+
+  if (SYSTEM === 'nds') {
+    // The NDS page registers the SW and reloads once to gain cross-origin
+    // isolation (for the threaded core). Wait for that to settle, tolerating
+    // the execution-context destruction the reload causes.
+    const end = Date.now() + 20000;
+    while (Date.now() < end) {
+      try { if (await page.evaluate(() => window.crossOriginIsolated === true)) break; } catch (e) {}
+      await sleep(300);
+    }
+    await page.waitForFunction('typeof play === "function"', { timeout: 10000 }).catch(() => {});
+  }
   console.log(`page loaded (${SYSTEM}), injecting ROM:`, ROM);
 
   await page.evaluate(async (rom) => {

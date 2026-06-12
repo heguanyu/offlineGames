@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.0.10';
+const CACHE = 'offline-games-0.0.11';
 
 const ASSETS = [
   './',
@@ -28,6 +28,8 @@ const ASSETS = [
   './emulatorjs/data/cores/mgba-wasm.data',
   './emulatorjs/data/cores/melonds-legacy-wasm.data',
   './emulatorjs/data/cores/melonds-wasm.data',
+  './emulatorjs/data/cores/melonds-thread-legacy-wasm.data',
+  './emulatorjs/data/cores/melonds-thread-wasm.data',
   './emulatorjs/data/cores/reports/mgba.json',
   './emulatorjs/data/cores/reports/melonds.json',
   './emulatorjs/data/localization/af-FR.json',
@@ -76,19 +78,31 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// Re-emit a response with the headers that enable cross-origin isolation
+// (crossOriginIsolated === true → SharedArrayBuffer works → threaded cores).
+// GitHub Pages can't set these, so the service worker adds them. All our
+// assets are same-origin, so COEP: require-corp is satisfied.
+function crossOriginIsolate(res) {
+  const headers = new Headers(res.headers);
+  headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 // Cache-first: guarantees offline play; new versions arrive via the
 // version bump above, never silently mid-session.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((hit) => {
-      if (hit) return hit;
+      if (hit) return crossOriginIsolate(hit);
       return fetch(e.request).then((res) => {
         if (res.ok && new URL(e.request.url).origin === location.origin) {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(e.request, copy));
         }
-        return res;
+        return crossOriginIsolate(res);
       });
     })
   );

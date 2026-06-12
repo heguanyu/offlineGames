@@ -45,9 +45,15 @@ A set of offline-playable PWA games for iPad, with Xbox controller support.
   every 30s, on every quick save, and when the page is hidden or closed
   (refresh, tab switch, swiping the PWA away). Covered by the e2e test's
   reload step.
-- The non-threaded core is used on purpose: threaded wasm needs
-  COOP/COEP headers, which GitHub Pages can't set. mGBA runs full speed
-  single-threaded on any recent iPad.
+- GBA (mGBA) runs full speed single-threaded, so it uses the plain core.
+- **NDS uses the multi-threaded melonDS core** — single-threaded melonDS is
+  too slow (lag, and no fast-forward headroom). Threads need SharedArrayBuffer,
+  which needs cross-origin isolation (COOP/COEP headers). GitHub Pages can't
+  set those, so `sw.js` injects them on every response, and the NDS page
+  registers the service worker + reloads once to pick them up. If isolation
+  can't be achieved, EmulatorJS falls back to the single-threaded core
+  automatically. All assets are same-origin, so COEP `require-corp` is
+  satisfied. (This same mechanism would later enable the PSP/DOSBox cores.)
 
 ## Test locally (desktop)
 

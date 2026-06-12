@@ -8,6 +8,28 @@
 <link rel="icon" href="../../icons/icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1a2e">
+<script>
+  // The threaded melonDS core needs cross-origin isolation (SharedArrayBuffer);
+  // our service worker injects the COOP/COEP headers GitHub Pages can't set.
+  // Ensure the SW is registered and controlling this page, reloading once to
+  // pick up the headers. If isolation can't be achieved, EmulatorJS simply
+  // falls back to the single-threaded core (no breakage).
+  (function () {
+    if (window.crossOriginIsolated || !('serviceWorker' in navigator)) return;
+    const reloadOnce = () => {
+      if (!sessionStorage.getItem('coiReload')) {
+        sessionStorage.setItem('coiReload', '1');
+        location.reload();
+      }
+    };
+    if (navigator.serviceWorker.controller) {
+      reloadOnce();
+    } else {
+      navigator.serviceWorker.register('../../sw.js').catch(() => {});
+      navigator.serviceWorker.addEventListener('controllerchange', reloadOnce);
+    }
+  })();
+</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -183,6 +205,10 @@
       window.EJS_player = '#game';
       window.EJS_core = 'nds';
       window.EJS_pathtodata = '../../emulatorjs/data/';
+      // Use the multi-threaded melonDS core when cross-origin isolation is
+      // available — single-threaded melonDS is the perf bottleneck (lag, and
+      // no fast-forward headroom). Falls back to single-thread if not isolated.
+      window.EJS_threads = window.crossOriginIsolated === true;
       window.EJS_DEBUG_XX = true; // self-hosting unminified src files
       const romBlob = rom.data instanceof Blob ? rom.data : new Blob([rom.data]);
       window.EJS_gameUrl = URL.createObjectURL(romBlob);
