@@ -77,5 +77,13 @@ function setupEmuPersistence({ dbName, gameName }) {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') flush();
     });
+
+    // EmulatorJS's exit button fires "exit" and aborts its WASM module,
+    // leaving a dead screen. Flush saves and reload to return to the ROM
+    // list cleanly (offline-safe — files come from the service worker).
+    window.EJS_emulator.on('exit', () => {
+      flush();
+      location.reload();
+    });
   };
 }
