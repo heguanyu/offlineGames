@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Offline Games</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="icon" href="./icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a2e">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: #1a1a2e;
+    color: #eaeaea;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: max(24px, env(safe-area-inset-top)) 24px 24px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 4px; }
+  #meta { font-size: 0.85rem; color: #8a8aa3; margin-bottom: 32px; }
+  #net-status.offline { color: #e9c46a; }
+  nav { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 180px;
+    height: 130px;
+    background: #16213e;
+    border: 1px solid #2c3a63;
+    border-radius: 14px;
+    text-decoration: none;
+    color: #eaeaea;
+    font-size: 1rem;
+  }
+  .card:active { background: #0f3460; }
+  .card .emoji { font-size: 2.4rem; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+  <h1>Offline Games</h1>
+  <p id="meta"><span id="app-version"></span><span id="net-status"></span></p>
+  <nav>
+    <a class="card" href="./games/gba/">
+      <span class="emoji">👾</span>
+      Game Boy Advance
+    </a>
+    <a class="card" href="./games/nds/">
+      <span class="emoji">🎴</span>
+      Nintendo DS
+    </a>
+    <a class="card" href="./games/pad-test/">
+      <span class="emoji">🎮</span>
+      Controller Test
+    </a>
+  </nav>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
+    const statusEl = document.getElementById('net-status');
+    function updateNetStatus() {
+      const online = navigator.onLine;
+      statusEl.textContent = online ? 'online' : 'offline — running from cache';
+      statusEl.classList.toggle('offline', !online);
+    }
+    addEventListener('online', updateNetStatus);
+    addEventListener('offline', updateNetStatus);
+    updateNetStatus();
+
+    // The version lives in sw.js's cache name; parse it so it can't drift.
+    fetch('./sw.js')
+      .then((r) => r.text())
+      .then((t) => {
+        const m = t.match(/offline-games-(\d+\.\d+\.\d+)/);
+        if (m) document.getElementById('app-version').textContent = 'v' + m[1] + ' · ';
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>

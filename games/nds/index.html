@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>NDS</title>
+<link rel="apple-touch-icon" href="../../icons/icon-180.png">
+<link rel="icon" href="../../icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a1a2e">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: #1a1a2e;
+    color: #eaeaea;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #library {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: max(16px, env(safe-area-inset-top)) 16px 16px;
+    height: 100%;
+    overflow-y: auto;
+  }
+  a.back { align-self: flex-start; color: #8a8aa3; text-decoration: none; font-size: 0.9rem; }
+  h1 { font-size: 1.5rem; margin: 8px 0 2px; }
+  .hint { font-size: 0.8rem; color: #8a8aa3; margin-bottom: 18px; text-align: center; max-width: 480px; }
+  label.add {
+    display: inline-block;
+    background: #0f3460;
+    border: 1px solid #2c3a63;
+    border-radius: 10px;
+    padding: 12px 28px;
+    margin-bottom: 20px;
+    cursor: pointer;
+  }
+  label.add input { display: none; }
+  #rom-list { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 10px; }
+  .rom {
+    display: flex;
+    align-items: center;
+    background: #16213e;
+    border: 1px solid #2c3a63;
+    border-radius: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+  }
+  .rom:active { background: #0f3460; }
+  .rom .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rom .size { color: #8a8aa3; font-size: 0.8rem; margin: 0 12px; }
+  .rom .del {
+    background: none; border: none; color: #e94560;
+    font-size: 1.1rem; cursor: pointer; padding: 4px 8px;
+  }
+  #empty { color: #8a8aa3; font-size: 0.9rem; }
+  #import-status { font-size: 0.85rem; color: #e9c46a; min-height: 1.2em; margin-bottom: 10px; text-align: center; max-width: 480px; }
+  #game-wrap { width: 100%; height: 100%; }
+  #game { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+  <div id="library">
+    <a class="back" href="../../">&larr; back</a>
+    <h1>Nintendo DS</h1>
+    <p class="hint">
+      Add .nds or .zip ROM files once — they are stored in the browser and playable
+      offline. In game: RT = quick save, LT = quick load, hold R3 = fast
+      forward; tap the lower screen directly for touch input. Screen layout
+      and other options are in the settings gear menu.
+    </p>
+    <label class="add">+ Add ROMs
+      <input type="file" id="rom-input" multiple>
+    </label>
+    <p id="import-status"></p>
+    <div id="rom-list"></div>
+    <p id="empty" hidden>No ROMs yet.</p>
+  </div>
+  <div id="game-wrap" hidden><div id="game"></div></div>
+
+  <script src="../../shared/emu-persistence.js"></script>
+  <script>
+    const DB_NAME = 'nds-library';
+    const STORE = 'roms';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 2);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'name' });
+          if (!db.objectStoreNames.contains('states')) db.createObjectStore('states', { keyPath: 'key' });
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function tx(db, mode, fn) {
+      return new Promise((resolve, reject) => {
+        const t = db.transaction(STORE, mode);
+        const result = fn(t.objectStore(STORE));
+        t.oncomplete = () => resolve(result.result !== undefined ? result.result : result);
+        t.onerror = () => reject(t.error);
+      });
+    }
+
+    const listEl = document.getElementById('rom-list');
+    const emptyEl = document.getElementById('empty');
+
+    function fmtSize(bytes) {
+      return bytes > 1048576
+        ? (bytes / 1048576).toFixed(1) + ' MB'
+        : Math.round(bytes / 1024) + ' KB';
+    }
+
+    async function refreshList() {
+      const db = await openDB();
+      const roms = await tx(db, 'readonly', (s) => s.getAll());
+      listEl.textContent = '';
+      emptyEl.hidden = roms.length > 0;
+      for (const rom of roms) {
+        const row = document.createElement('div');
+        row.className = 'rom';
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = rom.name;
+        const size = document.createElement('span');
+        size.className = 'size';
+        size.textContent = fmtSize(rom.data.size != null ? rom.data.size : rom.data.byteLength);
+        const del = document.createElement('button');
+        del.className = 'del';
+        del.textContent = '✕';
+        del.onclick = async (e) => {
+          e.stopPropagation();
+          await tx(db, 'readwrite', (s) => s.delete(rom.name));
+          refreshList();
+        };
+        row.append(name, size, del);
+        row.onclick = () => play(rom);
+        listEl.appendChild(row);
+      }
+    }
+
+    // Ask the browser to keep our storage; raises the quota iOS grants.
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+
+    const importStatus = document.getElementById('import-status');
+    document.getElementById('rom-input').onchange = async (e) => {
+      const files = Array.from(e.target.files);
+      e.target.value = '';
+      if (!files.length) return;
+      try {
+        const db = await openDB();
+        for (const file of files) {
+          importStatus.textContent = 'Importing ' + file.name + '…';
+          if (!file.size) {
+            throw new Error(file.name + ' read as empty. If it has an iCloud '
+              + 'cloud icon, open it once in the Files app to download it, then retry.');
+          }
+          // Store the File (a Blob) directly, not an ArrayBuffer. iOS Safari
+          // writes Blobs to disk as file references; putting a large
+          // ArrayBuffer in IndexedDB triggers "internal error" on big ROMs.
+          await tx(db, 'readwrite', (s) => s.put({ name: file.name, data: file }));
+        }
+        importStatus.textContent = 'Added ' + files.length + ' ROM'
+          + (files.length > 1 ? 's' : '') + '.';
+        refreshList();
+      } catch (err) {
+        importStatus.textContent = 'Import failed: ' + (err && err.message ? err.message : err);
+      }
+    };
+
+    function play(rom) {
+      document.getElementById('library').hidden = true;
+      document.getElementById('game-wrap').hidden = false;
+
+      window.EJS_player = '#game';
+      window.EJS_core = 'nds';
+      window.EJS_pathtodata = '../../emulatorjs/data/';
+      window.EJS_DEBUG_XX = true; // self-hosting unminified src files
+      const romBlob = rom.data instanceof Blob ? rom.data : new Blob([rom.data]);
+      window.EJS_gameUrl = URL.createObjectURL(romBlob);
+      // gameName keys save states and battery saves — keep it stable.
+      window.EJS_gameName = rom.name.replace(/\.(nds|zip)$/i, '');
+      window.EJS_startOnLoaded = true;
+      window.EJS_backgroundColor = '#1a1a2e';
+      window.EJS_defaultOptions = {
+        'save-state-location': 'browser',
+        'save-state-slot': '1',
+        'save-save-interval': '30',
+      };
+      setupEmuPersistence({ dbName: DB_NAME, gameName: window.EJS_gameName });
+      // Stock EmulatorJS defaults, with our additions: RT = quick save,
+      // LT = quick load (DS doesn't use the triggers), hold R3 = fast
+      // forward. Users can rebind in-game; their changes persist.
+      window.EJS_defaultControls = {
+        0: {
+          0:  { value: 'x', value2: 'BUTTON_2' },          // DS B
+          1:  { value: 's', value2: 'BUTTON_4' },          // DS Y
+          2:  { value: 'v', value2: 'SELECT' },
+          3:  { value: 'enter', value2: 'START' },
+          4:  { value: 'up arrow', value2: 'DPAD_UP' },
+          5:  { value: 'down arrow', value2: 'DPAD_DOWN' },
+          6:  { value: 'left arrow', value2: 'DPAD_LEFT' },
+          7:  { value: 'right arrow', value2: 'DPAD_RIGHT' },
+          8:  { value: 'z', value2: 'BUTTON_1' },          // DS A
+          9:  { value: 'a', value2: 'BUTTON_3' },          // DS X
+          10: { value: 'q', value2: 'LEFT_TOP_SHOULDER' },  // DS L
+          11: { value: 'e', value2: 'RIGHT_TOP_SHOULDER' }, // DS R
+          12: { value: 'tab' },
+          13: { value: 'r' },
+          14: { value: '', value2: 'LEFT_STICK' },
+          15: {},
+          16: { value: 'h' }, 17: { value: 'f' },
+          18: { value: 'g' }, 19: { value: 't' },
+          20: { value: 'l' }, 21: { value: 'j' },
+          22: { value: 'k' }, 23: { value: 'i' },
+          24: { value: '1', value2: 'RIGHT_BOTTOM_SHOULDER' }, // quick save
+          25: { value: '2', value2: 'LEFT_BOTTOM_SHOULDER' },  // quick load
+          26: { value: '3' },                                  // change slot
+          27: { value: 'space', value2: 'RIGHT_STICK' },       // hold = fast forward
+          28: {}, 29: {},
+        },
+        1: {}, 2: {}, 3: {},
+      };
+
+      const script = document.createElement('script');
+      script.src = '../../emulatorjs/data/loader.js';
+      document.body.appendChild(script);
+    }
+
+    refreshList();
+  </script>
+</body>
+</html>

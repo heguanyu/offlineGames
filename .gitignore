@@ -1,0 +1,9 @@
+# ROMs must never be pushed (copyright) — keep them local only
+roms/
+
+# Test artifacts and dependencies (generated, not needed in the repo)
+node_modules/
+test/*.png
+test/ingame/
+test/fixtures/
+package-lock.json
