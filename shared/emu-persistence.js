@@ -85,5 +85,16 @@ function setupEmuPersistence({ dbName, gameName }) {
       flush();
       location.reload();
     });
+
+    // iOS reports stale viewport dimensions during rotation and doesn't
+    // resize the emulator canvas, leaving the game in half the screen. Once
+    // the orientation settles, recompute layout and re-fire resize so the
+    // core re-reads the new dimensions. (Desktop handles real resize fine.)
+    addEventListener('orientationchange', () => {
+      setTimeout(() => {
+        try { window.EJS_emulator.handleResize(); } catch (e) { /* gone */ }
+        dispatchEvent(new Event('resize'));
+      }, 300);
+    });
   };
 }
