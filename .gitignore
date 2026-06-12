@@ -7,3 +7,7 @@ test/*.png
 test/ingame/
 test/fixtures/
 package-lock.json
+
+# test scratch
+test/cl/
+test/*.log

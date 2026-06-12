@@ -68,7 +68,7 @@
 <body>
   <div id="library">
     <a class="back" href="../../">&larr; back</a>
-    <h1>Game Boy Advance</h1>
+    <h1 id="gba-title">Game Boy Advance</h1>
     <p class="hint">
       Add .gba or .zip ROM files once — they are stored in the browser and playable
       offline. In game: RT = quick save, LT = quick load, hold R3 = fast
@@ -87,6 +87,10 @@
   <script>
     const DB_NAME = 'gba-library';
     const STORE = 'roms';
+    // Which core this hub entry runs (?core=mgba|vbam). ROM library is shared.
+    const CORE = new URLSearchParams(location.search).get('core') === 'vbam' ? 'vbam' : 'mgba';
+    document.getElementById('gba-title').textContent =
+      CORE === 'vbam' ? 'Game Boy Advance · VBA-M' : 'Game Boy Advance · mGBA';
 
     function openDB() {
       return new Promise((resolve, reject) => {
@@ -181,13 +185,21 @@
       document.getElementById('game-wrap').hidden = false;
 
       window.EJS_player = '#game';
-      window.EJS_core = 'gba';
+      // Core chosen by the hub entry via ?core= (mGBA default, VBA-M opt-in).
+      window.EJS_core = CORE === 'vbam' ? 'vbam' : 'gba';
+      // Force the GBA control scheme so the touch gamepad + controller map
+      // identically regardless of core.
+      window.EJS_controlScheme = 'gba';
       window.EJS_pathtodata = '../../emulatorjs/data/';
       window.EJS_DEBUG_XX = true; // self-hosting unminified src files
       const romBlob = rom.data instanceof Blob ? rom.data : new Blob([rom.data]);
       window.EJS_gameUrl = URL.createObjectURL(romBlob);
-      // gameName keys save states and battery saves — keep it stable.
-      window.EJS_gameName = rom.name.replace(/\.(gba|gbc|gb|zip)$/i, '');
+      // gameName keys saves AND becomes the content filename. vbam picks
+      // GB/GBC/GBA by extension and won't load a bare name; mGBA sniffs the
+      // header, so keep its name extension-free (preserves existing saves).
+      window.EJS_gameName = CORE === 'vbam'
+        ? rom.name.replace(/\.zip$/i, '')
+        : rom.name.replace(/\.(gba|gbc|gb|zip)$/i, '');
       window.EJS_startOnLoaded = true;
       window.EJS_backgroundColor = '#1a1a2e';
       window.EJS_defaultOptions = {

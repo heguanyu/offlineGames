@@ -21,7 +21,7 @@ class EmulatorJS {
             "pcfx": ["mednafen_pcfx"],
             "psx": ["pcsx_rearmed", "mednafen_psx_hw"],
             "ws": ["mednafen_wswan"],
-            "gba": ["mgba"],
+            "gba": ["mgba", "vbam"],
             "n64": ["mupen64plus_next", "parallel_n64"],
             "3do": ["opera"],
             "psp": ["ppsspp"],
@@ -505,8 +505,13 @@ class EmulatorJS {
     }
     checkCoreCompatibility(version) {
         if (this.versionAsInt(version.minimumEJSVersion) > this.versionAsInt(this.ejs_version)) {
-            this.startGameError(this.localization("Outdated EmulatorJS version"));
-            throw new Error("Core requires minimum EmulatorJS version of " + version.minimumEJSVersion);
+            // Our self-hosted cores (e.g. vbam) are built by the current
+            // EmulatorJS/build pipeline, which stamps minimumEJSVersion 4.3.0,
+            // while this vendored frontend reports 4.2.3. The libretro core
+            // interface is compatible across this gap, so warn instead of
+            // hard-failing. (Validated by booting + in-game save under vbam.)
+            console.warn("Core requests EmulatorJS >= " + version.minimumEJSVersion
+                + " but frontend is " + this.ejs_version + "; proceeding (self-hosted core).");
         }
     }
     startGameError(message) {
