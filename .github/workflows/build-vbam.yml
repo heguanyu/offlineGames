@@ -64,17 +64,18 @@ jobs:
           echo "=== build 1: clone + build vbam (unpatched) ==="
           bash build.sh --core=vbam 2>&1 | tee "$HOME/vbam-build.log"
           # Force 64K flash. The Emerald 386 bootleg declares FLASH1M_ (128K),
-          # so auto-detect picks 128K and the in-game save fails — but it saves
-          # correctly as 64K (matches the user's working VBA-M Flash Size=64K).
-          # Patch the FLASH1M branch of flashDetectSaveType to use 64K.
-          FLASH=$(find "$HOME/ejs-build/compile" -name gbaFlash.cpp 2>/dev/null | head -1)
-          echo "=== gbaFlash.cpp located at: $FLASH ===" | tee -a "$HOME/vbam-build.log"
-          if [ -n "$FLASH" ]; then
-            echo "before:" | tee -a "$HOME/vbam-build.log"; grep -n "flashSize = 0x20000" "$FLASH" | tee -a "$HOME/vbam-build.log"
-            sed -i 's/flashSize = 0x20000;/flashSize = 0x10000;/' "$FLASH"
-            echo "after:" | tee -a "$HOME/vbam-build.log"; grep -n "flashSize = 0x10000" "$FLASH" | tee -a "$HOME/vbam-build.log"
+          # so the libretro wrapper's load_image_preferences() auto-detects 128K
+          # and the in-game save fails — but it saves correctly as 64K (matches
+          # the user's working VBA-M "Flash Size = 64K" setting). Patch the
+          # FLASH1M_ autodetect branch in libretro.cpp to use 64K (SIZE_FLASH512).
+          LR=$(find "$HOME/ejs-build/compile" -path '*vbam*/src/libretro/libretro.cpp' 2>/dev/null | head -1)
+          echo "=== libretro.cpp located at: $LR ===" | tee -a "$HOME/vbam-build.log"
+          if [ -n "$LR" ]; then
+            echo "before:" | tee -a "$HOME/vbam-build.log"; grep -n "saveSize = SIZE_FLASH1M;" "$LR" | tee -a "$HOME/vbam-build.log"
+            sed -i 's/saveSize = SIZE_FLASH1M;/saveSize = SIZE_FLASH512;/' "$LR"
+            echo "after:" | tee -a "$HOME/vbam-build.log"; grep -n "saveSize = SIZE_FLASH512;" "$LR" | tee -a "$HOME/vbam-build.log"
           else
-            echo "!!! gbaFlash.cpp NOT FOUND under compile/ !!!" | tee -a "$HOME/vbam-build.log"
+            echo "!!! libretro.cpp NOT FOUND under compile/ !!!" | tee -a "$HOME/vbam-build.log"
           fi
           echo "=== build 2: rebuild vbam with forced-64K patch ==="
           bash build.sh --core=vbam 2>&1 | tee -a "$HOME/vbam-build.log"
