@@ -56,21 +56,14 @@ jobs:
           cd "$HOME"
           git clone --depth 1 https://github.com/EmulatorJS/build.git ejs-build
           cd ejs-build
-          # Add a vbam core entry (mirrors mgba's; vbam's libretro Makefile
-          # lives in src/libretro and has an emscripten platform branch).
-          jq '. += [{"name":"vbam","extensions":["gb","gbc","gba"],"makeoptions":{"buildpath":"src/libretro","makescript":"Makefile","arguments":[]},"options":{},"save":"srm","license":"doc/License.txt","repo":"https://github.com/libretro/vbam-libretro"}]' cores.json > cores.tmp && mv cores.tmp cores.json
-          echo "=== building mgba AND vbam with the SAME pipeline (to compare) ==="
-          bash build.sh --core=mgba 2>&1 | tee "$HOME/vbam-build.log"
-          echo "MGBA_EXIT=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
-          bash build.sh --core=vbam 2>&1 | tee -a "$HOME/vbam-build.log"
+          # Build vbam from the ACTUAL VBA-M project (visualboyadvance-m),
+          # which is what the user's working standalone 2.2.3 is built from —
+          # NOT the older/divergent libretro/vbam-libretro fork. Its libretro
+          # Makefile is also at src/libretro with an emscripten branch.
+          jq '. += [{"name":"vbam","extensions":["gb","gbc","gba"],"makeoptions":{"buildpath":"src/libretro","makescript":"Makefile","arguments":[]},"options":{},"save":"srm","license":"doc/License.txt","repo":"https://github.com/visualboyadvance-m/visualboyadvance-m"}]' cores.json > cores.tmp && mv cores.tmp cores.json
+          echo "=== building vbam from visualboyadvance-m ==="
+          bash build.sh --core=vbam 2>&1 | tee "$HOME/vbam-build.log"
           echo "BUILD_EXIT=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
-          # Dump each core's embedded build.json (has minimumEJSVersion) for comparison.
-          cd output
-          for d in mgba-wasm.data vbam-wasm.data; do
-            echo "=== build.json inside $d ===" | tee -a "$HOME/vbam-build.log"
-            7z e -so "$d" build.json 2>/dev/null | tee -a "$HOME/vbam-build.log" || echo "(extract failed)"
-            echo "" | tee -a "$HOME/vbam-build.log"
-          done
           exit 0
 
       - name: Collect results to core-build branch
