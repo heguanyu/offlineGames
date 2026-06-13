@@ -75,6 +75,12 @@ try {
   assert(/已听/.test(lockedHint), 'expected 已听 hint while 听, got: ' + lockedHint);
   console.log('OK locked render: no buttons, hint =', JSON.stringify(lockedHint));
 
+  // Let the tension loop run a few bars so its Web Audio scheduling (heartbeat,
+  // drone, tritone swell, 4-bar riser reset) is exercised for runtime errors.
+  await page.evaluate(() => window.__gb.setLocked([27])); // ensure music still wanted
+  await new Promise((r) => setTimeout(r, 6000));
+  console.log('OK music loop ran ~6s without error');
+
   if (errors.length) throw new Error('runtime errors:\n  ' + errors.join('\n  '));
   console.log('GUOBIAO-TING TEST PASS');
 } catch (e) {

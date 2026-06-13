@@ -69,54 +69,93 @@ export class Sound {
   select()  { this._play((t) => this._clack(t, { gain: 0.14, freq: 3200, dur: 0.028 })); }
   pung()    { this._play((t) => { this._clack(t, { gain: 0.6, freq: 1450, dur: 0.08 }); this._tone(t, 330, 0.16, 0.16, 'sine'); }); }
   kong()    { this._play((t) => { this._clack(t, { gain: 0.6, freq: 1250, dur: 0.09 }); this._clack(t + 0.085, { gain: 0.5, freq: 1350, dur: 0.07 }); this._tone(t, 262, 0.22, 0.16, 'sine'); }); }
-  win()     { this._play((t) => { this._clack(t, { gain: 0.4, freq: 1700, dur: 0.06 }); [523, 659, 784, 1047].forEach((f, i) => this._tone(t + 0.04 + i * 0.1, f, 0.34, 0.2, 'triangle')); }); }
+  // Resolves the 听牌 tension: a low boom (echoing the drone) and tile slap, an
+  // ascending pentatonic run, then a bright major bloom with a gong-like shimmer.
+  win() {
+    this._play((t) => {
+      this._tone(t, 64, 0.45, 0.3, 'sine');                       // deep boom
+      this._clack(t, { gain: 0.42, freq: 1550, dur: 0.06 });      // tile slap
+      const run = [523.25, 587.33, 659.25, 783.99, 880.0];        // C D E G A
+      run.forEach((f, i) => this._tone(t + 0.05 + i * 0.07, f, 0.26, 0.16, 'triangle'));
+      const t2 = t + 0.05 + run.length * 0.07;                    // resolution lands here
+      [523.25, 659.25, 783.99, 1046.5].forEach((f) => this._tone(t2, f, 1.3, 0.17, 'triangle')); // C E G C
+      [1318.5, 1567.98, 2093.0].forEach((f, i) => this._tone(t2 + 0.09 + i * 0.06, f, 1.1, 0.07, 'sine')); // shimmer
+    });
+  }
   drawGame() { this._play((t) => this._tone(t, 300, 0.28, 0.14, 'sine')); }
 
-  // --- Immersive background music (looping ambient pad), used while 听牌 ---
-  // A slow Am–F–C–G pad with a soft bass drone, synthesized so it stays offline.
+  // --- Immersive 紧张感 (tension) music, looped while 听牌 ---
+  // A held tone on the music bus (used for drones / swells / risers).
+  _busNote(t, freq, peak, dur, { type = 'sine', attack = 0.04, dest } = {}) {
+    const ctx = this.ctx;
+    const out = dest || this._musicBus || ctx.destination;
+    const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(out);
+    o.start(t); o.stop(t + dur + 0.05);
+    return o;
+  }
+  // A "lub-dub" heartbeat: a low sine punch plus a short low-mid noise body so
+  // it's still audible on small (iPad) speakers that roll off deep bass.
+  _heartbeat(t) {
+    const ctx = this.ctx, out = this._musicBus || ctx.destination;
+    const beat = (tt, peak) => {
+      this._busNote(tt, 58, peak, 0.18, { type: 'sine', attack: 0.004 });
+      const n = this._noise(0.12);
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 140; bp.Q.value = 1.2;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, tt);
+      g.gain.exponentialRampToValueAtTime(peak * 0.55, tt + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.12);
+      n.connect(bp).connect(g).connect(out);
+      n.start(tt); n.stop(tt + 0.14);
+    };
+    beat(t, 0.5);          // lub
+    beat(t + 0.17, 0.32);  // dub
+  }
   startMusic() {
     this._musicWanted = true;
     if (this.muted || this._musicOn) return;
     const ctx = this.resume();
     if (!ctx) return;
     this._musicOn = true;
+    this._musicPhase = 0;
     this._musicBus = ctx.createGain();
     this._musicBus.gain.setValueAtTime(0.0001, ctx.currentTime);
-    this._musicBus.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 2.0); // gentle fade-in
+    this._musicBus.gain.exponentialRampToValueAtTime(0.45, ctx.currentTime + 2.2); // fade-in
     this._musicBus.connect(ctx.destination);
-    // [chord, bass] frequencies for each bar
-    const bars = [
-      { chord: [220.0, 261.63, 329.63], bass: 110.0 }, // Am
-      { chord: [174.61, 220.0, 261.63], bass: 87.31 },  // F
-      { chord: [261.63, 329.63, 392.0], bass: 130.81 }, // C
-      { chord: [196.0, 246.94, 293.66], bass: 98.0 },   // G
-    ];
-    const BAR = 3.4;
-    let i = 0;
+    // Descending lament bass (A–G–F–E): a classic dread/tension figure.
+    const roots = [55.0, 49.0, 43.65, 41.2];
+    const BEAT = 0.6, BAR = 4 * BEAT; // ~2.4s, anxious heartbeat tempo
     const tick = () => {
       if (!this._musicOn) return;
-      const b = bars[i % bars.length]; i++;
-      const t = this.ctx.currentTime + 0.05;
-      // pad chord — soft triangles with long attack/release, overlapping for legato
-      for (const f of b.chord) {
-        const o = this.ctx.createOscillator();
-        o.type = 'triangle'; o.frequency.value = f;
-        const g = this.ctx.createGain();
+      const ph = this._musicPhase++;
+      const root = roots[ph % roots.length];
+      const t = ctx.currentTime + 0.06;
+      // heartbeat on beats 1 and 3
+      this._heartbeat(t);
+      this._heartbeat(t + 2 * BEAT);
+      // low drone: root + fifth, sustained across the bar
+      this._busNote(t, root, 0.13, BAR + 0.3, { type: 'triangle', attack: 0.5 });
+      this._busNote(t, root * 1.5, 0.08, BAR + 0.3, { type: 'triangle', attack: 0.6 });
+      // tritone swell two octaves up (the "diabolus" — unease), peaks mid-bar
+      this._busNote(t, root * 4 * Math.pow(2, 6 / 12), 0.05, BAR, { type: 'sawtooth', attack: BAR * 0.5 });
+      // every 4 bars: a slow low-passed riser that builds, then resets — suspense
+      if (ph % 4 === 0) {
+        const o = ctx.createOscillator(); o.type = 'sawtooth';
+        o.frequency.setValueAtTime(110, t);
+        o.frequency.linearRampToValueAtTime(165, t + 4 * BAR);
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 650;
+        const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.16, t + 1.1);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + BAR + 0.3);
-        o.connect(g).connect(this._musicBus);
-        o.start(t); o.stop(t + BAR + 0.4);
+        g.gain.linearRampToValueAtTime(0.035, t + 4 * BAR * 0.85);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 4 * BAR);
+        o.connect(lp).connect(g).connect(this._musicBus);
+        o.start(t); o.stop(t + 4 * BAR + 0.1);
       }
-      // bass drone
-      const bo = this.ctx.createOscillator();
-      bo.type = 'sine'; bo.frequency.value = b.bass;
-      const bg = this.ctx.createGain();
-      bg.gain.setValueAtTime(0.0001, t);
-      bg.gain.exponentialRampToValueAtTime(0.22, t + 0.6);
-      bg.gain.exponentialRampToValueAtTime(0.0001, t + BAR + 0.2);
-      bo.connect(bg).connect(this._musicBus);
-      bo.start(t); bo.stop(t + BAR + 0.3);
       this._musicTimer = setTimeout(tick, BAR * 1000);
     };
     tick();
