@@ -83,6 +83,33 @@ function drawTextFallback(x, kind, W, H) {
     x.fillText(kind < 31 ? WINDS[kind - 27] : DRAGONS[kind - 31], W / 2, H * 0.52);
   }
 }
+// A rounded-corner tile body: a rounded-rectangle extruded by the full depth, so
+// the tile is exactly TW×TH×TD (no added bulk) — only the four vertical corners
+// are rounded, to match the rounded card face. Two material groups: group 0 =
+// the flat front/back caps (the face), group 1 = the sides. Fewer groups than a
+// 6-sided box, so this also lowers draw calls per tile.
+function roundedTileGeo() {
+  const w = TW, h = TH, r = Math.min(w, h) * 0.12;   // corner radius
+  const x0 = -w / 2, y0 = -h / 2;
+  const s = new THREE.Shape();
+  s.moveTo(x0 + r, y0);
+  s.lineTo(x0 + w - r, y0); s.quadraticCurveTo(x0 + w, y0, x0 + w, y0 + r);
+  s.lineTo(x0 + w, y0 + h - r); s.quadraticCurveTo(x0 + w, y0 + h, x0 + w - r, y0 + h);
+  s.lineTo(x0 + r, y0 + h); s.quadraticCurveTo(x0, y0 + h, x0, y0 + h - r);
+  s.lineTo(x0, y0 + r); s.quadraticCurveTo(x0, y0, x0 + r, y0);
+  const geo = new THREE.ExtrudeGeometry(s, { depth: TD, bevelEnabled: false, steps: 1, curveSegments: 6 });
+  geo.center();
+  // Remap the cap UVs to 0..1 over the full TW×TH so the face texture maps cleanly
+  // (ExtrudeGeometry's default cap UVs are in model space).
+  const pos = geo.attributes.position, nrm = geo.attributes.normal, uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    if (Math.abs(nrm.getZ(i)) > 0.5) {
+      uv.setXY(i, (pos.getX(i) + w / 2) / w, (pos.getY(i) + h / 2) / h);
+    }
+  }
+  uv.needsUpdate = true;
+  return geo;
+}
 // Render a complete tile face onto canvas `cv`.
 function drawFace(cv, kind, wild) {
   const x = cv.getContext('2d');
@@ -128,7 +155,7 @@ export class MahjongScene {
 
     this._lights(); this._table();
 
-    this.geo = new THREE.BoxGeometry(TW, TH, TD);
+    this.geo = roundedTileGeo();
     this.ivory = new THREE.MeshStandardMaterial({ color: 0xece2c8, roughness: 0.6, metalness: 0.02 });
     this.green = new THREE.MeshStandardMaterial({ color: 0x1c855f, roughness: 0.5, metalness: 0.03 });
     this.faceMat = new Map();   // faceKey -> material
@@ -203,8 +230,8 @@ export class MahjongScene {
     }
   }
   _mats(kind, wild, emissive) {
-    const f = this._material(kind, wild, emissive);
-    return [this.ivory, this.ivory, this.ivory, this.ivory, kind == null ? this.green : f, this.green];
+    // rounded geometry has 2 groups: [0] flat caps (the face), [1] rounded sides.
+    return [this._material(kind, wild, emissive), this.ivory];
   }
 
   // Ensure a mesh exists for `key` with the given face, and set its target
@@ -253,7 +280,9 @@ export class MahjongScene {
       selected: ui.myTurn && i === ui.selRendered,
       gapBefore: i === drawnIdx ? 0.8 : 0,
     }));
-    this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: -0.34, ry: 0, pull: -0.35 }, HAND_HALF, seen);
+    // refSpan = a full 14-tile hand (13 gaps + the drawn-tile gap) so the tile
+    // size is fixed regardless of how many tiles are currently held.
+    this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: -0.34, ry: 0, pull: -0.35, refSpan: 13 * GAP + 0.8 }, HAND_HALF, seen);
 
     // Opponents: walls of backs.
     const oppCfg = {
@@ -334,7 +363,11 @@ export class MahjongScene {
     let cursor = 0;
     items.forEach((it, i) => { cursor += (i === 0 ? 0 : GAP) + (it.gapBefore || 0); pos.push(cursor); });
     const span = cursor;
-    const s = Math.min(1, (2 * maxHalf) / Math.max(span, 0.001));
+    // Scale to a fixed reference width when given (the hand), so tile size stays
+    // constant as the count/gap changes (e.g. drawing the 14th tile) — only the
+    // row's total width changes, not the tiles. Falls back to fit-to-span.
+    const ref = cfg.refSpan ? Math.max(cfg.refSpan, span) : span;
+    const s = Math.min(1, (2 * maxHalf) / Math.max(ref, 0.001));
     items.forEach((it, i) => {
       const off = (pos[i] - span / 2) * s;
       const x = cfg.cx + cfg.dx * off, baseY = (TH / 2) * s;
@@ -363,10 +396,10 @@ export class MahjongScene {
 
   _pool(game, seen) {
     const log = game.discardLog;
-    const POOL = 0.42;                      // discards are smaller than hands
-    const subGap = 0.46, typeGap = 0.8;     // within-type subcolumn / between-type spacing
-    const rowGap = 0.66;                    // rows pile from the player side toward the opposite
-    const zFront = 1.6;                     // first row sits near the player; rows grow toward -z
+    const POOL = 0.55;                      // discards are smaller than hands (30% bigger than before)
+    const subGap = 0.58, typeGap = 0.2;     // within-type subcolumn / between-type spacing
+    const rowGap = 0.8;                     // rows pile from the player side toward the opposite
+    const zFront = 4.0;                     // first (bottom) row sits near the player; rows grow toward -z
     // Each suit is a type-column (筒 条 万 字, left→right). Within a type, every row
     // holds 4 subcolumns; tiles fill left→right then front (player) → back (opposite).
     const typeWidth = 4 * subGap;
