@@ -11,3 +11,5 @@ package-lock.json
 # test scratch
 test/cl/
 test/*.log
+test/_*.mjs
+test/_commitmsg.txt

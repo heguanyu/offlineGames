@@ -87,8 +87,8 @@ function render() {
 // the front-center of the table.
 function positionClaimUI() {
   const hud = $('action-hud');
-  const claim = isClaimPhase();
-  const myDiscard = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
+  const claim = isClaimPhase() && !lockedTing;
+  const myDiscard = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD && !lockedTing;
   if (scene && (claim || myDiscard)) {
     const p = scene.worldToScreen(0, 0, 3.9);
     hud.classList.toggle('claim', claim);
@@ -134,7 +134,10 @@ function renderActions() {
   const hint = $('hand-hint'); hint.textContent = '';
   const buttons = [];
 
-  if (game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN) {
+  if (lockedTing) {
+    // already 听 — the seat is on autopilot; never offer 吃/碰/杠/打出.
+    hint.textContent = `已听 · 自动出牌（等 ${tingWaits.map(tileName).join(' ')}）`;
+  } else if (game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN) {
     const c = game.currentClaim();
     if (c.type === 'win') { buttons.push(mkBtn(`胡 (${c.result.fan}番)`, () => doClaimTake())); }
     else if (c.type === 'pung') buttons.push(mkBtn('碰', () => doClaimTake()));
@@ -145,29 +148,26 @@ function renderActions() {
     buttons.push(mkBtn('过', () => doClaimPass(), true));
     hint.textContent = `${SEAT_LABEL[game.lastDiscard.player]} 打出 ${tileName(game.lastDiscard.kind)}`;
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
-    if (lockedTing) {
-      // already 听 — the seat auto-plays; no manual discard.
-      hint.textContent = `已听 · 自动出牌（等 ${tingWaits.map(tileName).join(' ')}）`;
-    } else {
-      for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
-      buttons.push(mkBtn('打出', () => discardSelected()));
-      // 听牌提示: proactively show which discards leave a ready hand. If the
-      // currently selected tile is one of them, spell out the waits.
-      const ting = tingDiscards();
-      const sel = renderedHand()[selectableHandIndices()[selIndex]];
-      const selTing = ting.find((t) => t.kind === sel);
-      if (selTing) hint.textContent = `打 ${tileName(sel)} 即听：${selTing.waits.map(tileName).join(' ')}`;
-      else if (ting.length) hint.textContent = `可听！打 ${ting.map((t) => tileName(t.kind)).join('、')} 即听`;
-      else hint.textContent = '选牌后按「打出」/ A 键';
-    }
+    for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
+    buttons.push(mkBtn('打出', () => discardSelected(false)));
+    // 听牌提示: proactively show which discards leave a ready hand. If the
+    // currently selected tile is one of them, also offer 打出并听牌 (declare 听).
+    const ting = tingDiscards();
+    const sel = renderedHand()[selectableHandIndices()[selIndex]];
+    const selTing = ting.find((t) => t.kind === sel);
+    if (selTing) {
+      buttons.push(mkBtn('打出并听牌', () => discardSelected(true), false, 'riichi'));
+      hint.textContent = `打 ${tileName(sel)} 即听：${selTing.waits.map(tileName).join(' ')}`;
+    } else if (ting.length) hint.textContent = `可听！打 ${ting.map((t) => tileName(t.kind)).join('、')} 即听`;
+    else hint.textContent = '选牌后按「打出」/ A 键';
   } else if (game.phase !== PHASE.OVER) {
     hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
   }
   if (focusIndex >= buttons.length) focusIndex = buttons.length - 1;
   buttons.forEach((b, i) => { if (i === focusIndex && isClaimPhase()) b.classList.add('focus'); bar.appendChild(b); });
 }
-function mkBtn(label, fn, ghost) {
-  const b = document.createElement('button'); b.className = 'act-btn' + (ghost ? ' ghost' : ''); b.textContent = label;
+function mkBtn(label, fn, ghost, extra) {
+  const b = document.createElement('button'); b.className = 'act-btn' + (ghost ? ' ghost' : '') + (extra ? ' ' + extra : ''); b.textContent = label;
   b.addEventListener('click', fn); return b;
 }
 function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN; }
@@ -234,15 +234,21 @@ function onPickTile(idx) {
   if (pos === selIndex) discardSelected();
   else { selIndex = pos; sound.select(); render(); }
 }
-function discardSelected() {
-  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
+// declare=true → 打出并听牌: discard the selected tile AND lock 听 (报听). From
+// then on the seat auto-plays. declare=false → a plain discard with no lock.
+function discardSelected(declare) {
+  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing) return;
   const id = renderedHand()[selectableHandIndices()[selIndex]];
   if (id == null) return;
+  let waits = null;
+  if (declare) {
+    const rest = game.hands[HUMAN].slice(); rest.splice(rest.indexOf(id), 1);
+    waits = game.handWaits(rest, HUMAN);
+    if (!waits.length) declare = false; // safety: not actually 听 → plain discard
+  }
   game.discard(HUMAN, id); sound.discard();
   selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
-  // The moment this discard leaves a ready hand, lock 听: from now on the seat
-  // auto-plays (no more manual discards).
-  if (!lockedTing) { const ti = game.tenpaiInfo(HUMAN); if (ti.tenpai) { lockedTing = true; tingWaits = ti.waits; toast('听！', true); } }
+  if (declare) { lockedTing = true; tingWaits = waits; toast('听！自动出牌', true); sound.startMusic(); }
   tick();
 }
 function doSelfKong(kind) { if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) { game.selfKong(HUMAN, kind); tick(); } }
@@ -266,6 +272,7 @@ function showResult() {
     for (const m of game.melds[w]) for (const t of m.tiles) handEl.appendChild(faceTileEl(t, { lg: true }));
     payEl.innerHTML = r.payments.map((amt, p) => `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`).join('　');
   }
+  sound.stopMusic(); // 听 (if any) is over
   saveSession(); ov.classList.remove('hidden');
 }
 function nextHand() {
@@ -281,6 +288,7 @@ function startHand() {
   if (!scene) scene = new MahjongScene($('scene'));
   game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan });
   lastLogLen = 0; selIndex = 0; focusIndex = 0; lockedTing = false; tingWaits = [];
+  sound.stopMusic();
   saveSession(); tick();
 }
 function newGame() { game = null; session = { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 }; startHand(); }
@@ -315,7 +323,8 @@ function onAction(name) {
     const n = selectableHandIndices().length;
     if (name === 'left') { selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
     else if (name === 'right') { selIndex = (selIndex + 1) % n; sound.select(); render(); }
-    else if (name === 'confirm') discardSelected();
+    else if (name === 'confirm') discardSelected(false);
+    else if (name === 'declare') discardSelected(true); // 打出并听牌 (falls back to plain if not 听)
     else if (name === 'kong') { const o = game.selfKongOptions(HUMAN)[0]; if (o) doSelfKong(o.kind); }
     else if (name === 'menu' || name === 'cancel') openMenu();
     return;
@@ -323,7 +332,7 @@ function onAction(name) {
   if (name === 'menu') openMenu();
 }
 addEventListener('keydown', (e) => {
-  const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right', Enter: 'confirm', ' ': 'confirm', Escape: 'cancel', Backspace: 'pass', m: 'menu', M: 'menu', g: 'kong', G: 'kong', k: 'kong', K: 'kong' };
+  const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right', Enter: 'confirm', ' ': 'confirm', Escape: 'cancel', Backspace: 'pass', m: 'menu', M: 'menu', g: 'kong', G: 'kong', k: 'kong', K: 'kong', t: 'declare', T: 'declare' };
   const a = map[e.key]; if (a) { e.preventDefault(); onAction(a); }
 });
 const padPrev = {}; let axisLatch = false;
@@ -333,7 +342,7 @@ function pollGamepad() {
     const press = (i) => { const d = !!pad.buttons[i]?.pressed, was = padPrev[i]; padPrev[i] = d; return d && !was; };
     if (press(14) || press(12)) onAction('left');
     if (press(15) || press(13)) onAction('right');
-    if (press(0)) onAction('confirm'); if (press(1)) onAction('cancel'); if (press(3)) onAction('kong'); if (press(9)) onAction('menu');
+    if (press(0)) onAction('confirm'); if (press(1)) onAction('cancel'); if (press(2)) onAction('declare'); if (press(3)) onAction('kong'); if (press(9)) onAction('menu');
     const x = pad.axes[0] || 0;
     if (Math.abs(x) > 0.5) { if (!axisLatch) { onAction(x < 0 ? 'left' : 'right'); axisLatch = true; } } else axisLatch = false;
   }
@@ -379,5 +388,23 @@ if (new URLSearchParams(location.search).get('fast')) {
     phase: () => game && game.phase,
     claim: () => game && game.currentClaim(),
     humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,
+    locked: () => lockedTing,
+    music: () => !!(sound._musicWanted || sound._musicOn),
+    hint: () => $('hand-hint').textContent,
+    actions: () => [...$('action-bar').children].map((b) => ({ text: b.textContent, cls: b.className })),
+    // Force a deterministic state where the human holds `hand13` (tenpai) plus a
+    // freshly drawn `drawn` tile, so discarding `drawn` leaves a ready hand.
+    forceTing: (hand13, drawn) => {
+      lockedTing = false; tingWaits = []; _tingSig = '';
+      game.hands[HUMAN] = hand13.concat(drawn);
+      game.drawnTile = drawn; selIndex = 0; render();
+    },
+    setLocked: (waits) => { lockedTing = true; tingWaits = waits; render(); },
+    selectKind: (kind) => {
+      const idxs = selectableHandIndices();
+      for (let i = 0; i < idxs.length; i++) if (renderedHand()[idxs[i]] === kind) { selIndex = i; render(); return true; }
+      return false;
+    },
+    clickAction: (text) => { const b = [...$('action-bar').children].find((x) => x.textContent === text); if (b) { b.click(); return true; } return false; },
   };
 }

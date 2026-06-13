@@ -60,6 +60,12 @@
   #action-hud.claim .act-btn.ghost, #action-hud.discard .act-btn.ghost { box-shadow: 0 5px 0 #0c3526, 0 9px 18px rgba(0,0,0,0.45); }
   #action-hud.claim .hint { display: none; }
   #action-hud.discard .hint { font-size: 1.2rem; color: var(--gold); font-weight: 600; }
+  /* 打出并听牌 (declare 听): red, with a pulsing glow border */
+  #action-hud.discard .act-btn.riichi { background: linear-gradient(180deg, #ff5c5c, #d31f1f); color: #fff; border: 2px solid #ffdada; animation: riichi-glow 1.1s ease-in-out infinite; }
+  @keyframes riichi-glow {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(255,90,90,0.55), 0 0 14px 3px rgba(255,60,60,0.6), 0 5px 0 #8e1414; }
+    50% { box-shadow: 0 0 0 3px rgba(255,130,130,0.9), 0 0 28px 9px rgba(255,70,70,0.95), 0 5px 0 #8e1414; }
+  }
 
   .overlay { position: fixed; inset: 0; z-index: 20; background: rgba(3,16,11,0.84); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
   .overlay.hidden { display: none; }
