@@ -400,41 +400,46 @@ export class MahjongScene {
     const subGap = 0.58, typeGap = 0.2;     // within-type subcolumn / between-type spacing
     const rowGap = 0.8;                     // rows pile from the player side toward the opposite
     const zFront = 4.0;                     // first (bottom) row sits near the player; rows grow toward -z
-    // Each suit is a type-column (筒 条 万 字, left→right). Within a type, every row
-    // holds 4 subcolumns; tiles fill left→right then front (player) → back (opposite).
+    // Each suit is a type-column (万 筒 条 字, left→right). Within a type, every row
+    // holds 4 subcolumns; tiles are ordered by card id (rank), filling left→right
+    // then front (player) → back (opposite). Mesh keys stay tied to the discard's
+    // log index, so a tile slotting into sorted order just animates over.
     const typeWidth = 4 * subGap;
     const totalWidth = 4 * typeWidth + 3 * typeGap;
     const colOf = (kind) => {
       const s = suitOf(kind);
-      return s === 'p' ? 0 : s === 's' ? 1 : s === 'm' ? 2 : 3;
+      return s === 'm' ? 0 : s === 'p' ? 1 : s === 's' ? 2 : 3;
     };
-    const typeCount = [0, 0, 0, 0];
-    log.forEach((d, i) => {
-      const tc = colOf(d.kind);
-      const n = typeCount[tc]++;             // n-th discard of this suit
-      const sub = n % 4, row = Math.floor(n / 4);
-      const x = -totalWidth / 2 + tc * (typeWidth + typeGap) + (sub + 0.5) * subGap;
-      const z = zFront - row * rowGap;
-      // The just-discarded tile that YOU can claim (碰/杠/胡): show it big and
-      // upright (facing the camera), front-center, so the choice is obvious.
-      const pending = i === log.length - 1 && this.claimable;
-      if (pending) {
-        this._place('pool' + i, {
-          kind: d.kind, wild: game.isWild(d.kind), emissive: true, scale: 1.5, from: this._seatCenter(d.player),
-          x: 0, y: TH * 0.78, z: 2.6, rx: -0.18, ry: 0, rz: 0,
-        }, seen);
-        return;
-      }
-      // Your own discards rise up into the pool from your side of the table
-      // (in front of the hand), instead of sliding in from the row's middle.
-      const from = d.player === 0
-        ? new THREE.Vector3(x, TH * 0.35, R_HAND + 0.4)
-        : this._seatCenter(d.player);
-      this._place('pool' + i, {
-        kind: d.kind, wild: game.isWild(d.kind), emissive: false, scale: POOL, from,
-        x, y: (TD / 2) * POOL, z, rx: -Math.PI / 2, ry: 0,
+    // The just-discarded tile that YOU can claim (碰/杠/胡) is pulled out of the grid
+    // and shown big/upright, front-center, so the choice is obvious.
+    const pendingIdx = this.claimable && log.length ? log.length - 1 : -1;
+    if (pendingIdx >= 0) {
+      const d = log[pendingIdx];
+      this._place('pool' + pendingIdx, {
+        kind: d.kind, wild: game.isWild(d.kind), emissive: true, scale: 1.5, from: this._seatCenter(d.player),
+        x: 0, y: TH * 0.78, z: 2.6, rx: -0.18, ry: 0, rz: 0,
       }, seen);
-    });
+    }
+    // Bucket the remaining discards by suit, then order each column by card id.
+    const byType = [[], [], [], []];
+    log.forEach((d, i) => { if (i !== pendingIdx) byType[colOf(d.kind)].push({ i, kind: d.kind, player: d.player }); });
+    for (const list of byType) list.sort((a, b) => a.kind - b.kind || a.i - b.i);
+    for (let tc = 0; tc < 4; tc++) {
+      byType[tc].forEach((t, k) => {
+        const sub = k % 4, row = Math.floor(k / 4);
+        const x = -totalWidth / 2 + tc * (typeWidth + typeGap) + (sub + 0.5) * subGap;
+        const z = zFront - row * rowGap;
+        // Your own discards rise up into the pool from your side of the table
+        // (in front of the hand), instead of sliding in from the row's middle.
+        const from = t.player === 0
+          ? new THREE.Vector3(x, TH * 0.35, R_HAND + 0.4)
+          : this._seatCenter(t.player);
+        this._place('pool' + t.i, {
+          kind: t.kind, wild: game.isWild(t.kind), emissive: false, scale: POOL, from,
+          x, y: (TD / 2) * POOL, z, rx: -Math.PI / 2, ry: 0,
+        }, seen);
+      });
+    }
   }
 
   pick(clientX, clientY) {

@@ -564,6 +564,7 @@ bindUI();
 if (new URLSearchParams(location.search).get('fast')) {
   window.__mj = {
     humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,
+    scene: () => scene,
     // visual check: melds for every seat + a full pool + a pending claim
     debugMelds: () => {
       for (let p = 0; p < 4; p++) game.melds[p] = [
@@ -581,9 +582,10 @@ if (new URLSearchParams(location.search).get('fast')) {
     // visual check: a full discard pool laid out in suit columns, no pending tile
     debugPool: () => {
       game.discardLog = [];
-      const base = [9, 18, 0, 27]; // 筒 条 万 字 starting ids
-      for (let s = 0; s < 4; s++) for (let k = 0; k < 10; k++) {
-        game.discardLog.push({ player: k % 4, kind: base[s] + (k % (s === 3 ? 7 : 9)) });
+      const base = [0, 9, 18, 27]; // 万 筒 条 字 starting ids
+      const order = [3, 7, 1, 8, 0, 5, 2, 6, 4]; // scrambled, to show id-sorting
+      for (let s = 0; s < 4; s++) for (let k = 0; k < 9; k++) {
+        game.discardLog.push({ player: k % 4, kind: base[s] + (order[k] % (s === 3 ? 7 : 9)) });
       }
       game.phase = PHASE.AWAIT_DISCARD; game.claim = null; game.turn = HUMAN;
       render();
