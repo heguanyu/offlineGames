@@ -3,11 +3,13 @@
 // paces the AI so the human can follow along.
 import { Game, PHASE, tileName } from './engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
-import { MahjongScene, tileFaceUrl } from './scene.js';
+import { MahjongScene } from './scene.js';
 import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad } from './ui-util.js';
 
 const sound = new Sound();
+const toast = makeToast();
 
 const HUMAN = 0;
 // Relative seat names from the human's perspective (play order 0→1→2→3).
@@ -17,8 +19,6 @@ const WIND = ['东', '南', '西', '北'];
 // Pace between AI moves so the human can follow; `?fast=1` speeds it up for the
 // automated e2e test.
 const AI_DELAY = new URLSearchParams(location.search).get('fast') ? 35 : 600;
-
-const $ = (id) => document.getElementById(id);
 
 let game = null;
 let scene = null;             // MahjongScene (3D table)
@@ -47,19 +47,6 @@ function saveSession() {
 {
   const lv = parseInt(localStorage.getItem('mahjong-level'), 10);
   if (lv >= 1 && lv <= 3) level = lv;
-}
-
-// ---------------------------------------------------------------------------
-// A DOM tile showing its real SVG face (used in the 混儿 header overlay + the
-// result panel; the table itself is rendered in 3D by scene.js). opts: { lg, wild }.
-// ---------------------------------------------------------------------------
-function faceTileEl(kind, opts = {}) {
-  const el = document.createElement('div');
-  el.className = 'tile face-tile' + (opts.lg ? ' lg' : '') + (opts.wild ? ' wild' : '');
-  const img = document.createElement('img');
-  img.className = 'face'; img.src = tileFaceUrl(kind); img.alt = tileName(kind);
-  el.appendChild(img);
-  return el;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,16 +143,16 @@ function renderActions() {
 
   if (game.phase === PHASE.AWAIT_CLAIM && game.claim && game.claim.player === HUMAN) {
     const c = game.claim;
-    if (c.options.includes('pung')) buttons.push(mkBtn('碰', 'pung', () => doClaim('pung')));
-    if (c.options.includes('kong')) buttons.push(mkBtn('杠', 'kong', () => doClaim('kong')));
-    buttons.push(mkBtn('过', 'pass', () => doPass(), true));
+    if (c.options.includes('pung')) buttons.push(mkBtn('碰', () => doClaim('pung')));
+    if (c.options.includes('kong')) buttons.push(mkBtn('杠', () => doClaim('kong')));
+    buttons.push(mkBtn('过', () => doPass(), true));
     hint.textContent = `${SEAT_LABEL[c.player === HUMAN ? game.lastDiscard.player : c.player]} 打出 ${tileName(c.kind)}`;
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
     // self-kong options
     for (const k of game.selfKongOptions(HUMAN)) {
-      buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, 'selfkong', () => doSelfKong(k.kind), true));
+      buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
     }
-    buttons.push(mkBtn('打出', 'discard', () => discardSelected()));
+    buttons.push(mkBtn('打出', () => discardSelected()));
     // no disclaimer — 打出 sits in the bottom bar under the hand
   } else if (game.phase !== PHASE.OVER) {
     hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
@@ -173,15 +160,6 @@ function renderActions() {
 
   if (focusIndex >= buttons.length) focusIndex = buttons.length - 1;
   buttons.forEach((b, i) => { if (i === focusIndex && isClaimPhase()) b.classList.add('focus'); bar.appendChild(b); });
-}
-
-function mkBtn(label, kind, fn, ghost) {
-  const b = document.createElement('button');
-  b.className = 'act-btn' + (ghost ? ' ghost' : '');
-  b.dataset.kind = kind;
-  b.textContent = label;
-  b.addEventListener('click', fn);
-  return b;
 }
 
 function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.claim && game.claim.player === HUMAN; }
@@ -198,14 +176,6 @@ function flushLogToasts() {
     else if (/碰/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.pung(); }
   }
   lastLogLen = game.log.length;
-}
-let toastTimer = null;
-function toast(msg, big) {
-  const t = $('toast');
-  t.textContent = msg;
-  t.className = 'show' + (big ? ' big' : '');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.className = big ? 'big' : ''; }, 1100);
 }
 
 // ---------------------------------------------------------------------------
@@ -452,49 +422,14 @@ function onAction(name) {
   if (name === 'menu') openMenu();
 }
 
-// keyboard
-addEventListener('keydown', (e) => {
-  const map = {
-    ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right',
-    Enter: 'confirm', ' ': 'confirm',
-    p: 'pung', P: 'pung', g: 'kong', G: 'kong', k: 'kong', K: 'kong',
-    Escape: 'cancel', Backspace: 'pass',
-    m: 'menu', M: 'menu',
-  };
-  const a = map[e.key];
-  if (a) { e.preventDefault(); onAction(a); }
+bindKeys(onAction, {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right',
+  Enter: 'confirm', ' ': 'confirm',
+  p: 'pung', P: 'pung', g: 'kong', G: 'kong', k: 'kong', K: 'kong',
+  Escape: 'cancel', Backspace: 'pass', m: 'menu', M: 'menu',
 });
-
-// gamepad — poll each frame (Gamepad API is poll-based), with edge detection.
-const padPrev = {};
-let axisLatch = false;
-function pollGamepad() {
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  const pad = Array.from(pads).find((p) => p && p.connected);
-  if (pad) {
-    const press = (i) => {
-      const down = !!pad.buttons[i]?.pressed;
-      const was = padPrev[i];
-      padPrev[i] = down;
-      return down && !was; // rising edge
-    };
-    if (press(14)) onAction('left');
-    if (press(15)) onAction('right');
-    if (press(12)) onAction('left');
-    if (press(13)) onAction('right');
-    if (press(0)) onAction('confirm');  // A
-    if (press(1)) onAction('cancel');   // B
-    if (press(2)) onAction('pung');     // X
-    if (press(3)) onAction('kong');     // Y
-    if (press(9)) onAction('menu');     // Menu/Start
-    const x = pad.axes[0] || 0;
-    if (Math.abs(x) > 0.5) {
-      if (!axisLatch) { onAction(x < 0 ? 'left' : 'right'); axisLatch = true; }
-    } else axisLatch = false;
-  }
-  requestAnimationFrame(pollGamepad);
-}
-requestAnimationFrame(pollGamepad);
+// Xbox: A=confirm B=cancel X=pung Y=kong, d-pad/stick = left/right, Menu = menu.
+startGamepad(onAction, { 14: 'left', 12: 'left', 15: 'right', 13: 'right', 0: 'confirm', 1: 'cancel', 2: 'pung', 3: 'kong', 9: 'menu' });
 
 // ---------------------------------------------------------------------------
 // Overlays + boot

@@ -2,30 +2,12 @@
 // auto-plays the human seat through several hands (taking 胡 when offered, else
 // passing claims), and fails on any console/page error.
 // Usage: node test/guobiao-e2e.mjs
-import http from 'node:http';
-import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import puppeteer from 'puppeteer-core';
+import { startServer, launchBrowser, ROOT as root } from './harness.mjs';
 
 const PORT = 8143;
-const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml' };
-
-const server = http.createServer((req, res) => {
-  let file = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
-  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
-  if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
-  fs.createReadStream(file).pipe(res);
-});
-await new Promise((r) => server.listen(PORT, r));
-
-const browser = await puppeteer.launch({
-  executablePath: EDGE, headless: 'new',
-  args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader', '--enable-webgl'],
-});
+const server = await startServer(PORT);
+const browser = await launchBrowser();
 const errors = [];
 try {
   const page = await browser.newPage();

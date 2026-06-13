@@ -3,17 +3,17 @@
 // claim-queue orchestration (胡 > 碰/杠 > 吃 priority, win off discards, 听).
 import { Game, PHASE, tileName, MIN_FAN } from './engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
-import { MahjongScene, tileFaceUrl } from '../mahjong/scene.js';
+import { MahjongScene } from '../mahjong/scene.js';
 import { Sound } from '../mahjong/sound.js';
 import { buildOrder } from '../mahjong/handorder.js';
-import { suitOf, rankOf } from '../mahjong/engine.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad } from '../mahjong/ui-util.js';
 
 const sound = new Sound();
+const toast = makeToast();
 const HUMAN = 0;
 const SEAT_LABEL = ['你', '下家', '对家', '上家'];
 const WIND = ['东', '南', '西', '北'];
 const AI_DELAY = new URLSearchParams(location.search).get('fast') ? 35 : 650;
-const $ = (id) => document.getElementById(id);
 
 // Per-page config (set by each index.html before this module loads). The 无定番
 // variant uses minFan: 0 and its own storage key so the two games keep separate
@@ -35,23 +35,6 @@ function saveSession() {
   localStorage.setItem(CFG.sessionKey + '-level', String(level));
 }
 { const lv = parseInt(localStorage.getItem(CFG.sessionKey + '-level'), 10); if (lv >= 1 && lv <= 3) level = lv; }
-
-// ---- small DOM tile (result panel + 听 display) ----
-const SUIT_CHAR = { m: '万', p: '筒', s: '条' };
-const DRAGON_CLASS = ['z-c', 'z-f', 'z-b'];
-function tileEl(id, opts = {}) {
-  const el = document.createElement('div');
-  el.className = 'tile' + (opts.size ? ' ' + opts.size : '');
-  if (id < 27) { el.classList.add('suit-' + suitOf(id)); el.innerHTML = `<span class="rk">${rankOf(id)}</span><span class="st">${SUIT_CHAR[suitOf(id)]}</span>`; }
-  else if (id < 31) { el.classList.add('honor', 'wind'); el.innerHTML = `<span class="rk">${WIND[id - 27]}</span>`; }
-  else { el.classList.add('honor', DRAGON_CLASS[id - 31]); el.innerHTML = `<span class="rk">${['中', '發', '白'][id - 31]}</span>`; }
-  return el;
-}
-function faceTileEl(kind, opts = {}) {
-  const el = document.createElement('div'); el.className = 'tile face-tile' + (opts.lg ? ' lg' : '');
-  const img = document.createElement('img'); img.className = 'face'; img.src = tileFaceUrl(kind); el.appendChild(img);
-  return el;
-}
 
 // ---- hand order (no wilds → just sorted, drawn on the right) ----
 const noWild = () => false;
@@ -161,10 +144,6 @@ function renderActions() {
   if (focusIndex >= buttons.length) focusIndex = buttons.length - 1;
   buttons.forEach((b, i) => { if (i === focusIndex && isClaimPhase()) b.classList.add('focus'); bar.appendChild(b); });
 }
-function mkBtn(label, fn, ghost, extra) {
-  const b = document.createElement('button'); b.className = 'act-btn' + (ghost ? ' ghost' : '') + (extra ? ' ' + extra : ''); b.textContent = label;
-  b.addEventListener('click', fn); return b;
-}
 // A 吃 option rendered as the actual 3-tile run (faces), with a red ▼ over the
 // claimed tile, as one big button. `opt` is the two hand tiles; `claimed` is the
 // discard being chowed.
@@ -191,11 +170,6 @@ function flushLog() {
     else if (/吃/.test(line)) { toast(line, false); sound.select(); }
   }
   lastLogLen = game.log.length;
-}
-let toastTimer = null;
-function toast(msg, big) {
-  const t = $('toast'); t.textContent = msg; t.className = 'show' + (big ? ' big' : '');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = big ? 'big' : ''; }, 1100);
 }
 
 // ---- orchestration ----
@@ -348,24 +322,13 @@ function onAction(name) {
   }
   if (name === 'menu') openMenu();
 }
-addEventListener('keydown', (e) => {
-  const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right', Enter: 'confirm', ' ': 'confirm', Escape: 'cancel', Backspace: 'pass', m: 'menu', M: 'menu', g: 'kong', G: 'kong', k: 'kong', K: 'kong', t: 'declare', T: 'declare' };
-  const a = map[e.key]; if (a) { e.preventDefault(); onAction(a); }
+bindKeys(onAction, {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right',
+  Enter: 'confirm', ' ': 'confirm', Escape: 'cancel', Backspace: 'pass',
+  m: 'menu', M: 'menu', g: 'kong', G: 'kong', k: 'kong', K: 'kong', t: 'declare', T: 'declare',
 });
-const padPrev = {}; let axisLatch = false;
-function pollGamepad() {
-  const pad = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).find((p) => p && p.connected);
-  if (pad) {
-    const press = (i) => { const d = !!pad.buttons[i]?.pressed, was = padPrev[i]; padPrev[i] = d; return d && !was; };
-    if (press(14) || press(12)) onAction('left');
-    if (press(15) || press(13)) onAction('right');
-    if (press(0)) onAction('confirm'); if (press(1)) onAction('cancel'); if (press(2)) onAction('declare'); if (press(3)) onAction('kong'); if (press(9)) onAction('menu');
-    const x = pad.axes[0] || 0;
-    if (Math.abs(x) > 0.5) { if (!axisLatch) { onAction(x < 0 ? 'left' : 'right'); axisLatch = true; } } else axisLatch = false;
-  }
-  requestAnimationFrame(pollGamepad);
-}
-requestAnimationFrame(pollGamepad);
+// Xbox: A=confirm B=cancel X=declare(听) Y=kong, d-pad/stick = left/right, Menu = menu.
+startGamepad(onAction, { 14: 'left', 12: 'left', 15: 'right', 13: 'right', 0: 'confirm', 1: 'cancel', 2: 'declare', 3: 'kong', 9: 'menu' });
 
 // ---- overlays + boot ----
 function openMenu() { $('menu-overlay').classList.remove('hidden'); }

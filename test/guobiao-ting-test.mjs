@@ -4,29 +4,11 @@
 //  2. Clicking 打出并听牌 locks the seat (听) and starts background music.
 //  3. While 听, the seat is on autopilot: no 打出/碰/吃 buttons are offered.
 // Usage: node test/guobiao-ting-test.mjs
-import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import puppeteer from 'puppeteer-core';
+import { startServer, launchBrowser } from './harness.mjs';
 
 const PORT = 8166;
-const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml' };
-const server = http.createServer((req, res) => {
-  let file = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
-  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
-  if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
-  fs.createReadStream(file).pipe(res);
-});
-await new Promise((r) => server.listen(PORT, r));
-
-const browser = await puppeteer.launch({
-  executablePath: EDGE, headless: 'new',
-  args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader', '--enable-webgl', '--autoplay-policy=no-user-gesture-required'],
-});
+const server = await startServer(PORT);
+const browser = await launchBrowser(['--autoplay-policy=no-user-gesture-required']);
 function assert(c, m) { if (!c) throw new Error(m); }
 try {
   const page = await browser.newPage();
