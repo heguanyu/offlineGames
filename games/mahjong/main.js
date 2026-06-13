@@ -117,22 +117,19 @@ function render() {
   flushLogToasts();
 }
 
-// Pin the big buttons (碰/杠/过 when claiming, or 打出 on your own turn) at the
-// front-center of the table instead of the bottom bar.
+// Pin the claim buttons (碰/杠/过) under the big pending tile (front-center). The
+// 打出 button stays in the default bottom bar, under the player's hand.
 function positionClaimUI() {
   const hud = $('action-hud');
-  const claim = isClaimPhase();
-  const myDiscard = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
-  if (scene && (claim || myDiscard)) {
+  if (scene && isClaimPhase()) {
     const p = scene.worldToScreen(0, 0, 3.9);
-    hud.classList.toggle('claim', claim);
-    hud.classList.toggle('discard', !claim && myDiscard);
+    hud.classList.add('claim');
     hud.style.left = p.x + 'px';
     hud.style.top = p.y + 'px';
     hud.style.bottom = 'auto';
     hud.style.transform = 'translate(-50%, 0)';
   } else {
-    hud.classList.remove('claim', 'discard');
+    hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
   }
 }
@@ -168,7 +165,7 @@ function renderActions() {
       buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, 'selfkong', () => doSelfKong(k.kind), true));
     }
     buttons.push(mkBtn('打出', 'discard', () => discardSelected()));
-    hint.textContent = '选牌后按「打出」/ A 键 · 混儿不可打出';
+    // no disclaimer — 打出 sits in the bottom bar under the hand
   } else if (game.phase !== PHASE.OVER) {
     hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
   }
@@ -338,6 +335,9 @@ function showResult() {
   const payEl = $('result-payments');
   fansEl.innerHTML = ''; handEl.innerHTML = '';
 
+  const winEl = $('result-winning');
+  winEl.innerHTML = '';
+  winEl.classList.remove('show');
   if (r.type === 'draw') {
     $('result-title').textContent = '荒牌 · 流局';
     scoreEl.textContent = '';
@@ -350,6 +350,12 @@ function showResult() {
       fansEl.appendChild(c);
     }
     scoreEl.textContent = r.score + ' 分';
+    if (r.winningTile != null) {
+      const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = '自摸 · 和这张';
+      winEl.appendChild(cap);
+      winEl.appendChild(faceTileEl(r.winningTile, { lg: true, wild: game.isWild(r.winningTile) }));
+      winEl.classList.add('show');
+    }
     renderWinningHand(handEl, w, r);
     payEl.innerHTML = r.payments.map((amt, p) =>
       `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`
@@ -564,11 +570,18 @@ if (new URLSearchParams(location.search).get('fast')) {
         { type: 'kong', kind: 9 + p * 3, tiles: [9 + p * 3, 9 + p * 3, 9 + p * 3, 9 + p * 3] },
       ];
       game.discardLog = [];
-      for (let i = 0; i < 33; i++) game.discardLog.push({ player: i % 4, kind: (i * 7) % 27 });
+      for (let i = 0; i < 40; i++) game.discardLog.push({ player: i % 4, kind: (i * 7) % 34 });
       game.discardLog.push({ player: 1, kind: 4 });       // pending tile
       game.phase = PHASE.AWAIT_CLAIM;
       game.lastDiscard = { player: 1, kind: 4 };
       game.claim = { player: HUMAN, kind: 4, options: ['pung'] };
+      render();
+    },
+    // visual check: a full discard pool laid out in suit columns, no pending tile
+    debugPool: () => {
+      game.discardLog = [];
+      for (let i = 0; i < 44; i++) game.discardLog.push({ player: i % 4, kind: (i * 5 + (i % 3)) % 34 });
+      game.phase = PHASE.AWAIT_DISCARD; game.claim = null; game.turn = HUMAN;
       render();
     },
   };

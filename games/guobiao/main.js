@@ -83,20 +83,17 @@ function render() {
   flushLog();
 }
 
-// Pin the big buttons (胡/碰/杠/吃/过 when claiming, or 打出 on your own turn) at
-// the front-center of the table.
+// Pin the claim buttons (胡/碰/杠/吃/过) under the big pending tile (front-center).
+// The 打出 button stays in the bottom bar; 打出并听牌 floats at screen center (CSS).
 function positionClaimUI() {
   const hud = $('action-hud');
-  const claim = isClaimPhase() && !lockedTing;
-  const myDiscard = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD && !lockedTing;
-  if (scene && (claim || myDiscard)) {
+  if (scene && isClaimPhase() && !lockedTing) {
     const p = scene.worldToScreen(0, 0, 3.9);
-    hud.classList.toggle('claim', claim);
-    hud.classList.toggle('discard', !claim && myDiscard);
+    hud.classList.add('claim');
     hud.style.left = p.x + 'px'; hud.style.top = p.y + 'px';
     hud.style.bottom = 'auto'; hud.style.transform = 'translate(-50%, 0)';
   } else {
-    hud.classList.remove('claim', 'discard');
+    hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
   }
 }
@@ -131,6 +128,7 @@ function tingDiscards() {
 
 function renderActions() {
   const bar = $('action-bar'); bar.innerHTML = '';
+  const center = $('ting-center'); center.innerHTML = ''; // 打出并听牌 floats here
   const hint = $('hand-hint'); hint.textContent = '';
   const buttons = [];
 
@@ -150,16 +148,12 @@ function renderActions() {
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
     for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
     buttons.push(mkBtn('打出', () => discardSelected(false)));
-    // 听牌提示: proactively show which discards leave a ready hand. If the
-    // currently selected tile is one of them, also offer 打出并听牌 (declare 听).
-    const ting = tingDiscards();
+    // If the selected discard would leave a ready hand, float 打出并听牌 (declare
+    // 听) at screen center. No text disclaimer — the red button is the 听 signal.
     const sel = renderedHand()[selectableHandIndices()[selIndex]];
-    const selTing = ting.find((t) => t.kind === sel);
-    if (selTing) {
-      buttons.push(mkBtn('打出并听牌', () => discardSelected(true), false, 'riichi'));
-      hint.textContent = `打 ${tileName(sel)} 即听：${selTing.waits.map(tileName).join(' ')}`;
-    } else if (ting.length) hint.textContent = `可听！打 ${ting.map((t) => tileName(t.kind)).join('、')} 即听`;
-    else hint.textContent = '选牌后按「打出」/ A 键';
+    if (tingDiscards().some((t) => t.kind === sel)) {
+      center.appendChild(mkBtn('打出并听牌', () => discardSelected(true), false, 'riichi'));
+    }
   } else if (game.phase !== PHASE.OVER) {
     hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
   }
@@ -259,7 +253,9 @@ function doClaimPass() { if (isClaimPhase()) { game.claimPass(); tick(); } }
 function showResult() {
   const r = game.result, ov = $('result-overlay');
   const fansEl = $('result-fans'), scoreEl = $('result-score'), handEl = $('result-hand'), payEl = $('result-payments');
-  fansEl.innerHTML = ''; handEl.innerHTML = '';
+  const winEl = $('result-winning');
+  $('ting-center').innerHTML = ''; // clear any floating 打出并听牌 before the modal
+  fansEl.innerHTML = ''; handEl.innerHTML = ''; winEl.innerHTML = ''; winEl.classList.remove('show');
   if (r.type === 'draw') {
     $('result-title').textContent = '荒牌 · 流局'; scoreEl.textContent = ''; payEl.textContent = '本局无人和牌';
   } else {
@@ -267,6 +263,12 @@ function showResult() {
     $('result-title').textContent = `${SEAT_LABEL[w]}（${WIND[game.seatWind(w)]}）${r.byDiscard ? '和牌' : '自摸'}！`;
     for (const f of r.fans) { const c = document.createElement('span'); c.className = 'fan-chip'; c.textContent = `${f.name} ${f.points}`; fansEl.appendChild(c); }
     scoreEl.textContent = r.fan + ' 番';
+    if (r.winningTile != null) {
+      const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = (r.byDiscard ? '点炮' : '自摸') + ' · 和这张';
+      winEl.appendChild(cap);
+      winEl.appendChild(faceTileEl(r.winningTile, { lg: true }));
+      winEl.classList.add('show');
+    }
     const hand = game.hands[w].slice().sort((a, b) => a - b);
     for (const id of hand) handEl.appendChild(faceTileEl(id, { lg: true }));
     for (const m of game.melds[w]) for (const t of m.tiles) handEl.appendChild(faceTileEl(t, { lg: true }));
@@ -391,7 +393,7 @@ if (new URLSearchParams(location.search).get('fast')) {
     locked: () => lockedTing,
     music: () => !!(sound._musicWanted || sound._musicOn),
     hint: () => $('hand-hint').textContent,
-    actions: () => [...$('action-bar').children].map((b) => ({ text: b.textContent, cls: b.className })),
+    actions: () => [...$('action-bar').children, ...$('ting-center').children].map((b) => ({ text: b.textContent, cls: b.className })),
     // Force a deterministic state where the human holds `hand13` (tenpai) plus a
     // freshly drawn `drawn` tile, so discarding `drawn` leaves a ready hand.
     forceTing: (hand13, drawn) => {
@@ -405,6 +407,12 @@ if (new URLSearchParams(location.search).get('fast')) {
       for (let i = 0; i < idxs.length; i++) if (renderedHand()[idxs[i]] === kind) { selIndex = i; render(); return true; }
       return false;
     },
-    clickAction: (text) => { const b = [...$('action-bar').children].find((x) => x.textContent === text); if (b) { b.click(); return true; } return false; },
+    clickAction: (text) => { const b = [...$('action-bar').children, ...$('ting-center').children].find((x) => x.textContent === text); if (b) { b.click(); return true; } return false; },
+    debugResult: () => {
+      game.phase = PHASE.OVER;
+      game.result = { type: 'win', winner: HUMAN, fan: 24, byDiscard: false, winningTile: game.hands[HUMAN][0],
+        fans: [{ name: '清一色', points: 24 }, { name: '碰碰和', points: 6 }], payments: [72, -24, -24, -24] };
+      showResult();
+    },
   };
 }

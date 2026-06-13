@@ -360,12 +360,19 @@ export class MahjongScene {
 
   _pool(game, seen) {
     const log = game.discardLog;
-    const POOL = 0.82;                 // discards are smaller than hands
-    const perRow = 9, sx = 0.74, sz = 0.98; // keep the pool compact in the middle
-    const rows = Math.max(1, Math.ceil(log.length / perRow));
+    const POOL = 0.5;                       // discards are smaller than hands
+    const colGap = 1.18, rowGap = 0.64;     // 4 suit columns; rows grow toward the player
+    const zStart = -3.7;
+    // Discards are sorted into columns by suit (筒 条 万 字, left→right); within a
+    // column each row is a tile in the order it was played.
+    const colOf = (kind) => {
+      const s = suitOf(kind);
+      return s === 'p' ? 0 : s === 's' ? 1 : s === 'm' ? 2 : 3;
+    };
+    const rowCount = [0, 0, 0, 0];
     log.forEach((d, i) => {
-      const r = Math.floor(i / perRow), col = i % perRow;
-      const inRow = Math.min(perRow, log.length - r * perRow);
+      const col = colOf(d.kind);
+      const row = rowCount[col]++;           // this tile's row within its suit column
       // The just-discarded tile that YOU can claim (碰/杠/胡): show it big and
       // upright (facing the camera), front-center, so the choice is obvious.
       const pending = i === log.length - 1 && this.claimable;
@@ -378,7 +385,7 @@ export class MahjongScene {
       }
       this._place('pool' + i, {
         kind: d.kind, wild: game.isWild(d.kind), emissive: false, scale: POOL, from: this._seatCenter(d.player),
-        x: (col - (inRow - 1) / 2) * sx, y: (TD / 2) * POOL, z: (r - (rows - 1) / 2) * sz - 0.2,
+        x: (col - 1.5) * colGap, y: (TD / 2) * POOL, z: zStart + row * rowGap,
         rx: -Math.PI / 2, ry: 0,
       }, seen);
     });

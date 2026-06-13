@@ -525,7 +525,7 @@ export class Game {
     this.phase = PHASE.OVER;
     const payments = this._settle(player, result.score);
     this.result = { type: 'win', winner: player, score: result.score, fans: result.fans,
-      decomp: result.decomp, payments };
+      decomp: result.decomp, winningTile: this.drawnTile, payments };
     this._emit(`${this.seatName(player)} 自摸 ${result.fans.join('+')} (${result.score})`);
   }
 

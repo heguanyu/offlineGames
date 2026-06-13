@@ -53,9 +53,10 @@ try {
   assert(plain, '打出 button missing: ' + JSON.stringify(acts));
   assert(riichi, '打出并听牌 button missing: ' + JSON.stringify(acts));
   assert(riichi.cls.includes('riichi'), '打出并听牌 missing .riichi class: ' + riichi.cls);
+  // No text disclaimer anymore — the red 打出并听牌 button itself is the 听 signal.
   const hint = await page.evaluate(() => window.__gb.hint());
-  assert(/即听/.test(hint), 'hint should mention 即听, got: ' + hint);
-  console.log('OK split: 打出 + 打出并听牌(riichi), hint =', JSON.stringify(hint));
+  assert(hint === '', 'discard turn should have no disclaimer text, got: ' + JSON.stringify(hint));
+  console.log('OK split: 打出 + 打出并听牌(riichi), no disclaimer');
 
   // (2) declare → locks + music starts
   await page.evaluate(() => window.__gb.clickAction('打出并听牌'));

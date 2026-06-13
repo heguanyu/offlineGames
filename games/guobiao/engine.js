@@ -231,7 +231,8 @@ export class Game {
   _win(player, result, byDiscard, payer) {
     this.phase = PHASE.OVER;
     const payments = this._settle(player, result.fan, byDiscard ? payer : null);
-    this.result = { type: 'win', winner: player, fan: result.fan, fans: result.fans, byDiscard, payer, payments };
+    const winningTile = byDiscard ? this.lastDiscard.kind : this.drawnTile;
+    this.result = { type: 'win', winner: player, fan: result.fan, fans: result.fans, byDiscard, payer, winningTile, payments };
     this._emit(`${this.seatName(player)} ${byDiscard ? '和牌' : '自摸'} ${result.fan}番`);
   }
 
