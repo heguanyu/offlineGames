@@ -102,6 +102,7 @@ function render() {
     selRendered: myTurn && !revealing ? selectable[selIndex] : null,
     claimable: isClaimPhase(),
     drawnTile: (myTurn && game.drawnTile != null && !game.isWild(game.drawnTile)) ? game.drawnTile : null,
+    reveal: game.phase === PHASE.OVER,
   });
 
   // ---- action bar / hint + toasts ----

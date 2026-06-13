@@ -318,8 +318,9 @@ export class MahjongScene {
     });
     // refSpan = a full 14-tile hand (13 gaps + the drawn tile's two half-gaps) so
     // the tile size is fixed regardless of how many tiles are currently held.
-    // 听牌 (lockedTing): lay the hand flat on the table, the same rotation as 碰/杠 melds.
-    const flat = !!ui.tingFlat;
+    // 听牌 (lockedTing) and game-over reveal both lay the hand flat on the table,
+    // the same rotation as 碰/杠 melds (faces up).
+    const flat = !!ui.tingFlat || !!ui.reveal;
     this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: flat ? -Math.PI / 2 : -0.34, ry: 0, pull: -0.35, flat, refSpan: 13 * GAP + 2 * DRAW_MARGIN }, HAND_HALF, seen);
 
     // Opponents: walls of backs. refSpan = a full 14-tile hand so the back row is
@@ -331,10 +332,19 @@ export class MahjongScene {
       3: { cx: -R_OPP, cz: 0, dx: 0, dz: 1, rx: 0, ry: Math.PI / 2, pull: 0, refSpan: oppRef },
     };
     for (const p of [1, 2, 3]) {
-      const backs = [];
-      // from: the deck → a newly-drawn back tile flies in from the deck wall.
-      for (let i = 0; i < game.hands[p].length; i++) backs.push({ key: `o${p}_${i}`, kind: null, from: this.deckPos });
-      this._placeRow(backs, oppCfg[p], OPP_HALF, seen);
+      const c = oppCfg[p];
+      if (ui.reveal) {
+        // game over: flip each opponent's wall down to a flat, face-up row (faces
+        // shown). rz spins each row so it reads from that seat (like the melds).
+        const spin = p === 2 ? 0 : Math.PI / 2;
+        const items = game.hands[p].map((kind, i) => ({ key: `o${p}_${i}`, kind, rz: spin }));
+        this._placeRow(items, { ...c, rx: -Math.PI / 2, ry: 0, flat: true }, OPP_HALF, seen);
+      } else {
+        const backs = [];
+        // from: the deck → a newly-drawn back tile flies in from the deck wall.
+        for (let i = 0; i < game.hands[p].length; i++) backs.push({ key: `o${p}_${i}`, kind: null, from: this.deckPos });
+        this._placeRow(backs, c, OPP_HALF, seen);
+      }
     }
 
     // Exposed 吃/碰/杠 melds: laid flat and face-up on the table, in a spot pulled

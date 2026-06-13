@@ -100,7 +100,8 @@
   #result-fans { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 12px 0; }
   .fan-chip { background: linear-gradient(#f3d785,#e3b94f); color: #4a3500; border-radius: 999px; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
   #result-score { font-size: 2.4rem; color: #fff; font-weight: 900; text-shadow: 0 2px 10px rgba(232,196,102,0.5); }
-  #result-overlay { backdrop-filter: blur(2px); }
+  /* lighter than other overlays so the revealed hands show through behind the modal */
+  #result-overlay { backdrop-filter: blur(0.5px); background: rgba(3,16,11,0.4); }
   #result-winning { display: none; flex-direction: column; align-items: center; gap: 7px; margin: 14px 0 6px; padding: 12px; border-radius: 14px; background: rgba(232,196,102,0.08); border: 1px solid rgba(232,196,102,0.3); }
   #result-winning.show { display: flex; }
   #result-winning .cap { font-size: 0.82rem; color: var(--gold); font-weight: 800; letter-spacing: 2px; }

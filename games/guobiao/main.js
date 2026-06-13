@@ -71,7 +71,7 @@ function render() {
   const revealing = scene && scene.handDrawRevealing; // drawn tile still flying in → no selection yet
   if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn: showSel, selRendered: showSel && !revealing ? selectable[selIndex] : null, claimable: isClaimPhase() && !lockedTing,
     drawnTile: ((showSel || tingWin) && game.drawnTile != null) ? game.drawnTile : null,
-    tingFlat: lockedTing, tingRevealDiscardIdx: tingRevealIdx });
+    tingFlat: lockedTing, tingRevealDiscardIdx: tingRevealIdx, reveal: game.phase === PHASE.OVER });
   renderActions();
   positionClaimUI();
   positionTingBanner();
