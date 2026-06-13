@@ -219,8 +219,8 @@ export function isWinningHand(naturalIds, jokers, needMelds) {
 // additive fan is present the base is 1, so a fan-less win scores 1 — below 起和
 // (WIN_MIN), i.e. a 小和, which analyzeWin() rejects. Single source of truth.
 export const FAN = {
-  HUNDIAO: 2,    // 混吊 — winning tile pairs the 将 via a wild, single wait (×2)
-  SHUANGHUN: 2,  // 双混吊 — that pair uses two wilds; still 2番 per wiki (×2)
+  HUNDIAO: 2,    // 混吊 — a standing 混儿 held the 将 wait; a natural draw closed it (×2)
+  SHUANGHUN: 2,  // 双混吊 / 双混儿 — two standing 混儿 held the wait; natural draw closes (×2)
   SU: 2,         // 素 / 没混儿 — no wild in the hand at all (×2)
   ZHUOWU: 3,     // 捉五 — self-draw the 5万 into a 4-5-6万 run (+)
   LONG: 4,       // 龙 — full 1-9 run in one suit, as three chows (+)
@@ -253,16 +253,18 @@ function scoreFromDecomp(decomp, ctx) {
   // 素 — no wild present in the hand at all (decomposition-independent).
   const su = wildCount === 0;
 
-  // Wild status of the win: it is "wild-completed" (混吊 / 双混吊 / 双混儿, all ×2)
-  // when the winning tile finishes a group that is all-wild except one tile (a
-  // 单/双吊 on the wilds). A wild merely PARKED in an otherwise-natural meld does
-  // not count — that is "提溜" (the ×1 base). Prefer such a group so the best
-  // reading is credited.
+  // Wild status of the win: "wild-completed" (混吊 / 双混吊 / 双混儿, all ×2) means
+  // STANDING (hand-row) 混儿 held a 单/双吊 wait open and the NATURAL winning tile
+  // closed it — the group the win lands in is all-wild but for that one natural
+  // tile. Two things never qualify: a 混儿 merely PARKED in an otherwise-natural
+  // group (jokers < size-1 → just 提溜, the ×1 base), and — crucially — a freshly
+  // DREW 混儿 as the winning tile (winIsWild). A drawn 混儿 is not a wait the hand
+  // was holding; it parks, so it earns no 混吊. (This is the hand-row-vs-new-tile
+  // distinction: only winningKind being natural lets in-hand 混儿 score the 吊.)
   const groupSize = (g) => (g.type === 'pair' ? 2 : 3);
   const winByKind = decomp.filter((g) => g.kinds.includes(winningKind));
-  let winGroup = winByKind.find((g) => g.jokers >= groupSize(g) - 1) || winByKind[0] || null;
-  if (!winGroup && winIsWild) winGroup = decomp.find((g) => g.jokers >= groupSize(g) - 1);
-  const wildCompleted = !su && !!winGroup && winGroup.jokers >= groupSize(winGroup) - 1;
+  const winGroup = winByKind.find((g) => g.jokers >= groupSize(g) - 1) || winByKind[0] || null;
+  const wildCompleted = !su && !winIsWild && !!winGroup && winGroup.jokers >= groupSize(winGroup) - 1;
   const shuangHun = wildCompleted && winGroup.jokers >= 2;
   const hunDiao = wildCompleted && !shuangHun;
   const winPair = !!(winGroup && winGroup.type === 'pair');

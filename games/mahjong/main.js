@@ -61,10 +61,10 @@ function selectableHandIndices() {
   return renderedHand().map((id, i) => (game.isWild(id) ? -1 : i)).filter((i) => i >= 0);
 }
 
-// The human's display order: 混儿 on the left, the rest sorted with the freshly
-// drawn tile on the right.
+// The human's display order: 混儿 on the left, the rest sorted ascending. The
+// freshly drawn tile sorts into place; scene.js flanks it with a small margin.
 const isWildFn = (id) => game.isWild(id);
-function renderedHand() { return buildOrder(game.hands[HUMAN], isWildFn, game.turn === HUMAN ? game.drawnTile : null); }
+function renderedHand() { return buildOrder(game.hands[HUMAN], isWildFn); }
 
 function render() {
   // ---- header ----
@@ -143,6 +143,7 @@ function renderPlate(p) {
 function renderActions() {
   const bar = $('action-bar');
   bar.innerHTML = '';
+  const center = $('ting-center'); center.innerHTML = ''; // the 和牌(胡) button floats here
   const hint = $('hand-hint');
   hint.textContent = '';
   const buttons = [];
@@ -154,10 +155,10 @@ function renderActions() {
     buttons.push(mkBtn('过', () => doPass(), true));
     hint.textContent = `${SEAT_LABEL[c.player === HUMAN ? game.lastDiscard.player : c.player]} 打出 ${tileName(c.kind)}`;
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
-    // self-draw win available → offer 胡 (but you may still play on)
+    // self-draw win available → offer 胡 (but you may still play on). Big + centered.
     if (game.selfDrawWin) {
       const w = game.selfDrawWin;
-      buttons.push(mkBtn(`胡 · ${w.fans[0]} · ${w.score}分`, () => doDeclareWin(), false, 'hu'));
+      center.appendChild(mkBtn(`胡 · ${w.fans[0]} · ${w.score}分`, () => doDeclareWin(), false, 'hu'));
     }
     // self-kong options (金杠 = a concealed kong of four 混儿)
     for (const k of game.selfKongOptions(HUMAN)) {

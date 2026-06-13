@@ -39,9 +39,9 @@ function saveSession() {
 }
 { const lv = parseInt(localStorage.getItem(CFG.sessionKey + '-level'), 10); if (lv >= 1 && lv <= 3) level = lv; }
 
-// ---- hand order (no wilds → just sorted, drawn on the right) ----
+// ---- hand order (no wilds → just sorted; scene.js flanks the drawn tile) ----
 const noWild = () => false;
-function renderedHand() { return buildOrder(game.hands[HUMAN], noWild, game.turn === HUMAN ? game.drawnTile : null); }
+function renderedHand() { return buildOrder(game.hands[HUMAN], noWild); }
 function selectableHandIndices() { return renderedHand().map((_, i) => i); }
 
 // ---- rendering ----
@@ -127,7 +127,8 @@ function renderActions() {
   } else if (game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN) {
     const c = game.currentClaim();
     // 点炮 win — a confirm: take it (胡, showing pattern + score) or 过 to play on.
-    if (c.type === 'win') { buttons.push(mkBtn(`胡 · ${c.result.fans[0].name} · ${c.result.fan}番`, () => doClaimTake(), false, 'hu')); }
+    // The 胡 floats big + centered (like 打出并听牌); 过 stays in the bottom bar.
+    if (c.type === 'win') { center.appendChild(mkBtn(`胡 · ${c.result.fans[0].name} · ${c.result.fan}番`, () => doClaimTake(), false, 'hu')); }
     else if (c.type === 'pung') buttons.push(mkBtn('碰', () => doClaimTake()));
     else if (c.type === 'kong') buttons.push(mkBtn('杠', () => doClaimTake()));
     else if (c.type === 'chow') {
@@ -138,7 +139,7 @@ function renderActions() {
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
     if (game.selfDrawWin) { // self-draw win available — offer 胡 (you may still play on)
       const w = game.selfDrawWin;
-      buttons.push(mkBtn(`胡 · ${w.fans[0].name} · ${w.fan}番`, () => doDeclareWin(), false, 'hu'));
+      center.appendChild(mkBtn(`胡 · ${w.fans[0].name} · ${w.fan}番`, () => doDeclareWin(), false, 'hu')); // big + centered, like 打出并听牌
     }
     for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
     // If the selected discard would leave a ready hand, present 打出并听牌 (declare
@@ -323,6 +324,14 @@ function onAction(name) {
   }
   if (!$('result-overlay').classList.contains('hidden')) { if (name === 'confirm' || name === 'menu') nextHand(); return; }
   if (isClaimPhase()) {
+    // 点炮 win: the 胡 floats centered (not in the bar), so confirm/win takes it and
+    // cancel/pass declines — no bar navigation. (Pad has no 'win' key, so A=confirm.)
+    if (game.currentClaim().type === 'win') {
+      if (name === 'confirm' || name === 'win') doClaimTake();
+      else if (name === 'cancel' || name === 'pass') doClaimPass();
+      else if (name === 'menu') openMenu();
+      return;
+    }
     const btns = [...$('action-bar').children];
     if (name === 'left') { focusIndex = (focusIndex - 1 + btns.length) % btns.length; render(); }
     else if (name === 'right') { focusIndex = (focusIndex + 1) % btns.length; render(); }
@@ -412,6 +421,19 @@ if (new URLSearchParams(location.search).get('fast')) {
       game.phase = PHASE.AWAIT_CLAIM;
       game.lastDiscard = { player: 3, kind: 3 }; // 上家 discards 4万 (id 3)
       game.currentClaim = () => ({ player: HUMAN, type: 'chow', options: [[1, 2], [2, 4], [4, 5]] });
+      render();
+    },
+    // self-draw win available → the big centered 胡 should appear (visual check).
+    debugWin: () => {
+      game.phase = PHASE.AWAIT_DISCARD; game.turn = HUMAN;
+      game.selfDrawWin = { fan: 24, fans: [{ name: '清一色', points: 24 }] };
+      render();
+    },
+    // 点炮 win claim → the centered 胡 (take) with 过 in the bar (visual check).
+    debugWinClaim: () => {
+      game.phase = PHASE.AWAIT_CLAIM;
+      game.lastDiscard = { player: 3, kind: 5 };
+      game.currentClaim = () => ({ player: HUMAN, type: 'win', result: { fan: 16, fans: [{ name: '混一色', points: 16 }] } });
       render();
     },
     debugResult: () => {

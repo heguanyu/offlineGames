@@ -12,6 +12,7 @@ import { suitOf, rankOf } from './engine.js';
 const TW = 1.0, TH = 1.35, TD = 0.62; // tile width / height / depth
 const FELT = 16;
 const GAP = 1.06;
+const DRAW_MARGIN = 0.4;  // half-gap flanking the freshly-drawn tile on each side
 // Seats sit on a ring; the player's row is pushed forward (toward the camera)
 // and each row's half-length is capped so neighbouring rows never collide at
 // the corners. Rows longer than their cap shrink uniformly to fit.
@@ -289,20 +290,30 @@ export class MahjongScene {
     // Deck wall first, so it sets this.deckPos (where draws fly from).
     this._wall(game, seen);
 
-    // Player hand (upright, pickable). The freshly-drawn tile sits apart from the
-    // sorted row (a gap) so it's easy to spot, and is presented from the deck.
+    // Player hand (upright, pickable). The freshly-drawn tile sorts into its
+    // natural place but gets a half-gap on each side (and a deck→center→slot
+    // reveal) to set it apart. It carries a stable 'hdraw' key — separate from
+    // the positional h0..hN of the settled tiles — so (a) the reveal re-fires
+    // each draw (its key is recreated), and (b) the settled tiles keep their
+    // keys and just slide to open the slot, rather than swapping faces as the
+    // row reflows around the inserted tile.
     const hand = ui.renderedHand;
     const drawnIdx = ui.drawnTile != null ? hand.lastIndexOf(ui.drawnTile) : -1;
-    const handItems = hand.map((id, i) => ({
-      key: 'h' + i, kind: id, wild: game.isWild(id), pick: i,
-      selected: ui.myTurn && i === ui.selRendered,
-      gapBefore: i === drawnIdx ? 0.8 : 0,
-      from: i === drawnIdx ? this.deckPos : null,  // the drawn tile flies from the deck
-      draw: i === drawnIdx,                        // ...with the deck→center→slot reveal
-    }));
-    // refSpan = a full 14-tile hand (13 gaps + the drawn-tile gap) so the tile
-    // size is fixed regardless of how many tiles are currently held.
-    this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: -0.34, ry: 0, pull: -0.35, refSpan: 13 * GAP + 0.8 }, HAND_HALF, seen);
+    let settled = 0;
+    const handItems = hand.map((id, i) => {
+      const isDrawn = i === drawnIdx;
+      return {
+        key: isDrawn ? 'hdraw' : 'h' + settled++, kind: id, wild: game.isWild(id), pick: i,
+        selected: ui.myTurn && i === ui.selRendered,
+        // flank the drawn tile: a half-gap before it and before its right neighbour
+        gapBefore: drawnIdx >= 0 && (i === drawnIdx || i === drawnIdx + 1) ? DRAW_MARGIN : 0,
+        from: isDrawn ? this.deckPos : null,  // the drawn tile flies from the deck
+        draw: isDrawn,                        // ...with the deck→center→slot reveal
+      };
+    });
+    // refSpan = a full 14-tile hand (13 gaps + the drawn tile's two half-gaps) so
+    // the tile size is fixed regardless of how many tiles are currently held.
+    this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: -0.34, ry: 0, pull: -0.35, refSpan: 13 * GAP + 2 * DRAW_MARGIN }, HAND_HALF, seen);
 
     // Opponents: walls of backs. refSpan = a full 14-tile hand so the back row is
     // a fixed size, not rescaling each time a bot draws/discards (13 ↔ 14 tiles).
