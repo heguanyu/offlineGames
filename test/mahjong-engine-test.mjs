@@ -69,12 +69,19 @@ ok(r && r.meta.hunDiao, '混吊 detected');
 ok(!r.meta.su, '混吊 hand is not 素');
 eq(r.score, 2, '混吊(2) = 2');
 
-// A freshly-DRAWN 混儿 is not a 吊 wait — it parks (提溜), so it earns no 混吊.
-// 123m 456m 123p 456p + a {混,混} 将, won by drawing the 2nd 混儿 (winningKind is a
-// wild). Pre-fix this wrongly scored 双混吊(2); now it is a fan-less 小和 → no win.
+// Self-drawing a 混儿 to win is itself a 单吊 → at least 混吊. 123m 456m 123p 456p +
+// a {混,混} 将 closed by drawing the 2nd 混儿: 1 STANDING 混儿 in the 将 → 混吊 (×2).
 const drewWildPair = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(4), P(5), P(6), 27, 28];
-ok(analyzeWin(drewWildPair, [], { wilds: [27, 28], winningKind: 28 }) === null,
-  'drawing a 混儿 to fill the 将 is 提溜, not 混吊 → 小和 rejected');
+r = analyzeWin(drewWildPair, [], { wilds: [27, 28], winningKind: 28 });
+ok(r && r.meta.hunDiao && !r.meta.shuangHun, '混吊 when a drawn 混儿 closes the 将 (1 standing 混儿)');
+eq(r.score, 2, '混吊 = 2');
+
+// A drawn 混儿 that just parks in an otherwise-natural meld is still a 单吊 → 混吊.
+// 123m 456m 123p 99p + {7s,8s,混}: drew the 混儿 to fill the 9s of a 7-8-9s run.
+const drewParks = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(9), P(9), S(7), S(8), 27];
+r = analyzeWin(drewParks, [], { wilds: [27, 28], winningKind: 27 });
+ok(r && r.meta.hunDiao, '混吊 when the drawn 混儿 completes the win (even parking in a run)');
+eq(r.score, 2, '混吊 = 2');
 
 // 双混 IS credited when a NATURAL tile closes a wait two standing 混儿 held open.
 // 123m 456m 123p 99p + {27,28,9s}: the two hand-row wilds stand as 999s and the
@@ -108,14 +115,28 @@ r = analyzeWin(plain, [], { wilds: [27, 28], winningKind: S(5), tianOrDi: true, 
 eq(r.score, 28, '天和 = 28 (flat max)');
 ok(r.fans.includes('天和'), '天和 labelled');
 
-// 捉五 on a DRAWN 混儿 filling the 5万 of a 4-5-6万 run (the 4万 is a standing 混儿).
-// 捉五 still applies — a 混儿 may capture the 5万 — but the drawn 混儿 is not a 吊
-// wait, so it earns no 双混 bonus: 捉五(3) only. (Pre-fix this wrongly ×2'd to 6.)
+// 捉五 won on a 混儿 as the 5万, no other 混儿 in the run (4万/6万 natural). The drawn
+// 混儿 is the 吊 → 混吊; 0 standing 混儿 so not 双混. 捉五(3) × 混吊(2) = 6.
+const zw0 = [M(4), 27, M(6), P(1), P(2), P(3), 31, 31, 31, 32, 32, 32, S(9), S(9)];
+r = analyzeWin(zw0, [], { wilds: [27, 28], winningKind: 27 });
+ok(r && r.meta.zhuoWu && r.meta.hunDiao && !r.meta.shuangHun, '捉五 + 混吊 (won 混儿 as 5万, 0 standing)');
+eq(r.score, 6, '捉五(3) × 混吊(2) = 6');
+
+// 捉五 won on a 混儿 as the 5万, with the 4万 also a STANDING 混儿 (run has 2 混儿).
+// 1 standing 混儿 → 混吊 (not 双混, since the won 混儿 doesn't count). 捉五×混吊 = 6.
 const sszw = [M(6), 27, 28, P(1), P(2), P(3), 31, 31, 31, 32, 32, 32, S(9), S(9)];
 r = analyzeWin(sszw, [], { wilds: [27, 28], winningKind: 28 });
 ok(r && r.meta.zhuoWu, '捉五 detected when a drawn 混儿 fills the 5万');
-ok(r && !r.meta.shuangHun, 'a drawn 混儿 earns no 双混 (it is not a 吊 wait)');
-eq(r.score, 3, '捉五(3) only — a drawn 混儿 adds no wild-completion');
+ok(r && r.meta.hunDiao && !r.meta.shuangHun, '捉五 + 混吊 (1 standing 混儿; the won 混儿 is the 吊)');
+eq(r.score, 6, '捉五(3) × 混吊(2) = 6');
+
+// 捉五 won on a 混儿 as the 5万 with BOTH 4万 and 6万 standing 混儿 (run = three 混儿).
+// 2 STANDING 混儿 → 双混. 捉五(3) × 双混(2) = 6.
+const sszw2 = [27, 28, 27, P(1), P(2), P(3), 31, 31, 31, 32, 32, 32, S(9), S(9)];
+r = analyzeWin(sszw2, [], { wilds: [27, 28], winningKind: 28 });
+ok(r && r.meta.zhuoWu, '捉五 detected (won 混儿 as 5万, two standing 混儿)');
+ok(r && r.meta.shuangHun, '双混 when 2 standing 混儿 are in the 捉五 run');
+eq(r.score, 6, '捉五(3) × 双混(2) = 6');
 
 // --- 杠分 (kong points) + 金杠 -------------------------------------------------
 console.log('kong points:');

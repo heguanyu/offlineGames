@@ -43,7 +43,7 @@ export function analyzeWin(concealed, exposed, ctx) {
     if (!pairG) continue;
     const melds = buildMelds(exposed, d, ctx);
     const r = scoreStandard(melds, pairG.kinds[0], { ...ctx, concealedHand: exposed.every((m) => m.concealed) });
-    if (!best || r.fan > best.fan) best = { ...r, pair: pairG.kinds[0] };
+    if (!best || r.fan > best.fan) best = { ...r, pair: pairG.kinds[0], melds }; // melds → the win modal shows the pattern
   }
   return best;
 }
@@ -244,7 +244,7 @@ export class Game {
     this.phase = PHASE.OVER;
     const payments = this._settle(player, result.fan, byDiscard ? payer : null);
     const winningTile = byDiscard ? this.lastDiscard.kind : this.drawnTile;
-    this.result = { type: 'win', winner: player, fan: result.fan, fans: result.fans, byDiscard, payer, winningTile, payments };
+    this.result = { type: 'win', winner: player, fan: result.fan, fans: result.fans, melds: result.melds, pair: result.pair, byDiscard, payer, winningTile, payments };
     this._emit(`${this.seatName(player)} ${byDiscard ? '和牌' : '自摸'} ${result.fan}番`);
   }
 

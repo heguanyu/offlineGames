@@ -64,6 +64,14 @@ export function forceLandscape(apply) {
   }
   addEventListener('resize', update);
   addEventListener('orientationchange', () => setTimeout(update, 50)); // metrics settle late
+  // Returning to the PWA (iPad app-switch / unlock) often fires no resize, and iOS
+  // may report stale (portrait) metrics for a beat — leaving the page mis-rotated and
+  // the canvas mis-sized until a manual rotate. Re-apply on every resume, repeating
+  // as the metrics settle so it self-corrects without the user rotating the device.
+  const resume = () => { update(); setTimeout(update, 150); setTimeout(update, 450); };
+  addEventListener('pageshow', resume);
+  addEventListener('focus', resume);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) resume(); });
   update();
   return () => window.innerHeight > window.innerWidth; // query current state
 }

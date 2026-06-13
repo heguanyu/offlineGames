@@ -68,7 +68,8 @@ function render() {
   // when it WINS (it then stays for the 胡 confirmation). A non-winning 听 draw is
   // never shown in the hand; it reveals straight into the pool (see tick()).
   const tingWin = lockedTing && myTurn && game.selfDrawWin;
-  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn: showSel, selRendered: showSel ? selectable[selIndex] : null, claimable: isClaimPhase() && !lockedTing,
+  const revealing = scene && scene.handDrawRevealing; // drawn tile still flying in → no selection yet
+  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn: showSel, selRendered: showSel && !revealing ? selectable[selIndex] : null, claimable: isClaimPhase() && !lockedTing,
     drawnTile: ((showSel || tingWin) && game.drawnTile != null) ? game.drawnTile : null,
     tingFlat: lockedTing, tingRevealDiscardIdx: tingRevealIdx });
   renderActions();
@@ -264,6 +265,7 @@ function schedule(fn, delay) { clearTimeout(pendingTimer); pendingTimer = setTim
 // ---- human actions ----
 function onPickTile(idx) {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing) return;
+  if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const id = renderedHand()[idx];
   if (id == null) return;
   const pos = selectableHandIndices().indexOf(idx);
@@ -275,6 +277,7 @@ function onPickTile(idx) {
 // then on the seat auto-plays. declare=false → a plain discard with no lock.
 function discardSelected(declare) {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing) return;
+  if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const id = renderedHand()[selectableHandIndices()[selIndex]];
   if (id == null) return;
   let waits = null;
@@ -288,8 +291,15 @@ function discardSelected(declare) {
   if (declare) { lockedTing = true; tingWaits = waits; toast('听！自动出牌', true); sound.startMusic(); }
   tick();
 }
-function doDeclareWin() { if (game.declareWin()) tick(); }
-function doSelfKong(kind) { if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) { game.selfKong(HUMAN, kind); tick(); } }
+function doDeclareWin() { if (scene && scene.handDrawRevealing) return; if (game.declareWin()) tick(); }
+function doSelfKong(kind) { if (scene && scene.handDrawRevealing) return; if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) { game.selfKong(HUMAN, kind); tick(); } }
+// When the freshly-drawn tile finishes its reveal, auto-select it (ready to discard).
+function selectDrawnTile() {
+  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing || game.drawnTile == null) return;
+  const si = selectableHandIndices().indexOf(renderedHand().lastIndexOf(game.drawnTile));
+  if (si >= 0) selIndex = si;
+  render();
+}
 function doClaimTake(opt) { if (isClaimPhase()) { game.claimTake(opt); tick(); } }
 function doClaimPass() { if (isClaimPhase()) { game.claimPass(); tick(); } }
 
@@ -313,9 +323,21 @@ function showResult() {
       winEl.appendChild(faceTileEl(r.winningTile, { lg: true }));
       winEl.classList.add('show');
     }
-    const hand = game.hands[w].slice().sort((a, b) => a - b);
-    for (const id of hand) handEl.appendChild(faceTileEl(id, { lg: true }));
-    for (const m of game.melds[w]) for (const t of m.tiles) handEl.appendChild(faceTileEl(t, { lg: true }));
+    // Show the winning hand grouped by its pattern (each meld + the 将), so the
+    // structure behind the 番种 is visible — not a flat row.
+    const addGroup = (tiles, extra) => {
+      const wrap = document.createElement('div'); wrap.className = 'meld-group' + (extra || '');
+      for (const t of tiles.slice().sort((a, b) => a - b)) wrap.appendChild(faceTileEl(t, { lg: true }));
+      handEl.appendChild(wrap);
+    };
+    if (r.melds) {
+      for (const m of r.melds) addGroup(m.tiles);
+      if (r.pair != null) addGroup([r.pair, r.pair], ' pair');
+    } else { // 七对 / 十三幺 — no meld structure; show the sorted hand (+ the 点炮 tile)
+      const hand = game.hands[w].slice();
+      if (r.byDiscard && r.winningTile != null) hand.push(r.winningTile);
+      addGroup(hand);
+    }
     payEl.innerHTML = r.payments.map((amt, p) => `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`).join('　');
   }
   sound.stopMusic(); // 听 (if any) is over
@@ -331,7 +353,7 @@ function nextHand() {
 }
 function startHand() {
   clearTimeout(pendingTimer);
-  if (!scene) { scene = new MahjongScene($('scene')); scene.setRotated(isPortrait); scene.resize(); }
+  if (!scene) { scene = new MahjongScene($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
   game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan });
   lastLogLen = 0; selIndex = 0; focusIndex = 0; lockedTing = false; tingWaits = [];
   sound.stopMusic();
@@ -345,6 +367,16 @@ $('scene').addEventListener('pointerdown', (e) => {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   const idx = scene.pick(e.clientX, e.clientY);
   if (idx != null) onPickTile(idx);
+});
+// PC only: hovering a hand tile selects it (same as a click-to-select). Mouse-only
+// so touch is unaffected; respects the same turn/听/draw-settle guards.
+$('scene').addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || !scene || !gameStarted) return;
+  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing || scene.handDrawRevealing) return;
+  const idx = scene.pick(e.clientX, e.clientY);
+  if (idx == null) return;
+  const pos = selectableHandIndices().indexOf(idx);
+  if (pos >= 0 && pos !== selIndex) { selIndex = pos; sound.select(); render(); }
 });
 
 // ---- input dispatch (keyboard + gamepad) ----
@@ -438,6 +470,7 @@ if (new URLSearchParams(location.search).get('fast')) {
     phase: () => game && game.phase,
     scene: () => scene,
     tick: () => tick(),
+    selInfo: () => ({ selIndex, drawn: game && game.drawnTile, selKind: renderedHand()[selectableHandIndices()[selIndex]], revealing: !!(scene && scene.handDrawRevealing) }),
     claim: () => game && game.currentClaim(),
     humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,
     locked: () => lockedTing,
@@ -450,6 +483,7 @@ if (new URLSearchParams(location.search).get('fast')) {
       lockedTing = false; tingWaits = []; _tingSig = '';
       game.hands[HUMAN] = hand13.concat(drawn);
       game.drawnTile = drawn; selIndex = 0; render();
+      if (scene) scene.handDrawRevealing = false; // instant test setup — don't gate input
     },
     setLocked: (waits) => { lockedTing = true; tingWaits = waits; render(); },
     selectKind: (kind) => {

@@ -219,8 +219,8 @@ export function isWinningHand(naturalIds, jokers, needMelds) {
 // additive fan is present the base is 1, so a fan-less win scores 1 — below 起和
 // (WIN_MIN), i.e. a 小和, which analyzeWin() rejects. Single source of truth.
 export const FAN = {
-  HUNDIAO: 2,    // 混吊 — a standing 混儿 held the 将 wait; a natural draw closed it (×2)
-  SHUANGHUN: 2,  // 双混吊 / 双混儿 — two standing 混儿 held the wait; natural draw closes (×2)
+  HUNDIAO: 2,    // 混吊 — a 混儿 closes the winning wait (a standing 混儿, or the drawn 混儿) (×2)
+  SHUANGHUN: 2,  // 双混吊 / 双混儿 — ≥2 STANDING 混儿 in the group the win closes (×2)
   SU: 2,         // 素 / 没混儿 — no wild in the hand at all (×2)
   ZHUOWU: 3,     // 捉五 — self-draw the 5万 into a 4-5-6万 run (+)
   LONG: 4,       // 龙 — full 1-9 run in one suit, as three chows (+)
@@ -253,26 +253,40 @@ function scoreFromDecomp(decomp, ctx) {
   // 素 — no wild present in the hand at all (decomposition-independent).
   const su = wildCount === 0;
 
-  // Wild status of the win: "wild-completed" (混吊 / 双混吊 / 双混儿, all ×2) means
-  // STANDING (hand-row) 混儿 held a 单/双吊 wait open and the NATURAL winning tile
-  // closed it — the group the win lands in is all-wild but for that one natural
-  // tile. Two things never qualify: a 混儿 merely PARKED in an otherwise-natural
-  // group (jokers < size-1 → just 提溜, the ×1 base), and — crucially — a freshly
-  // DREW 混儿 as the winning tile (winIsWild). A drawn 混儿 is not a wait the hand
-  // was holding; it parks, so it earns no 混吊. (This is the hand-row-vs-new-tile
-  // distinction: only winningKind being natural lets in-hand 混儿 score the 吊.)
+  // Wild status of the win (混吊 / 双混吊 / 双混儿, all ×2): a 混儿 completes the group
+  // the winning tile closes. Self-drawing a 混儿 always closes a 单吊 wait, so it is
+  // at least 混吊. The number of STANDING (hand-row) 混儿 in that group sets the level:
+  // ≥2 standing → 双混 (双混儿 for a meld / 双混吊 for the 将), else 混吊. A 混儿 sitting
+  // in some OTHER, already-complete group is just 提溜 and earns nothing.
   const groupSize = (g) => (g.type === 'pair' ? 2 : 3);
-  const winByKind = decomp.filter((g) => g.kinds.includes(winningKind));
-  const winGroup = winByKind.find((g) => g.jokers >= groupSize(g) - 1) || winByKind[0] || null;
-  const wildCompleted = !su && !winIsWild && !!winGroup && winGroup.jokers >= groupSize(winGroup) - 1;
-  const shuangHun = wildCompleted && winGroup.jokers >= 2;
+  // The group the winning tile closes, and the STANDING 混儿 in it (which set the level).
+  // • Won on a 混儿: it closes a 单吊 wait by itself → at least 混吊; attribute it to the
+  //   most-wild group (the best reading). standingJokers = that group's jokers minus this
+  //   freshly-drawn one.
+  // • Won natural: the group it lands in must be all-but-one 混儿 (jokers ≥ size−1) — a
+  //   genuine 混儿-held 吊 — otherwise the 混儿 is merely 提溜 (×1). standingJokers = jokers.
+  let winGroup, standingJokers, wildCompleted;
+  if (winIsWild) {
+    winGroup = decomp.filter((g) => g.jokers >= 1).sort((a, b) => b.jokers - a.jokers)[0] || null;
+    standingJokers = winGroup ? winGroup.jokers - 1 : 0;
+    wildCompleted = !su; // a drawn 混儿 ⇒ 混儿 is held ⇒ never 素; the drawn 混儿 is the 吊
+  } else {
+    const winByKind = decomp.filter((g) => g.kinds.includes(winningKind));
+    winGroup = winByKind.find((g) => g.jokers >= groupSize(g) - 1) || winByKind[0] || null;
+    standingJokers = winGroup ? winGroup.jokers : 0;
+    wildCompleted = !su && !!winGroup && winGroup.jokers >= groupSize(winGroup) - 1;
+  }
+  const shuangHun = wildCompleted && standingJokers >= 2;
   const hunDiao = wildCompleted && !shuangHun;
   const winPair = !!(winGroup && winGroup.type === 'pair');
 
   // 捉五 — the win captures the 5万 in a 4-5-6万 run: won by a natural 5万 (id 4),
-  // or by a 混儿 filling the 5万 slot. 4/6万 may themselves be 混儿.
-  const zhuoWu = decomp.some((g) => g.type === 'chow' && g.kinds[0] === 3 &&
-    ((winningKind === 4 && g.natural.has(4)) || (winIsWild && !g.natural.has(4))));
+  // or by a 混儿 filling the 5万 slot (4/6万 may themselves be 混儿). A win on a 混儿
+  // whose group is three 混儿 also qualifies — they can stand as 4-5-6万, the won one
+  // as the 5万 (decompose() represents such a meld with empty kinds, not a chow).
+  const zhuoWu = (winIsWild && !!winGroup && winGroup.jokers >= 3)
+    || decomp.some((g) => g.type === 'chow' && g.kinds[0] === 3 &&
+      ((winningKind === 4 && g.natural.has(4)) || (winIsWild && !g.natural.has(4))));
 
   // 龙 / 本混龙 — three runs covering 1-9 in a single number suit.
   const seqStartsBySuit = {};

@@ -269,7 +269,11 @@ export class MahjongScene {
       this.tiles.set(key, rec);
       // The human's freshly-drawn tile gets a reveal: deck → big in the centre,
       // facing the camera → its slot in the hand. (Handled in the animation loop.)
-      if (spec.draw && spec.from) rec.drawSeq = { t0: performance.now(), deck: spec.from.clone() };
+      // `gate` tiles also block input until the reveal settles (see _animateDraw).
+      if (spec.draw && spec.from) {
+        rec.drawSeq = { t0: performance.now(), deck: spec.from.clone() };
+        if (spec.gate) { rec.gate = true; this.handDrawRevealing = true; }
+      }
     } else if (rec.faceKey !== faceKey) {
       rec.mesh.material = this._mats(spec.kind, spec.wild, spec.emissive);
       rec.faceKey = faceKey;
@@ -309,6 +313,7 @@ export class MahjongScene {
         gapBefore: drawnIdx >= 0 && (i === drawnIdx || i === drawnIdx + 1) ? DRAW_MARGIN : 0,
         from: isDrawn ? this.deckPos : null,  // the drawn tile flies from the deck
         draw: isDrawn,                        // ...with the deck→center→slot reveal
+        gate: isDrawn,                        // ...and input is gated until it settles
       };
     });
     // refSpan = a full 14-tile hand (13 gaps + the drawn tile's two half-gaps) so
@@ -414,7 +419,7 @@ export class MahjongScene {
       this._place(it.key, {
         kind: it.kind, wild: it.wild, pick: it.pick, emissive: it.emissive, scale: s,
         x, y: baseY + lift, z, rx: cfg.rx + (it.selected ? 0.16 : 0), ry: cfg.ry, rz: it.rz || 0,
-        from: it.from, draw: it.draw,
+        from: it.from, draw: it.draw, gate: it.gate,
       }, seen);
       if (it.selected) {
         this.glowTarget.on = true;
@@ -559,7 +564,12 @@ export class MahjongScene {
       [0.95, C[0], C[1], C[2], C[3], C[4]],
       [1.45, rec.tp.x, rec.tp.y, rec.tp.z, rec.ts, rec.trx],
     ];
-    if (t >= kf[kf.length - 1][0]) { delete rec.drawSeq; return false; }
+    if (t >= kf[kf.length - 1][0]) {
+      delete rec.drawSeq;
+      // gated (hand) reveal finished → unblock input and tell the caller it settled
+      if (rec.gate) { rec.gate = false; this.handDrawRevealing = false; this.onHandDrawSettled && this.onHandDrawSettled(); }
+      return false;
+    }
     let i = 0; while (i < kf.length - 1 && t > kf[i + 1][0]) i++;
     const A = kf[i], B = kf[i + 1];
     let u = (t - A[0]) / (B[0] - A[0]); u = u * u * (3 - 2 * u); // smoothstep

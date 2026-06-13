@@ -95,10 +95,11 @@ function render() {
   const selectable = selectableHandIndices();
   if (selIndex >= selectable.length) selIndex = Math.max(0, selectable.length - 1);
   const myTurn = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
+  const revealing = scene && scene.handDrawRevealing; // drawn tile still flying in → no selection yet
   if (scene) scene.sync(game, {
     renderedHand: renderedHand(),
     myTurn,
-    selRendered: myTurn ? selectable[selIndex] : null,
+    selRendered: myTurn && !revealing ? selectable[selIndex] : null,
     claimable: isClaimPhase(),
     drawnTile: (myTurn && game.drawnTile != null && !game.isWild(game.drawnTile)) ? game.drawnTile : null,
   });
@@ -239,6 +240,7 @@ function ensureSelection() {
 // confirm (打出 button / A / Enter). Tapping the already-selected tile confirms.
 function onPickTile(renderedIdx) {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
+  if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const id = renderedHand()[renderedIdx];
   if (id == null) return;
   if (game.isWild(id)) { toast('混儿不能打出'); return; }
@@ -250,6 +252,7 @@ function onPickTile(renderedIdx) {
 
 function discardSelected() {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
+  if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const hand = renderedHand();
   const sel = selectableHandIndices();
   const id = hand[sel[selIndex]];
@@ -261,9 +264,18 @@ function discardSelected() {
 }
 
 function doDeclareWin() {
+  if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   if (game.declareWin()) tick();
 }
+// When the freshly-drawn tile finishes its reveal, auto-select it (ready to discard).
+function selectDrawnTile() {
+  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || game.drawnTile == null) return;
+  const si = selectableHandIndices().indexOf(renderedHand().lastIndexOf(game.drawnTile));
+  if (si >= 0) selIndex = si;
+  render();
+}
 function doSelfKong(kind) {
+  if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   game.selfKong(HUMAN, kind);
   tick();
@@ -378,7 +390,7 @@ function nextHand() {
 
 function startHand() {
   clearTimeout(pendingTimer);
-  if (!scene) { scene = new MahjongScene($('scene')); scene.setRotated(isPortrait); scene.resize(); }
+  if (!scene) { scene = new MahjongScene($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
   game = new Game({
     dealer: session.dealer,
     prevailingWind: session.prevailingWind,
@@ -397,6 +409,16 @@ $('scene').addEventListener('pointerdown', (e) => {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   const idx = scene.pick(e.clientX, e.clientY);
   if (idx != null) onPickTile(idx);
+});
+// PC only: hovering a hand tile selects it (same as a click-to-select). Mouse-only
+// so touch is unaffected; 混儿 aren't selectable so hovering them is ignored.
+$('scene').addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || !scene || !gameStarted) return;
+  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || scene.handDrawRevealing) return;
+  const idx = scene.pick(e.clientX, e.clientY);
+  if (idx == null) return;
+  const pos = selectableHandIndices().indexOf(idx);
+  if (pos >= 0 && pos !== selIndex) { selIndex = pos; sound.select(); render(); }
 });
 
 function newGame() {
