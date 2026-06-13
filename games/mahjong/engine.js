@@ -437,11 +437,12 @@ export class Game {
   }
 
   // The set of self-kong options available to the current player right now.
+  // Four identical 混儿 is a 金杠 (gold kong) — the only way a wild may be konged.
   selfKongOptions(player) {
     if (this.phase !== PHASE.AWAIT_DISCARD || this.turn !== player) return [];
-    const counts = toCounts(this.hands[player].filter((id) => !this.isWild(id)));
+    const counts = toCounts(this.hands[player]); // includes 混儿 (for 金杠)
     const opts = [];
-    for (let k = 0; k < KINDS; k++) if (counts[k] === 4) opts.push({ type: 'concealed', kind: k });
+    for (let k = 0; k < KINDS; k++) if (counts[k] === 4) opts.push({ type: this.isWild(k) ? 'gold' : 'concealed', kind: k });
     // Added kong (补杠): an exposed pung whose 4th tile is now in hand.
     for (const m of this.melds[player]) {
       if (m.type === 'pung' && this.hands[player].includes(m.kind) && !this.isWild(m.kind)) {
@@ -453,24 +454,25 @@ export class Game {
 
   selfKong(player, kind) {
     if (this.turn !== player || this.phase !== PHASE.AWAIT_DISCARD) throw new Error('not your turn');
-    if (this.isWild(kind)) throw new Error('cannot kong a wild');
     const hand = this.hands[player];
-    const added = this.melds[player].find((m) => m.type === 'pung' && m.kind === kind);
+    const wild = this.isWild(kind);
+    const added = !wild && this.melds[player].find((m) => m.type === 'pung' && m.kind === kind);
     if (added) {
-      // 补杠 — upgrade the exposed pung.
+      // 补杠 — upgrade the exposed pung (明杠). 混儿 can never be an exposed pung.
       const i = hand.indexOf(kind);
       if (i < 0) throw new Error('no tile to add');
       hand.splice(i, 1);
       added.type = 'kong';
       added.tiles = [kind, kind, kind, kind];
     } else {
+      // concealed kong (暗杠), or 金杠 when the kind is a 混儿.
       const n = hand.filter((id) => id === kind).length;
       if (n < 4) throw new Error('need 4 to conceal-kong');
       for (let c = 0; c < 4; c++) hand.splice(hand.indexOf(kind), 1);
-      this.melds[player].push({ type: 'kong', kind, tiles: [kind, kind, kind, kind], concealed: !added });
+      this.melds[player].push({ type: 'kong', kind, tiles: [kind, kind, kind, kind], concealed: true });
     }
-    this._emit(`${this.seatName(player)} 杠 ${tileName(kind)}`);
-    this._draw(player, true); // kong replacement draw → may be 杠开
+    this._emit(`${this.seatName(player)} ${wild ? '金杠' : '杠'} ${tileName(kind)}`);
+    this._draw(player, true); // kong replacement draw → may be 杠开 (incl. 金杠开)
   }
 
   // Current player discards `tile`. Wilds may never be discarded.
@@ -550,8 +552,9 @@ export class Game {
   _win(player, result) {
     this.phase = PHASE.OVER;
     const payments = this._settle(player, result.score);
+    const kong = this._settleKongs(payments); // 杠分, added on top of the 胡分
     this.result = { type: 'win', winner: player, score: result.score, fans: result.fans,
-      decomp: result.decomp, winningTile: this.drawnTile, payments };
+      decomp: result.decomp, winningTile: this.drawnTile, payments, kong };
     this._emit(`${this.seatName(player)} 自摸 ${result.fans.join('+')} (${result.score})`);
   }
 
@@ -570,9 +573,27 @@ export class Game {
     return pay;
   }
 
+  // 杠分 — every kong scores 明杠 1 / 暗杠 2 / 金杠 4. Each player's kong points are
+  // paid by the other three (incl. the winner), settled at hand end with no 坐庄
+  // doubling. Adds the net into `pay` (and this.scores) and returns the per-seat net.
+  _kongPoints(m) {
+    if (m.type !== 'kong') return 0;
+    if (this.isWild(m.kind)) return 4;   // 金杠
+    return m.concealed ? 2 : 1;          // 暗杠 : 明杠
+  }
+  _settleKongs(pay) {
+    const K = this.melds.map((ms) => ms.reduce((s, m) => s + this._kongPoints(m), 0));
+    const total = K[0] + K[1] + K[2] + K[3];
+    const net = K.map((k) => 4 * k - total);
+    for (let p = 0; p < 4; p++) { this.scores[p] += net[p]; pay[p] += net[p]; }
+    return net;
+  }
+
   _drawGame() {
     this.phase = PHASE.OVER;
-    this.result = { type: 'draw' };
+    const pay = [0, 0, 0, 0];
+    const kong = this._settleKongs(pay); // 杠分 still settles on a draw
+    this.result = { type: 'draw', payments: pay, kong };
     this._emit('荒牌');
   }
 

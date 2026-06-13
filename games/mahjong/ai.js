@@ -223,7 +223,9 @@ export function chooseClaim(game, player, claim, level, rng = Math.random) {
 
 // Decide whether to declare a self-kong on your turn. Returns the kind or null.
 export function chooseSelfKong(game, player, level, rng = Math.random) {
-  const opts = game.selfKongOptions(player);
+  // Bots never 金杠 — konging away four 混儿 is almost always a losing play; only a
+  // human would choose it deliberately.
+  const opts = game.selfKongOptions(player).filter((o) => o.type !== 'gold');
   if (opts.length === 0) return null;
   if (level === LEVELS.EASY) return rng() < 0.5 ? rngPick(opts, rng).kind : null;
   // NORMAL/HARD: kong unless the hand is already tenpai and the kong would not

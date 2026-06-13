@@ -108,6 +108,27 @@ ok(r && r.meta.zhuoWu, '双混儿捉伍: 捉五 detected when won on a 混儿 fo
 ok(r && r.meta.shuangHun, '双混儿捉伍: 双混 (wild-completed run) detected');
 eq(r.score, 6, '双混儿捉伍 = 捉五(3) × 双混(2) = 6');
 
+// --- 杠分 (kong points) + 金杠 -------------------------------------------------
+console.log('kong points:');
+{
+  const kg = new Game({ rng: () => 0.5, indicator: 31 }); // wilds = 中,發 (31,32)
+  ok(kg.isWild(31) && !kg.isWild(0), 'indicator 31 → 中發 are 混儿');
+  kg.melds = [
+    [{ type: 'kong', kind: 0, concealed: true }],   // 暗杠 = 2
+    [{ type: 'kong', kind: 5, concealed: false }],  // 明杠 = 1
+    [{ type: 'kong', kind: 31, concealed: true }],  // 金杠 (中 is a 混儿) = 4
+    [],
+  ];
+  const net = kg._settleKongs([0, 0, 0, 0]);
+  // K = [2,1,4,0], total = 7 → net = 4K − total = [1, −3, 9, −7]
+  eq(net.join(), '1,-3,9,-7', '杠分 net: 暗2 / 明1 / 金4, paid by the other three');
+  eq(net.reduce((a, b) => a + b, 0), 0, '杠分 is zero-sum');
+  // 金杠 is offered for four 混儿 in hand (the only way to kong a wild)
+  kg.hands[kg.dealer] = [31, 31, 31, 31, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3];
+  kg.phase = PHASE.AWAIT_DISCARD; kg.turn = kg.dealer;
+  ok(kg.selfKongOptions(kg.dealer).some((o) => o.type === 'gold' && o.kind === 31), '金杠 offered for four 混儿');
+}
+
 // --- full game state machine: random self-play terminates, scores zero-sum ----
 console.log('state machine:');
 function autoplay(seed) {

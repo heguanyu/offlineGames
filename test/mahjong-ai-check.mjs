@@ -17,6 +17,7 @@ function play(level, seed) {
     }
     if (g.phase === PHASE.AWAIT_DISCARD) {
       const p = g.turn;
+      if (g.selfDrawWin) { g.declareWin(); continue; } // self-draw no longer auto-fires
       const kong = chooseSelfKong(g, p, level, rng);
       if (kong !== null) { g.selfKong(p, kong); continue; }
       g.discard(p, chooseDiscard(g, p, level, rng));

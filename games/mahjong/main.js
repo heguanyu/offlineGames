@@ -159,9 +159,9 @@ function renderActions() {
       const w = game.selfDrawWin;
       buttons.push(mkBtn(`胡 · ${w.fans[0]} · ${w.score}分`, () => doDeclareWin(), false, 'hu'));
     }
-    // self-kong options
+    // self-kong options (金杠 = a concealed kong of four 混儿)
     for (const k of game.selfKongOptions(HUMAN)) {
-      buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
+      buttons.push(mkBtn(`${k.type === 'gold' ? '金杠' : '杠'} ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
     }
     buttons.push(mkBtn('打出', () => discardSelected()));
   } else if (game.phase !== PHASE.OVER) {
@@ -332,7 +332,9 @@ function showResult() {
   if (r.type === 'draw') {
     $('result-title').textContent = '荒牌 · 流局';
     scoreEl.textContent = '';
-    payEl.textContent = '本局无人和牌';
+    // a draw still settles 杠分, so show payments if any kong scored
+    const hasPay = r.payments && r.payments.some((a) => a !== 0);
+    payEl.innerHTML = hasPay ? '杠分　' + payHtml(r.payments) : '本局无人和牌';
   } else {
     const w = r.winner;
     $('result-title').textContent = `${SEAT_LABEL[w]}（${WIND[game.seatWind(w)]}）自摸！`;
@@ -348,12 +350,17 @@ function showResult() {
       winEl.classList.add('show');
     }
     renderWinningHand(handEl, w, r);
-    payEl.innerHTML = r.payments.map((amt, p) =>
-      `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`
-    ).join('　');
+    payEl.innerHTML = payHtml(r.payments);
   }
   saveSession();
   ov.classList.remove('hidden');
+}
+
+// Per-seat payment chips (the net includes 杠分 settled on top of the 胡分).
+function payHtml(payments) {
+  return payments.map((amt, p) =>
+    `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`
+  ).join('　');
 }
 
 function nextHand() {
@@ -476,7 +483,10 @@ function fillRules() {
     <h3>算番</h3>
     捉五、龙<b>相加</b>成底（无则底为 1，即提溜）；本混、混吊、素、杠开各<b>×2</b>。先加后乘。
     <b>起和 2 番</b>，不足 2 番为小和、不能胡。庄家加倍。
+    <h3>杠分</h3>
+    明杠 <code>+1</code>，暗杠 <code>+2</code>，金杠（暗杠四张混儿）<code>+4</code>。每家杠分由其它三家补，局末单独结算（不受坐庄翻倍，暂略）。
     <h3>操作</h3>
+    自摸成胡时出现 <b>胡</b> 按钮（含番种与得分），点它才和牌，也可继续打牌；快捷键 <b>H</b>。
     点牌选中、再点或按「打出」/<b>A</b> 出牌；左右/摇杆移动光标。
     可碰/杠时：<b>X</b>=碰，<b>Y</b>=杠，<b>B</b>=过。<b>Menu</b> 打开菜单。`;
 }
@@ -551,6 +561,13 @@ if (new URLSearchParams(location.search).get('fast')) {
       game.hands[HUMAN] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 26, 26];
       game.turn = HUMAN; game.phase = PHASE.AWAIT_DISCARD; game.drawnTile = 26; game.claim = null;
       game.selfDrawWin = { score: 8, fans: ['龙'], decomp: null };
+      render();
+    },
+    // visual check: 金杠 available (four 混儿 held)
+    debugGold: () => {
+      const w = game.wilds[1];
+      game.hands[HUMAN] = [w, w, w, w, 0, 1, 2, 9, 10, 11, 18, 19, 20, 26];
+      game.turn = HUMAN; game.phase = PHASE.AWAIT_DISCARD; game.drawnTile = 26; game.claim = null; game.selfDrawWin = null;
       render();
     },
     // visual check: a 混吊 win — the 混 (here 1万) stands in the 9条 pair but is
