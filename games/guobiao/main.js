@@ -15,20 +15,25 @@ const WIND = ['东', '南', '西', '北'];
 const AI_DELAY = new URLSearchParams(location.search).get('fast') ? 35 : 650;
 const $ = (id) => document.getElementById(id);
 
+// Per-page config (set by each index.html before this module loads). The 无定番
+// variant uses minFan: 0 and its own storage key so the two games keep separate
+// scores. Defaults to standard MCR.
+const CFG = window.MJ_CONFIG || { minFan: MIN_FAN, sessionKey: 'guobiao' };
+
 let game = null, scene = null, level = LEVELS.NORMAL;
 let session = loadSession();
 let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
 
 function loadSession() {
-  try { const s = JSON.parse(localStorage.getItem('guobiao-session')); if (s && Array.isArray(s.scores)) return s; } catch {}
+  try { const s = JSON.parse(localStorage.getItem(CFG.sessionKey + '-session')); if (s && Array.isArray(s.scores)) return s; } catch {}
   return { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 };
 }
 function saveSession() {
   session.scores = game ? game.scores.slice() : session.scores;
-  localStorage.setItem('guobiao-session', JSON.stringify(session));
-  localStorage.setItem('guobiao-level', String(level));
+  localStorage.setItem(CFG.sessionKey + '-session', JSON.stringify(session));
+  localStorage.setItem(CFG.sessionKey + '-level', String(level));
 }
-{ const lv = parseInt(localStorage.getItem('guobiao-level'), 10); if (lv >= 1 && lv <= 3) level = lv; }
+{ const lv = parseInt(localStorage.getItem(CFG.sessionKey + '-level'), 10); if (lv >= 1 && lv <= 3) level = lv; }
 
 // ---- small DOM tile (result panel + 听 display) ----
 const SUIT_CHAR = { m: '万', p: '筒', s: '条' };
@@ -54,7 +59,8 @@ function selectableHandIndices() { return renderedHand().map((_, i) => i); }
 
 // ---- rendering ----
 function render() {
-  $('round-info').innerHTML = `<b>${WIND[session.roundWind]}圈</b> · 第 ${session.hand} 局 · 难度 <b>${LEVEL_NAMES[level]}</b> · 起和 ${MIN_FAN}番`;
+  const minTxt = CFG.minFan > 0 ? `起和 ${CFG.minFan}番` : '无定番';
+  $('round-info').innerHTML = `<b>${WIND[session.roundWind]}圈</b> · 第 ${session.hand} 局 · 难度 <b>${LEVEL_NAMES[level]}</b> · ${minTxt}`;
   const scoresEl = $('scores'); scoresEl.innerHTML = '';
   for (let p = 0; p < 4; p++) {
     const chip = document.createElement('div');
@@ -233,7 +239,7 @@ function nextHand() {
 function startHand() {
   clearTimeout(pendingTimer);
   if (!scene) scene = new MahjongScene($('scene'));
-  game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores });
+  game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan });
   lastLogLen = 0; selIndex = 0; focusIndex = 0;
   saveSession(); tick();
 }
@@ -301,7 +307,7 @@ function closeOverlays() { for (const id of ['menu-overlay', 'rules-overlay']) $
 function fillRules() {
   $('rules-body').innerHTML = `
     <h3>基本</h3>136 张牌（无花）。可<b>吃、碰、杠</b>；和牌可<b>自摸</b>或<b>点炮</b>（食他人打出之牌）。
-    <h3>起和</h3>和牌至少 <b>${MIN_FAN} 番</b>（番种总和），不足 8 番不可和。
+    <h3>起和</h3>${CFG.minFan > 0 ? `和牌至少 <b>${CFG.minFan} 番</b>（番种总和），不足则不可和。` : '<b>无定番</b>：任意番数（含 0 番）皆可和。'}
     <h3>番种</h3>采用国标 81 番的常见番种子集：清一色24、混一色6、碰碰和6、字一色88、清/混幺九、大小三元、大小四喜、
     四/三/双暗刻、三色三同顺8、花龙8、一色三步高16、平和2、门前清/不求人、五门齐6、箭/风/幺九刻、单钓/边/坎张等。
     <h3>计分</h3>和牌得 (番 + 8)；自摸三家各付，点炮则点炮者付 (番+8)，余两家各付 8。

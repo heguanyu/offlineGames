@@ -31,7 +31,7 @@ try {
 
   const cards = await page.$$eval('.card', (els) => els.map((e) => e.textContent.trim()));
   console.log('cards:', cards.join(' | '));
-  for (const expected of ['GBA · mGBA', 'GBA · VBA-M', 'Nintendo DS', '天津麻将', '国标麻将', 'Controller Test']) {
+  for (const expected of ['GBA · mGBA', 'GBA · VBA-M', 'Nintendo DS', '天津麻将', '国标麻将', '国标（无定番）', 'Controller Test']) {
     if (!cards.some((c) => c.includes(expected))) throw new Error(`missing card: ${expected}`);
   }
 

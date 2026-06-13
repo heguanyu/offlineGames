@@ -48,10 +48,10 @@ ok(names(selfd).includes('四暗刻'), `self-draw → 四暗刻 (got ${names(sel
 ok(!names(disc).includes('四暗刻'), 'discard completes the pung → not 四暗刻');
 
 console.log('full game: random self-play terminates, zero-sum, wins ≥ 8 fan:');
-function play(seed, takeClaims) {
+function play(seed, takeClaims, minFan = 8) {
   let s = seed >>> 0;
   const rng = () => { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-  const g = new Game({ rng });
+  const g = new Game({ rng, minFan });
   let guard = 0;
   while (g.phase !== PHASE.OVER && guard++ < 6000) {
     if (g.phase === PHASE.AWAIT_CLAIM) {
@@ -77,6 +77,21 @@ for (let seed = 1; seed <= 150; seed++) {
 }
 ok(bad === 0, `no anomalies (${bad})`);
 console.log(`  (${wins} wins, ${draws} draws over 300 games; anomalies ${bad})`);
+
+console.log('无定番 (minFan: 0): more wins, including some below 8 fan:');
+let w0 = 0, d0 = 0, bad0 = 0, sub8 = 0;
+for (let seed = 1; seed <= 150; seed++) {
+  for (const take of [false, true]) {
+    const g = play(seed, take, 0);
+    if (g.phase !== PHASE.OVER) bad0++;
+    if (g.scores.reduce((a, b) => a + b, 0) !== 0) bad0++;
+    if (g.result.type === 'win') { w0++; if (g.result.fan < MIN_FAN) sub8++; } else d0++;
+  }
+}
+ok(bad0 === 0, `no anomalies with minFan 0 (${bad0})`);
+ok(w0 > wins, `minFan 0 yields more wins than minFan 8 (${w0} vs ${wins})`);
+ok(sub8 > 0, `some 无定番 wins are below 8 fan (${sub8})`);
+console.log(`  (${w0} wins incl. ${sub8} sub-8-fan, ${d0} draws over 300 games)`);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

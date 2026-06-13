@@ -13,6 +13,8 @@ A set of offline-playable PWA games for iPad, with Xbox controller support.
 - `games/nds/` — Nintendo DS emulator (melonDS core) — gen 4/5 Pokémon etc.
 - `games/mahjong/` — 天津麻将 (Tianjin mahjong), a native game vs. 3 AI bots
 - `games/guobiao/` — 国标麻将 (Chinese Official / MCR), reuses the mahjong render layer
+- `games/guobiao-free/` — 国标（无定番）, the MCR game with the 8-fan minimum
+  removed; just a page + `window.MJ_CONFIG` that reuses `../guobiao/main.js`
 - `emulatorjs/data/` — shared [EmulatorJS](https://github.com/EmulatorJS/EmulatorJS)
   v4.2.3 frontend + wasm cores, used by all emulator pages
 
@@ -149,11 +151,17 @@ and tile assets, but brings its own rules:
   hint, and the MCR payment (winner gets fan+8; self-draw → all pay it, discard
   → the 点炮者 pays it and the other two pay the 8 base).
 
+The 8-fan minimum is a per-`Game` option (`minFan`, default 8). **国标（无定番）**
+(`games/guobiao-free/`) is the same game with `minFan: 0` (any valid hand wins) —
+it's just a page whose inline `window.MJ_CONFIG = { minFan: 0, sessionKey: ... }`
+reuses `../guobiao/main.js`, `engine.js`, `score.js`, `ai.js` unchanged.
+
 Scope note: 136 tiles (no flowers), a fan **subset** (not all 81), and no
 robbing-kong — documented simplifications for a playable, reasonably authentic
 v1. Tests: `node test/guobiao-engine-test.mjs` (scoring + random self-play:
-terminate, zero-sum, wins ≥ 8 fan) and `node test/guobiao-e2e.mjs` (headless
-WebGL, plays full hands, fails on any console error).
+terminate, zero-sum, wins ≥ 8 fan for standard, sub-8-fan wins for 无定番),
+`node test/guobiao-e2e.mjs` and `node test/guobiao-free-e2e.mjs` (headless WebGL,
+play full hands, fail on any console error).
 
 ## Test locally (desktop)
 

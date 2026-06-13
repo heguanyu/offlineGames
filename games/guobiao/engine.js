@@ -67,6 +67,7 @@ export class Game {
     this.dealer = opts.dealer ?? 0;
     this.roundWind = opts.roundWind ?? 0;
     this.scores = opts.scores ? opts.scores.slice() : [0, 0, 0, 0];
+    this.minFan = opts.minFan ?? MIN_FAN; // 8 for standard MCR; 0 for 无定番
     this.log = [];
     this._deal(opts);
   }
@@ -117,7 +118,7 @@ export class Game {
     this.turn = player;
 
     const r = analyzeWin(this.hands[player], this.melds[player], this._winCtx(player, tile, false));
-    if (r && r.fan >= MIN_FAN) { this._win(player, r, false, null); return; }
+    if (r && r.fan >= this.minFan) { this._win(player, r, false, null); return; }
     this.phase = PHASE.AWAIT_DISCARD;
   }
 
@@ -167,7 +168,7 @@ export class Game {
     for (let off = 1; off <= 3; off++) {
       const p = (discarder + off) % 4;
       const test = analyzeWin(this.hands[p].concat(kind), this.melds[p], this._winCtx(p, kind, true));
-      if (test && test.fan >= MIN_FAN) offers.push({ player: p, type: 'win', result: test });
+      if (test && test.fan >= this.minFan) offers.push({ player: p, type: 'win', result: test });
     }
     for (let off = 1; off <= 3; off++) {
       const p = (discarder + off) % 4;
@@ -257,7 +258,7 @@ export class Game {
     const waits = [];
     for (let k = 0; k < KINDS; k++) {
       const r = analyzeWin(hand.concat(k), this.melds[player], this._winCtx(player, k, true));
-      if (r && r.fan >= MIN_FAN) waits.push(k);
+      if (r && r.fan >= this.minFan) waits.push(k);
     }
     return waits;
   }
