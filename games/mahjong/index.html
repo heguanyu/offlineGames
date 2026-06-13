@@ -106,11 +106,12 @@
   .act-btn.ghost { background: linear-gradient(#1b5e45, #134836); color: #d7efe5; box-shadow: 0 3px 0 #0c3526, 0 5px 12px rgba(0,0,0,0.4); }
   .act-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
   .hint { font-size: 0.78rem; color: #bfe0d2; text-align: center; min-height: 1.1em; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
-  /* claim prompt (碰/杠/过): pinned under the big pending tile, ~2x size */
-  #action-hud.claim { gap: 14px; }
-  #action-hud.claim .act-btn { font-size: 1.9rem; font-weight: 800; padding: 18px 42px; border-radius: 16px; box-shadow: 0 5px 0 #b8902f, 0 9px 18px rgba(0,0,0,0.5); }
-  #action-hud.claim .act-btn.ghost { box-shadow: 0 5px 0 #0c3526, 0 9px 18px rgba(0,0,0,0.45); }
+  /* claim (碰/杠/过) + your-turn (打出) prompts: front-center, ~2x size */
+  #action-hud.claim, #action-hud.discard { gap: 14px; }
+  #action-hud.claim .act-btn, #action-hud.discard .act-btn { font-size: 1.9rem; font-weight: 800; padding: 18px 42px; border-radius: 16px; box-shadow: 0 5px 0 #b8902f, 0 9px 18px rgba(0,0,0,0.5); }
+  #action-hud.claim .act-btn.ghost, #action-hud.discard .act-btn.ghost { box-shadow: 0 5px 0 #0c3526, 0 9px 18px rgba(0,0,0,0.45); }
   #action-hud.claim .hint { display: none; }
+  #action-hud.discard .hint { font-size: 1.25rem; color: var(--gold); font-weight: 600; }
 
   /* ---------- overlays ---------- */
   .overlay { position: fixed; inset: 0; z-index: 20; background: rgba(3,16,11,0.84); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }

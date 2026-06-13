@@ -117,19 +117,22 @@ function render() {
   flushLogToasts();
 }
 
-// When the human can claim, pin the big 碰/杠/过 buttons just under the enlarged
-// pending tile (front-center of the table) instead of the bottom bar.
+// Pin the big buttons (碰/杠/过 when claiming, or 打出 on your own turn) at the
+// front-center of the table instead of the bottom bar.
 function positionClaimUI() {
   const hud = $('action-hud');
-  if (isClaimPhase() && scene) {
+  const claim = isClaimPhase();
+  const myDiscard = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
+  if (scene && (claim || myDiscard)) {
     const p = scene.worldToScreen(0, 0, 3.9);
-    hud.classList.add('claim');
+    hud.classList.toggle('claim', claim);
+    hud.classList.toggle('discard', !claim && myDiscard);
     hud.style.left = p.x + 'px';
     hud.style.top = p.y + 'px';
     hud.style.bottom = 'auto';
     hud.style.transform = 'translate(-50%, 0)';
   } else {
-    hud.classList.remove('claim');
+    hud.classList.remove('claim', 'discard');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
   }
 }

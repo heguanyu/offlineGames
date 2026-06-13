@@ -253,17 +253,24 @@ export class Game {
 
   nextDealer() { return (this.dealer + 1) % 4; } // MCR: dealer passes every hand
 
-  // Tiles that complete a ≥8-fan win for `player` from the given 13-tile hand.
+  // Tiles that complete a win of at least `minFan` for `player` from the given
+  // 13-tile hand. Uses the self-draw context (the highest-scoring way to win on
+  // a tile: it includes 自摸 / 不求人 / 暗刻), so a hand that's ready by self-draw
+  // counts as 听 even if winning off a discard would fall short of the minimum.
   handWaits(hand, player) {
     const waits = [];
     for (let k = 0; k < KINDS; k++) {
-      const r = analyzeWin(hand.concat(k), this.melds[player], this._winCtx(player, k, true));
+      const r = analyzeWin(hand.concat(k), this.melds[player], {
+        selfDraw: true, winByDiscard: false, winningTile: k,
+        roundWind: this.roundWind, seatWind: this.seatWind(player),
+        lastTile: false, afterKong: false,
+      });
       if (r && r.fan >= this.minFan) waits.push(k);
     }
     return waits;
   }
 
-  // Listening status for the UI: tiles that complete a ≥8-fan win.
+  // Listening status for the UI: tiles that complete a winning hand.
   tenpaiInfo(player) {
     const hand = this.hands[player];
     if ((hand.length % 3) !== 1) return { tenpai: false, waits: [] };

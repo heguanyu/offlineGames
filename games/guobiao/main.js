@@ -23,6 +23,7 @@ const CFG = window.MJ_CONFIG || { minFan: MIN_FAN, sessionKey: 'guobiao' };
 let game = null, scene = null, level = LEVELS.NORMAL;
 let session = loadSession();
 let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
+let lockedTing = false, tingWaits = []; // once 听, the seat auto-plays (tsumogiri)
 
 function loadSession() {
   try { const s = JSON.parse(localStorage.getItem(CFG.sessionKey + '-session')); if (s && Array.isArray(s.scores)) return s; } catch {}
@@ -75,22 +76,27 @@ function render() {
   const selectable = selectableHandIndices();
   if (selIndex >= selectable.length) selIndex = Math.max(0, selectable.length - 1);
   const myTurn = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
-  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn, selRendered: myTurn ? selectable[selIndex] : null, dragId: null, claimable: isClaimPhase() });
+  const showSel = myTurn && !lockedTing; // no manual selection once 听
+  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn: showSel, selRendered: showSel ? selectable[selIndex] : null, claimable: isClaimPhase() && !lockedTing });
   renderActions();
   positionClaimUI();
   flushLog();
 }
 
-// Pin the big 胡/碰/杠/吃/过 buttons under the enlarged pending tile.
+// Pin the big buttons (胡/碰/杠/吃/过 when claiming, or 打出 on your own turn) at
+// the front-center of the table.
 function positionClaimUI() {
   const hud = $('action-hud');
-  if (isClaimPhase() && scene) {
+  const claim = isClaimPhase();
+  const myDiscard = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
+  if (scene && (claim || myDiscard)) {
     const p = scene.worldToScreen(0, 0, 3.9);
-    hud.classList.add('claim');
+    hud.classList.toggle('claim', claim);
+    hud.classList.toggle('discard', !claim && myDiscard);
     hud.style.left = p.x + 'px'; hud.style.top = p.y + 'px';
     hud.style.bottom = 'auto'; hud.style.transform = 'translate(-50%, 0)';
   } else {
-    hud.classList.remove('claim');
+    hud.classList.remove('claim', 'discard');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
   }
 }
@@ -98,13 +104,29 @@ function positionClaimUI() {
 function renderPlate(p) {
   const seat = $('plate-' + p);
   const thinking = game.phase !== PHASE.OVER && game.turn === p && p !== HUMAN;
-  const listen = game.tenpaiInfo(p).tenpai && (p === HUMAN);
+  const listen = p === HUMAN && (lockedTing || game.tenpaiInfo(p).tenpai);
   seat.innerHTML =
     `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}">` +
     `<span class="wind">${WIND[game.seatWind(p)]}</span><span>${SEAT_LABEL[p]}</span>` +
     (p === game.dealer ? '<span class="dealer-dot" title="庄"></span>' : '') +
     (listen ? '<span class="listen">听</span>' : '') +
     (thinking ? '<span class="think">思考中…</span>' : '') + `</div>`;
+}
+
+// Which distinct discards leave the human 听 (ready), with their waits. Cached
+// per hand so it isn't recomputed on every cursor move.
+let _tingSig = '', _ting = [];
+function tingDiscards() {
+  const hand = game.hands[HUMAN];
+  const sig = hand.slice().sort((a, b) => a - b).join(',');
+  if (sig === _tingSig) return _ting;
+  _tingSig = sig; _ting = [];
+  for (const k of new Set(hand)) {
+    const rest = hand.slice(); rest.splice(rest.indexOf(k), 1);
+    const waits = game.handWaits(rest, HUMAN);
+    if (waits.length) _ting.push({ kind: k, waits });
+  }
+  return _ting;
 }
 
 function renderActions() {
@@ -123,14 +145,20 @@ function renderActions() {
     buttons.push(mkBtn('过', () => doClaimPass(), true));
     hint.textContent = `${SEAT_LABEL[game.lastDiscard.player]} 打出 ${tileName(game.lastDiscard.kind)}`;
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
-    for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
-    buttons.push(mkBtn('打出', () => discardSelected()));
-    // 听牌提示: would discarding the selected tile leave a ready hand?
-    const sel = renderedHand()[selectableHandIndices()[selIndex]];
-    if (sel != null) {
-      const rest = game.hands[HUMAN].slice(); rest.splice(rest.indexOf(sel), 1);
-      const waits = game.handWaits(rest, HUMAN);
-      hint.textContent = waits.length ? `打 ${tileName(sel)} 即听（${waits.map(tileName).join(' ')}）` : '选牌后按「打出」/ A 键';
+    if (lockedTing) {
+      // already 听 — the seat auto-plays; no manual discard.
+      hint.textContent = `已听 · 自动出牌（等 ${tingWaits.map(tileName).join(' ')}）`;
+    } else {
+      for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
+      buttons.push(mkBtn('打出', () => discardSelected()));
+      // 听牌提示: proactively show which discards leave a ready hand. If the
+      // currently selected tile is one of them, spell out the waits.
+      const ting = tingDiscards();
+      const sel = renderedHand()[selectableHandIndices()[selIndex]];
+      const selTing = ting.find((t) => t.kind === sel);
+      if (selTing) hint.textContent = `打 ${tileName(sel)} 即听：${selTing.waits.map(tileName).join(' ')}`;
+      else if (ting.length) hint.textContent = `可听！打 ${ting.map((t) => tileName(t.kind)).join('、')} 即听`;
+      else hint.textContent = '选牌后按「打出」/ A 键';
     }
   } else if (game.phase !== PHASE.OVER) {
     hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
@@ -167,7 +195,11 @@ function tick() {
   if (game.phase === PHASE.OVER) { showResult(); return; }
   if (game.phase === PHASE.AWAIT_CLAIM) {
     const c = game.currentClaim();
-    if (c.player === HUMAN) { focusIndex = 0; render(); return; }
+    if (c.player === HUMAN) {
+      // Once 听, the human seat is on autopilot: take a 胡, pass everything else.
+      if (lockedTing) { schedule(() => { if (c.type === 'win') game.claimTake(); else game.claimPass(); tick(); }, AI_DELAY); return; }
+      focusIndex = 0; render(); return;
+    }
     schedule(() => {
       const dec = chooseClaim(game, c.player, c, level);
       if (dec.take) game.claimTake(dec.option); else game.claimPass();
@@ -176,7 +208,12 @@ function tick() {
     return;
   }
   if (game.phase === PHASE.AWAIT_DISCARD) {
-    if (game.turn === HUMAN) { render(); return; }
+    if (game.turn === HUMAN) {
+      // Locked 听: auto-discard the drawn tile (a self-draw win already fired in
+      // the engine), so the hand is preserved until it wins or the wall runs out.
+      if (lockedTing) { schedule(() => { game.discard(HUMAN, game.drawnTile); sound.discard(); tick(); }, AI_DELAY); return; }
+      render(); return;
+    }
     schedule(() => {
       const p = game.turn;
       const kong = chooseSelfKong(game, p, level);
@@ -189,7 +226,7 @@ function schedule(fn, delay) { clearTimeout(pendingTimer); pendingTimer = setTim
 
 // ---- human actions ----
 function onPickTile(idx) {
-  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
+  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing) return;
   const id = renderedHand()[idx];
   if (id == null) return;
   const pos = selectableHandIndices().indexOf(idx);
@@ -203,6 +240,9 @@ function discardSelected() {
   if (id == null) return;
   game.discard(HUMAN, id); sound.discard();
   selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
+  // The moment this discard leaves a ready hand, lock 听: from now on the seat
+  // auto-plays (no more manual discards).
+  if (!lockedTing) { const ti = game.tenpaiInfo(HUMAN); if (ti.tenpai) { lockedTing = true; tingWaits = ti.waits; toast('听！', true); } }
   tick();
 }
 function doSelfKong(kind) { if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) { game.selfKong(HUMAN, kind); tick(); } }
@@ -240,7 +280,7 @@ function startHand() {
   clearTimeout(pendingTimer);
   if (!scene) scene = new MahjongScene($('scene'));
   game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan });
-  lastLogLen = 0; selIndex = 0; focusIndex = 0;
+  lastLogLen = 0; selIndex = 0; focusIndex = 0; lockedTing = false; tingWaits = [];
   saveSession(); tick();
 }
 function newGame() { game = null; session = { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 }; startHand(); }
@@ -271,7 +311,7 @@ function onAction(name) {
     else if (name === 'menu') openMenu();
     return;
   }
-  if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) {
+  if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD && !lockedTing) {
     const n = selectableHandIndices().length;
     if (name === 'left') { selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
     else if (name === 'right') { selIndex = (selIndex + 1) % n; sound.select(); render(); }
