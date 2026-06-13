@@ -76,17 +76,28 @@ export function forceLandscape(apply) {
   return () => window.innerHeight > window.innerWidth; // query current state
 }
 
-// Poll the gamepad each frame (edge-detected) and dispatch to onAction. `buttonMap`
-// is { buttonIndex: actionName }; the left-stick X axis also emits left/right.
+// Poll the gamepad each frame and dispatch to onAction. `buttonMap` is
+// { buttonIndex: actionName }; non-nav buttons are edge-detected (one press = one
+// action). left/right — from the left-stick X axis OR the mapped d-pad — key-repeat
+// while held, so the selected card keeps moving without re-flicking.
 export function startGamepad(onAction, buttonMap) {
-  const prev = {}; let axisLatch = false;
+  const prev = {};
+  let navDir = 0, navNext = 0;
+  const REPEAT_DELAY = 380, REPEAT_RATE = 120; // ms: initial hold delay, then steady rate
   const press = (pad, i) => { const d = !!pad.buttons[i]?.pressed, was = prev[i]; prev[i] = d; return d && !was; };
   (function poll() {
     const pad = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).find((p) => p && p.connected);
     if (pad) {
-      for (const i in buttonMap) if (press(pad, +i)) onAction(buttonMap[i]);
+      for (const i in buttonMap) { const a = buttonMap[i]; if (a !== 'left' && a !== 'right' && press(pad, +i)) onAction(a); }
+      // left/right with auto-repeat (stick axis, else a held d-pad direction)
       const x = pad.axes[0] || 0;
-      if (Math.abs(x) > 0.5) { if (!axisLatch) { onAction(x < 0 ? 'left' : 'right'); axisLatch = true; } } else axisLatch = false;
+      let dir = x < -0.5 ? -1 : x > 0.5 ? 1 : 0;
+      if (!dir) for (const i in buttonMap) if (pad.buttons[+i]?.pressed) { if (buttonMap[i] === 'left') dir = -1; else if (buttonMap[i] === 'right') dir = 1; }
+      const now = performance.now();
+      if (dir) {
+        if (dir !== navDir) { onAction(dir < 0 ? 'left' : 'right'); navNext = now + REPEAT_DELAY; navDir = dir; }
+        else if (now >= navNext) { onAction(dir < 0 ? 'left' : 'right'); navNext = now + REPEAT_RATE; }
+      } else navDir = 0;
     }
     requestAnimationFrame(poll);
   })();

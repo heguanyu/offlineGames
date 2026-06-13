@@ -265,28 +265,19 @@
            d="m -990.50324,324.51204 c -8.35911,-1.30406 -7.60048,9.08422 -3.31653,11.28821 59.84729,26.46758 123.8383,-8.86564 177.96674,-5.69096 2.05825,0.36905 5.31253,1.56409 8.29438,3.20196 9.55669,5.04809 3.73393,19.51008 -0.97638,22.47878 -21.53617,9.8449 -16.51418,0.091 -40.67325,11.2497 -2.27744,1.4605 -8.25717,2.5966 -10.48172,1.6848 -8.94326,-2.9779 -16.30179,-8.1024 -22.15012,-12.6641 l -11.18847,5.6458 c 6.90544,8.6009 17.09988,12.6716 25.54075,16.3714 6.74722,3.2135 14.12571,2.8541 19.02891,3.0056 25.10802,0.3448 48.58902,-9.2971 60.40286,-10.7554 3.45799,-0.5303 7.48318,-6.5254 9.05051,-9.3096 9.69143,-15.8724 5.68822,-18.57024 -1.08565,-35.18913 -3.84938,-6.23214 -14.98024,-8.01151 -20.8275,-8.80455 -60.71768,-2.57426 -138.25414,18.81176 -189.58453,7.48749 z"
            style="fill:#b93c3c;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1" />
       </g>
-      <g
-         transform="translate(-0.3219,0)"
-         id="g5482">
-        <path
-           sodipodi:nodetypes="cccsc"
-           inkscape:connector-curvature="0"
-           id="path5484"
-           d="m 146.54838,677.43662 c 0.54434,-9.2727 -36.81274,-17.9586 -33.24598,-4.27126 17.95022,62.01984 -5.54222,79.38907 -66.76663,100.84189 -4.171059,1.14614 -5.268439,9.32072 1.845649,7.11565 C 112.9187,761.11914 152.22385,756.52046 146.54838,677.43662 Z"
-           style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1" />
-        <path
-           sodipodi:nodetypes="ccssscccc"
-           inkscape:connector-curvature="0"
-           id="path5486"
-           d="m 121.57594,718.65069 c -5.84347,-2.20134 -10.97704,-5.4517 -14.36291,-10.56747 -0.6003,-0.89938 -2.22977,-8.68579 1.97466,-9.14854 16.17404,-1.78017 7.17997,-6.60782 10.67327,-7.33243 21.63049,-4.4868 52.3212,-17.63183 71.64182,-22.71807 10.80219,-2.84372 17.88236,-11.073 21.27228,-10.05511 12.27112,-0.89102 13.76383,25.66912 5.86784,27.62595 -31.09527,4.56377 -48.76316,2.63772 -79.85842,11.44328 z"
-           style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1" />
-        <path
-           sodipodi:nodetypes="ccsccccsc"
-           inkscape:connector-curvature="0"
-           id="path5488"
-           d="m 165.44117,679.72349 c 0.55992,-10.21772 -8.38843,-6.91831 -11.02734,3.18557 3.16535,28.79842 -18.621,73.62164 5.90075,102.0204 11.2851,13.06933 72.50888,13.30221 84.39146,4.71358 17.01662,-14.57154 7.85274,-28.29435 -2.36625,-27.88037 -19.38336,1.4505 -19.42048,-50.0732 -27.57994,-48.89888 -8.69404,1.63399 0.64114,48.83811 -6.38105,54.13434 -11.27931,8.35714 -30.81168,-3.74639 -36.18692,-11.11154 -14.7811,-20.25304 -3.422,-56.24978 -6.75071,-76.1631 z"
-           style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1" />
-      </g>
+      <!-- 九: standardized 楷书 glyph (was a stylized 3-path drawing that read poorly),
+           stretched wide (textLength) to match the 萬 below, like the other man tiles. -->
+      <text
+         id="man9-num"
+         x="152"
+         y="795"
+         text-anchor="middle"
+         textLength="250"
+         lengthAdjust="spacingAndGlyphs"
+         font-family="'Kaiti SC','STKaiti','KaiTi','楷体','Kaiti TC','DFKai-SB','BiauKai',serif"
+         font-weight="700"
+         font-size="180"
+         style="fill:#000000;fill-opacity:1;stroke:none">九</text>
     </g>
   </g>
 </svg>
