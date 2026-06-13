@@ -1,7 +1,7 @@
 // Tianjin mahjong — UI glue: drives the 3D scene (scene.js), the HTML HUD, input
 // (touch raycast / keyboard / Xbox controller) and the turn orchestration that
 // paces the AI so the human can follow along.
-import { Game, PHASE, tileName, suitOf, rankOf } from './engine.js';
+import { Game, PHASE, tileName } from './engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
 import { MahjongScene, tileFaceUrl } from './scene.js';
 import { Sound } from './sound.js';
@@ -51,32 +51,9 @@ function saveSession() {
 }
 
 // ---------------------------------------------------------------------------
-// Small DOM tile (used only for the wild indicator + the result panel; the
-// table itself is rendered in 3D by scene.js).
+// A DOM tile showing its real SVG face (used in the 混儿 header overlay + the
+// result panel; the table itself is rendered in 3D by scene.js). opts: { lg, wild }.
 // ---------------------------------------------------------------------------
-const SUIT_CHAR = { m: '万', p: '筒', s: '条' };
-const DRAGON_CLASS = ['z-c', 'z-f', 'z-b']; // 中 發 白
-
-function tileEl(id, opts = {}) {
-  const el = document.createElement('div');
-  el.className = 'tile' + (opts.size ? ' ' + opts.size : '');
-  if (id < 27) {
-    const s = suitOf(id);
-    el.classList.add('suit-' + s);
-    el.innerHTML = `<span class="rk">${rankOf(id)}</span><span class="st">${SUIT_CHAR[s]}</span>`;
-  } else if (id < 31) {
-    el.classList.add('honor', 'wind');
-    el.innerHTML = `<span class="rk">${WIND[id - 27]}</span>`;
-  } else {
-    el.classList.add('honor', DRAGON_CLASS[id - 31]);
-    el.innerHTML = `<span class="rk">${['中', '發', '白'][id - 31]}</span>`;
-  }
-  if (opts.wild) el.classList.add('wild');
-  return el;
-}
-
-// A tile showing its real SVG face (used in the 混儿 header overlay + the result
-// panel). opts: { lg, wild }.
 function faceTileEl(kind, opts = {}) {
   const el = document.createElement('div');
   el.className = 'tile face-tile' + (opts.lg ? ' lg' : '') + (opts.wild ? ' wild' : '');
@@ -334,6 +311,35 @@ function doPass() {
 // ---------------------------------------------------------------------------
 // Result / new hand
 // ---------------------------------------------------------------------------
+
+// Render the winning hand grouped by meld + pair from the decomposition. Each
+// 混儿 is placed in its slot and drawn as the tile it stands for, marked 混.
+function renderWinningHand(handEl, w, r) {
+  const meldTilesOf = (g) => {
+    if (g.type === 'pung') { const k = g.kinds[0], nat = 3 - g.jokers; return [0, 1, 2].map((i) => ({ kind: k, wild: i >= nat })); }
+    return g.kinds.map((id) => ({ kind: id, wild: !g.natural.has(id) })); // chow
+  };
+  const pairTilesOf = (g) => {
+    if (g.kinds.length) { const k = g.kinds[0], nat = 2 - g.jokers; return [0, 1].map((i) => ({ kind: k, wild: i >= nat })); }
+    return [{ kind: game.wilds[0], wild: true }, { kind: game.wilds[0], wild: true }];
+  };
+  const addGroup = (tiles, extra) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'meld-group' + (extra || '');
+    for (const t of tiles) wrap.appendChild(faceTileEl(t.kind, { lg: true, wild: t.wild }));
+    handEl.appendChild(wrap);
+  };
+  if (!r.decomp) { // fallback: plain sorted hand
+    addGroup(game.hands[w].slice().sort((a, b) => a - b).map((id) => ({ kind: id, wild: game.isWild(id) })));
+    for (const m of game.melds[w]) addGroup(m.tiles.map((k) => ({ kind: k, wild: false })));
+    return;
+  }
+  for (const m of game.melds[w]) addGroup(m.tiles.map((k) => ({ kind: k, wild: false })));
+  let pair = null;
+  for (const g of r.decomp) { if (g.type === 'pair') pair = pairTilesOf(g); else addGroup(meldTilesOf(g)); }
+  if (pair) addGroup(pair, ' pair');
+}
+
 function showResult() {
   const r = game.result;
   const ov = $('result-overlay');
@@ -355,12 +361,7 @@ function showResult() {
       fansEl.appendChild(c);
     }
     scoreEl.textContent = r.score + ' 分';
-    // winning hand (real SVG faces)
-    const hand = game.hands[w].slice().sort((a, b) => a - b);
-    for (const id of hand) handEl.appendChild(faceTileEl(id, { lg: true, wild: game.isWild(id) }));
-    for (const m of game.melds[w]) {
-      for (const t of m.tiles) handEl.appendChild(faceTileEl(t, { lg: true }));
-    }
+    renderWinningHand(handEl, w, r);
     payEl.innerHTML = r.payments.map((amt, p) =>
       `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`
     ).join('　');
