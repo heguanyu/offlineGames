@@ -244,11 +244,15 @@ export class MahjongScene {
     const seen = new Set();
     const HUMAN = 0;
 
-    // Player hand (upright, pickable).
+    // Player hand (upright, pickable). The freshly-drawn tile sits apart from the
+    // sorted row and is rolled 90° (lying on its side) to mark it.
     const hand = ui.renderedHand;
+    const drawnIdx = ui.drawnTile != null ? hand.lastIndexOf(ui.drawnTile) : -1;
     const handItems = hand.map((id, i) => ({
       key: 'h' + i, kind: id, wild: game.isWild(id), pick: i,
       selected: ui.myTurn && i === ui.selRendered,
+      gapBefore: i === drawnIdx ? 0.8 : 0,
+      rz: i === drawnIdx ? Math.PI / 2 : 0,
     }));
     this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: -0.34, ry: 0, pull: -0.35 }, HAND_HALF, seen);
 
@@ -339,7 +343,7 @@ export class MahjongScene {
       const z = cfg.cz + cfg.dz * off + (it.selected ? cfg.pull : 0);
       this._place(it.key, {
         kind: it.kind, wild: it.wild, pick: it.pick, emissive: it.emissive, scale: s,
-        x, y: baseY + lift, z, rx: cfg.rx + (it.selected ? 0.16 : 0), ry: cfg.ry,
+        x, y: baseY + lift, z, rx: cfg.rx + (it.selected ? 0.16 : 0), ry: cfg.ry, rz: it.rz || 0,
       }, seen);
       if (it.selected) {
         this.glowTarget.on = true;
@@ -383,8 +387,13 @@ export class MahjongScene {
         }, seen);
         return;
       }
+      // Your own discards rise up into the pool from your side of the table
+      // (in front of the hand), instead of sliding in from the row's middle.
+      const from = d.player === 0
+        ? new THREE.Vector3((col - 1.5) * colGap, TH * 0.35, R_HAND + 0.4)
+        : this._seatCenter(d.player);
       this._place('pool' + i, {
-        kind: d.kind, wild: game.isWild(d.kind), emissive: false, scale: POOL, from: this._seatCenter(d.player),
+        kind: d.kind, wild: game.isWild(d.kind), emissive: false, scale: POOL, from,
         x: (col - 1.5) * colGap, y: (TD / 2) * POOL, z: zStart + row * rowGap,
         rx: -Math.PI / 2, ry: 0,
       }, seen);

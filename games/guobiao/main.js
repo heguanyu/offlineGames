@@ -77,7 +77,8 @@ function render() {
   if (selIndex >= selectable.length) selIndex = Math.max(0, selectable.length - 1);
   const myTurn = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
   const showSel = myTurn && !lockedTing; // no manual selection once 听
-  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn: showSel, selRendered: showSel ? selectable[selIndex] : null, claimable: isClaimPhase() && !lockedTing });
+  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn: showSel, selRendered: showSel ? selectable[selIndex] : null, claimable: isClaimPhase() && !lockedTing,
+    drawnTile: (showSel && game.drawnTile != null) ? game.drawnTile : null });
   renderActions();
   positionClaimUI();
   flushLog();
@@ -141,7 +142,7 @@ function renderActions() {
     else if (c.type === 'pung') buttons.push(mkBtn('碰', () => doClaimTake()));
     else if (c.type === 'kong') buttons.push(mkBtn('杠', () => doClaimTake()));
     else if (c.type === 'chow') {
-      c.options.forEach((opt) => buttons.push(mkBtn(`吃 ${tileName(opt[0])}${tileName(opt[1])}`, () => doClaimTake(opt))));
+      c.options.forEach((opt) => buttons.push(mkChowBtn(opt, game.lastDiscard.kind)));
     }
     buttons.push(mkBtn('过', () => doClaimPass(), true));
     hint.textContent = `${SEAT_LABEL[game.lastDiscard.player]} 打出 ${tileName(game.lastDiscard.kind)}`;
@@ -163,6 +164,20 @@ function renderActions() {
 function mkBtn(label, fn, ghost, extra) {
   const b = document.createElement('button'); b.className = 'act-btn' + (ghost ? ' ghost' : '') + (extra ? ' ' + extra : ''); b.textContent = label;
   b.addEventListener('click', fn); return b;
+}
+// A 吃 option rendered as the actual 3-tile run (faces), with a red ▼ over the
+// claimed tile, as one big button. `opt` is the two hand tiles; `claimed` is the
+// discard being chowed.
+function mkChowBtn(opt, claimed) {
+  const b = document.createElement('button'); b.className = 'act-btn chow-btn';
+  for (const t of [opt[0], opt[1], claimed].sort((a, b) => a - b)) {
+    const cell = document.createElement('div');
+    cell.className = 'chow-cell' + (t === claimed ? ' claimed' : '');
+    cell.appendChild(faceTileEl(t, { lg: true }));
+    b.appendChild(cell);
+  }
+  b.addEventListener('click', () => doClaimTake(opt));
+  return b;
 }
 function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN; }
 
@@ -408,6 +423,12 @@ if (new URLSearchParams(location.search).get('fast')) {
       return false;
     },
     clickAction: (text) => { const b = [...$('action-bar').children, ...$('ting-center').children].find((x) => x.textContent === text); if (b) { b.click(); return true; } return false; },
+    debugChow: () => {
+      game.phase = PHASE.AWAIT_CLAIM;
+      game.lastDiscard = { player: 3, kind: 3 }; // 上家 discards 4万 (id 3)
+      game.currentClaim = () => ({ player: HUMAN, type: 'chow', options: [[1, 2], [2, 4], [4, 5]] });
+      render();
+    },
     debugResult: () => {
       game.phase = PHASE.OVER;
       game.result = { type: 'win', winner: HUMAN, fan: 24, byDiscard: false, winningTile: game.hands[HUMAN][0],

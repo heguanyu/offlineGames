@@ -59,6 +59,13 @@
   #action-hud.claim .act-btn { font-size: 1.7rem; font-weight: 800; padding: 16px 34px; border-radius: 16px; box-shadow: 0 5px 0 #b8902f, 0 9px 18px rgba(0,0,0,0.5); }
   #action-hud.claim .act-btn.ghost { box-shadow: 0 5px 0 #0c3526, 0 9px 18px rgba(0,0,0,0.45); }
   #action-hud.claim .hint { display: none; }
+  /* 吃 option: the actual run of tile faces with a red ▼ over the claimed tile */
+  #action-hud.claim .act-btn.chow-btn { display: inline-flex; gap: 5px; align-items: flex-end; padding: 10px 14px; background: linear-gradient(180deg, #1c6047, #134836); border: 2px solid #2c8160; box-shadow: 0 5px 0 #0c3526, 0 9px 18px rgba(0,0,0,0.5); }
+  .chow-cell { position: relative; padding-top: 18px; }
+  .chow-cell .tile { --tw: 42px; --th: 57px; }
+  .chow-cell.claimed .tile { box-shadow: 0 0 0 2px #ff3b3b, 0 0 12px rgba(255,59,59,0.65); }
+  .chow-cell.claimed::before { content: '▼'; position: absolute; top: 0; left: 50%; transform: translateX(-50%); color: #ff3b3b; font-size: 1.3rem; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.7); animation: chow-arrow 0.8s ease-in-out infinite; }
+  @keyframes chow-arrow { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(3px); } }
   /* 打出并听牌 (declare 听): a body-level overlay so it truly centers on screen */
   #ting-center { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; pointer-events: none; }
   #ting-center:empty { display: none; }
