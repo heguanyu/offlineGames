@@ -75,10 +75,11 @@ function tileEl(id, opts = {}) {
   return el;
 }
 
-// A wild tile showing its real SVG face (used in the 混儿 header overlay).
-function wildFaceEl(kind) {
+// A tile showing its real SVG face (used in the 混儿 header overlay + the result
+// panel). opts: { lg, wild }.
+function faceTileEl(kind, opts = {}) {
   const el = document.createElement('div');
-  el.className = 'tile wild face-tile';
+  el.className = 'tile face-tile' + (opts.lg ? ' lg' : '') + (opts.wild ? ' wild' : '');
   const img = document.createElement('img');
   img.className = 'face'; img.src = tileFaceUrl(kind); img.alt = tileName(kind);
   el.appendChild(img);
@@ -129,7 +130,7 @@ function render() {
   // ---- the round's two 混儿 (e.g. 7万 + 8万), shown with their real faces ----
   const wc = $('wild-indicator');
   wc.innerHTML = '';
-  for (const w of game.wilds) wc.appendChild(wildFaceEl(w));
+  for (const w of game.wilds) wc.appendChild(faceTileEl(w, { wild: true }));
   $('wall-count').textContent = `余 ${game.wall.length} 张`;
 
   // ---- nameplates ----
@@ -144,11 +145,30 @@ function render() {
     myTurn,
     selRendered: myTurn ? selectable[selIndex] : null,
     dragId,
+    claimable: isClaimPhase(),
   });
 
   // ---- action bar / hint + toasts ----
   renderActions();
+  positionClaimUI();
   flushLogToasts();
+}
+
+// When the human can claim, pin the big 碰/杠/过 buttons just under the enlarged
+// pending tile (front-center of the table) instead of the bottom bar.
+function positionClaimUI() {
+  const hud = $('action-hud');
+  if (isClaimPhase() && scene) {
+    const p = scene.worldToScreen(0, 0, 3.9);
+    hud.classList.add('claim');
+    hud.style.left = p.x + 'px';
+    hud.style.top = p.y + 'px';
+    hud.style.bottom = 'auto';
+    hud.style.transform = 'translate(-50%, 0)';
+  } else {
+    hud.classList.remove('claim');
+    hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
+  }
 }
 
 function renderPlate(p) {
@@ -335,12 +355,11 @@ function showResult() {
       fansEl.appendChild(c);
     }
     scoreEl.textContent = r.score + ' 分';
-    // winning hand
+    // winning hand (real SVG faces)
     const hand = game.hands[w].slice().sort((a, b) => a - b);
-    for (const id of hand) handEl.appendChild(tileEl(id, { size: 'lg', wild: game.isWild(id) }));
+    for (const id of hand) handEl.appendChild(faceTileEl(id, { lg: true, wild: game.isWild(id) }));
     for (const m of game.melds[w]) {
-      const n = m.type === 'kong' ? 4 : 3;
-      for (let i = 0; i < n; i++) handEl.appendChild(tileEl(m.kind, { size: 'lg' }));
+      for (const t of m.tiles) handEl.appendChild(faceTileEl(t, { lg: true }));
     }
     payEl.innerHTML = r.payments.map((amt, p) =>
       `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`
@@ -575,14 +594,18 @@ if (new URLSearchParams(location.search).get('fast')) {
     isWild: (id) => game.isWild(id),
     wildIndices: () => currentOrder().map((id, i) => (game.isWild(id) ? i : -1)).filter((i) => i >= 0),
     tileXY: (pick) => scene && scene.tileScreenXY(pick),
-    // visual check: give every seat melds + a full discard pool, then re-render
+    // visual check: melds for every seat + a full pool + a pending claim
     debugMelds: () => {
       for (let p = 0; p < 4; p++) game.melds[p] = [
         { type: 'pung', kind: p * 4, tiles: [p * 4, p * 4, p * 4] },
         { type: 'kong', kind: 9 + p * 3, tiles: [9 + p * 3, 9 + p * 3, 9 + p * 3, 9 + p * 3] },
       ];
       game.discardLog = [];
-      for (let i = 0; i < 34; i++) game.discardLog.push({ player: i % 4, kind: (i * 7) % 27 });
+      for (let i = 0; i < 33; i++) game.discardLog.push({ player: i % 4, kind: (i * 7) % 27 });
+      game.discardLog.push({ player: 1, kind: 4 });       // pending tile
+      game.phase = PHASE.AWAIT_CLAIM;
+      game.lastDiscard = { player: 1, kind: 4 };
+      game.claim = { player: HUMAN, kind: 4, options: ['pung'] };
       render();
     },
   };

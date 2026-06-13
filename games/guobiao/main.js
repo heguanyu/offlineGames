@@ -42,8 +42,8 @@ function tileEl(id, opts = {}) {
   else { el.classList.add('honor', DRAGON_CLASS[id - 31]); el.innerHTML = `<span class="rk">${['中', '發', '白'][id - 31]}</span>`; }
   return el;
 }
-function faceTileEl(kind) {
-  const el = document.createElement('div'); el.className = 'tile face-tile';
+function faceTileEl(kind, opts = {}) {
+  const el = document.createElement('div'); el.className = 'tile face-tile' + (opts.lg ? ' lg' : '');
   const img = document.createElement('img'); img.className = 'face'; img.src = tileFaceUrl(kind); el.appendChild(img);
   return el;
 }
@@ -76,9 +76,24 @@ function render() {
   const selectable = selectableHandIndices();
   if (selIndex >= selectable.length) selIndex = Math.max(0, selectable.length - 1);
   const myTurn = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
-  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn, selRendered: myTurn ? selectable[selIndex] : null, dragId: null });
+  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn, selRendered: myTurn ? selectable[selIndex] : null, dragId: null, claimable: isClaimPhase() });
   renderActions();
+  positionClaimUI();
   flushLog();
+}
+
+// Pin the big 胡/碰/杠/吃/过 buttons under the enlarged pending tile.
+function positionClaimUI() {
+  const hud = $('action-hud');
+  if (isClaimPhase() && scene) {
+    const p = scene.worldToScreen(0, 0, 3.9);
+    hud.classList.add('claim');
+    hud.style.left = p.x + 'px'; hud.style.top = p.y + 'px';
+    hud.style.bottom = 'auto'; hud.style.transform = 'translate(-50%, 0)';
+  } else {
+    hud.classList.remove('claim');
+    hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
+  }
 }
 
 function renderPlate(p) {
@@ -208,8 +223,8 @@ function showResult() {
     for (const f of r.fans) { const c = document.createElement('span'); c.className = 'fan-chip'; c.textContent = `${f.name} ${f.points}`; fansEl.appendChild(c); }
     scoreEl.textContent = r.fan + ' 番';
     const hand = game.hands[w].slice().sort((a, b) => a - b);
-    for (const id of hand) handEl.appendChild(tileEl(id, { size: 'lg' }));
-    for (const m of game.melds[w]) for (const t of m.tiles) handEl.appendChild(tileEl(t, { size: 'lg' }));
+    for (const id of hand) handEl.appendChild(faceTileEl(id, { lg: true }));
+    for (const m of game.melds[w]) for (const t of m.tiles) handEl.appendChild(faceTileEl(t, { lg: true }));
     payEl.innerHTML = r.payments.map((amt, p) => `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`).join('　');
   }
   saveSession(); ov.classList.remove('hidden');

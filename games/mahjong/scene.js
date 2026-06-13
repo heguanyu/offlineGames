@@ -240,6 +240,7 @@ export class MahjongScene {
   sync(game, ui) {
     this.pickables = [];
     this.glowTarget.on = false;
+    this.claimable = !!ui.claimable; // only enlarge the pending tile if YOU can claim
     const seen = new Set();
     const HUMAN = 0;
 
@@ -297,7 +298,7 @@ export class MahjongScene {
     // pushed right so they don't hide behind the bottom-center action bar.
     const E = 8.5;                       // radius onto the brown rim
     const cfg = {
-      0: { cx: 5.4, cz: E - 0.6, dx: 1, dz: 0, spin: 0 },       // you: front-right rim, clear of the action bar
+      0: { cx: 4.8, cz: E - 0.1, dx: 1, dz: 0, spin: 0 },       // you: front rim, just below the hand, right of the action bar
       1: { cx: E, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },     // 下家 right rim
       2: { cx: 0, cz: -E, dx: 1, dz: 0, spin: 0 },              // 对家 top rim
       3: { cx: -E, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },    // 上家 left rim
@@ -349,6 +350,14 @@ export class MahjongScene {
     return s;
   }
 
+  // Project a world point to CSS pixel coords (viewport-relative). The pending
+  // claim tile sits at PENDING_AT, so HUD can be pinned under it.
+  worldToScreen(x, y, z) {
+    const rect = this.canvas.getBoundingClientRect();
+    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    return { x: rect.left + (v.x * 0.5 + 0.5) * rect.width, y: rect.top + (-v.y * 0.5 + 0.5) * rect.height };
+  }
+
   // Screen-space center of a hand tile (by its rendered index) — used by the
   // drag test, and handy for any HUD that wants to point at a tile.
   tileScreenXY(pick) {
@@ -383,10 +392,19 @@ export class MahjongScene {
     log.forEach((d, i) => {
       const r = Math.floor(i / perRow), col = i % perRow;
       const inRow = Math.min(perRow, log.length - r * perRow);
-      const last = i === log.length - 1 && game.phase === 'await-claim';
+      // The just-discarded tile that YOU can claim (碰/杠/胡): show it big and
+      // upright (facing the camera), front-center, so the choice is obvious.
+      const pending = i === log.length - 1 && this.claimable;
+      if (pending) {
+        this._place('pool' + i, {
+          kind: d.kind, wild: game.isWild(d.kind), emissive: true, scale: 1.5, from: this._seatCenter(d.player),
+          x: 0, y: TH * 0.78, z: 2.6, rx: -0.18, ry: 0, rz: 0,
+        }, seen);
+        return;
+      }
       this._place('pool' + i, {
-        kind: d.kind, wild: game.isWild(d.kind), emissive: last, scale: POOL, from: this._seatCenter(d.player),
-        x: (col - (inRow - 1) / 2) * sx, y: (TD / 2) * POOL + (last ? 0.12 : 0), z: (r - (rows - 1) / 2) * sz - 0.2,
+        kind: d.kind, wild: game.isWild(d.kind), emissive: false, scale: POOL, from: this._seatCenter(d.player),
+        x: (col - (inRow - 1) / 2) * sx, y: (TD / 2) * POOL, z: (r - (rows - 1) / 2) * sz - 0.2,
         rx: -Math.PI / 2, ry: 0,
       }, seen);
     });
