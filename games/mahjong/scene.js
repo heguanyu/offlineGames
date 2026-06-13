@@ -245,14 +245,13 @@ export class MahjongScene {
     const HUMAN = 0;
 
     // Player hand (upright, pickable). The freshly-drawn tile sits apart from the
-    // sorted row and is rolled 90° (lying on its side) to mark it.
+    // sorted row (a gap) so it's easy to spot.
     const hand = ui.renderedHand;
     const drawnIdx = ui.drawnTile != null ? hand.lastIndexOf(ui.drawnTile) : -1;
     const handItems = hand.map((id, i) => ({
       key: 'h' + i, kind: id, wild: game.isWild(id), pick: i,
       selected: ui.myTurn && i === ui.selRendered,
       gapBefore: i === drawnIdx ? 0.8 : 0,
-      rz: i === drawnIdx ? Math.PI / 2 : 0,
     }));
     this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: -0.34, ry: 0, pull: -0.35 }, HAND_HALF, seen);
 
@@ -364,19 +363,25 @@ export class MahjongScene {
 
   _pool(game, seen) {
     const log = game.discardLog;
-    const POOL = 0.5;                       // discards are smaller than hands
-    const colGap = 1.18, rowGap = 0.64;     // 4 suit columns; rows grow toward the player
-    const zStart = -3.7;
-    // Discards are sorted into columns by suit (筒 条 万 字, left→right); within a
-    // column each row is a tile in the order it was played.
+    const POOL = 0.42;                      // discards are smaller than hands
+    const subGap = 0.46, typeGap = 0.8;     // within-type subcolumn / between-type spacing
+    const rowGap = 0.66;                    // rows pile from the player side toward the opposite
+    const zFront = 1.6;                     // first row sits near the player; rows grow toward -z
+    // Each suit is a type-column (筒 条 万 字, left→right). Within a type, every row
+    // holds 4 subcolumns; tiles fill left→right then front (player) → back (opposite).
+    const typeWidth = 4 * subGap;
+    const totalWidth = 4 * typeWidth + 3 * typeGap;
     const colOf = (kind) => {
       const s = suitOf(kind);
       return s === 'p' ? 0 : s === 's' ? 1 : s === 'm' ? 2 : 3;
     };
-    const rowCount = [0, 0, 0, 0];
+    const typeCount = [0, 0, 0, 0];
     log.forEach((d, i) => {
-      const col = colOf(d.kind);
-      const row = rowCount[col]++;           // this tile's row within its suit column
+      const tc = colOf(d.kind);
+      const n = typeCount[tc]++;             // n-th discard of this suit
+      const sub = n % 4, row = Math.floor(n / 4);
+      const x = -totalWidth / 2 + tc * (typeWidth + typeGap) + (sub + 0.5) * subGap;
+      const z = zFront - row * rowGap;
       // The just-discarded tile that YOU can claim (碰/杠/胡): show it big and
       // upright (facing the camera), front-center, so the choice is obvious.
       const pending = i === log.length - 1 && this.claimable;
@@ -390,12 +395,11 @@ export class MahjongScene {
       // Your own discards rise up into the pool from your side of the table
       // (in front of the hand), instead of sliding in from the row's middle.
       const from = d.player === 0
-        ? new THREE.Vector3((col - 1.5) * colGap, TH * 0.35, R_HAND + 0.4)
+        ? new THREE.Vector3(x, TH * 0.35, R_HAND + 0.4)
         : this._seatCenter(d.player);
       this._place('pool' + i, {
         kind: d.kind, wild: game.isWild(d.kind), emissive: false, scale: POOL, from,
-        x: (col - 1.5) * colGap, y: (TD / 2) * POOL, z: zStart + row * rowGap,
-        rx: -Math.PI / 2, ry: 0,
+        x, y: (TD / 2) * POOL, z, rx: -Math.PI / 2, ry: 0,
       }, seen);
     });
   }

@@ -581,7 +581,10 @@ if (new URLSearchParams(location.search).get('fast')) {
     // visual check: a full discard pool laid out in suit columns, no pending tile
     debugPool: () => {
       game.discardLog = [];
-      for (let i = 0; i < 44; i++) game.discardLog.push({ player: i % 4, kind: (i * 5 + (i % 3)) % 34 });
+      const base = [9, 18, 0, 27]; // 筒 条 万 字 starting ids
+      for (let s = 0; s < 4; s++) for (let k = 0; k < 10; k++) {
+        game.discardLog.push({ player: k % 4, kind: base[s] + (k % (s === 3 ? 7 : 9)) });
+      }
       game.phase = PHASE.AWAIT_DISCARD; game.claim = null; game.turn = HUMAN;
       render();
     },
