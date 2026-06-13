@@ -11,6 +11,7 @@ A set of offline-playable PWA games for iPad, with Xbox controller support.
 - `games/pad-test/` — gamepad diagnostic screen (button/stick/trigger visualizer)
 - `games/gba/` — GBA emulator (mGBA core)
 - `games/nds/` — Nintendo DS emulator (melonDS core) — gen 4/5 Pokémon etc.
+- `games/mahjong/` — 天津麻将 (Tianjin mahjong), a native game vs. 3 AI bots
 - `emulatorjs/data/` — shared [EmulatorJS](https://github.com/EmulatorJS/EmulatorJS)
   v4.2.3 frontend + wasm cores, used by all emulator pages
 
@@ -63,6 +64,74 @@ A set of offline-playable PWA games for iPad, with Xbox controller support.
   can't be achieved, EmulatorJS falls back to the single-threaded core
   automatically. All assets are same-origin, so COEP `require-corp` is
   satisfied. (This same mechanism would later enable the PSP/DOSBox cores.)
+
+## Mahjong (天津麻将)
+
+A self-contained native game (no emulator) under `games/mahjong/`, rendered as a
+real 3D table with three.js. Split so the rules are unit-testable in Node:
+
+- `engine.js` — pure rules engine: 34-kind tile model, 混儿 (wild) determination,
+  the joker-aware win solver, fan scoring, and the turn/claim state machine. No
+  DOM; imported by both the page and the tests.
+- `ai.js` — three bot strengths (新手 / 普通 / 高手) sharing one shanten-style hand
+  evaluator; they differ in claim aggression and whether they steer toward
+  high-fan shapes (本混龙 / 捉五).
+- `scene.js` — the three.js table: felt + wooden rim, tiles as chunky boxes,
+  lighting + shadows, a persistent keyed-mesh manager that eases each tile toward
+  its target (so selection lifts, hand reflow, and discards dropping into the
+  pool animate for free), and raycast picking. Each seat's row is scaled to fit
+  its edge so rows never collide at the corners; the player's row is pushed
+  toward the camera with its 碰/杠 melds laid flat beside it. The selected tile
+  gets an additive glow sprite. `_resize` dollies the camera back in portrait so
+  the table is never cropped on the sides.
+- `handorder.js` — pure helpers for the hand display order: 混儿 default to the
+  left, drag reorders, and a dragged 混儿 keeps its spot across draws/discards
+  (`reconcileHandOrder`). Unit-tested in Node.
+- `sound.js` — Web Audio sound effects (tile clack, 碰/杠 calls, win jingle),
+  synthesized at runtime so there are no audio files; mute toggle (🔊) in the
+  header, persisted to `localStorage`.
+- `main.js` — HTML HUD (scoreboard, nameplates, floating 混儿 panel, action
+  buttons), input (touch raycast + drag-to-reorder + keyboard + Xbox controller),
+  and the orchestration that paces AI turns. `?fast=1` shortens the AI delay for
+  tests and exposes a `window.__mj` hook for the drag test.
+
+Assets (all vendored for offline use):
+- `lib/three.module.min.js` — three.js r160 (MIT).
+- `tiles/*.svg` — tile faces from the [FluffyStuff riichi-mahjong-tiles](https://github.com/FluffyStuff/riichi-mahjong-tiles)
+  set (CC0 / public domain). Loaded as images and composited onto an ivory tile
+  face; a drawn number+suit is used as a fallback until they load. Tile backs and
+  the felt are generated procedurally (canvas), so there are no other binaries.
+
+Rules implemented (the in-game 规则 panel has the player-facing version): 136
+tiles, **no chow — only 碰/杠**, and **win by self-draw only** (自摸, including
+杠开 and 海底; no 点炮). After the deal an indicator is flipped and its kind plus
+the next kind in cycle both become 混儿 wilds, which substitute for any tile when
+winning but can't be used to 碰/杠 and can't be discarded. Fans: 提溜 (base) ·
+混吊/双混吊 · 素 · 捉五 · 龙 · 本混龙 · 杠开 · 海底 · 天和/地和; 捉五 and 龙 add to
+form the base term, other fans multiply, dealer pays/collects double. Tune the
+fan values in one place: the `FAN` table in `engine.js`.
+
+Controls (select, then confirm): tap a tile to lift + highlight it, then tap
+**打出** (or press **A**) to discard; ←/→ or the stick move the cursor. Drag a
+tile sideways to reorder the hand (handy for arranging 混儿, which default to the
+left and keep their dragged spot). When a 碰/杠 is offered: **X** = 碰, **Y** = 杠,
+**B** = 过. **Menu** opens the menu. Difficulty + running score persist in
+`localStorage`.
+
+Tests:
+- `node test/mahjong-engine-test.mjs` — wild wrap-around, win detection,
+  scoring of each fan, and 200 random self-play games (terminate + zero-sum).
+- `node test/mahjong-handorder-test.mjs` — 混儿-left default + a dragged 混儿
+  surviving draws/discards.
+- `node test/mahjong-ai-check.mjs` — bots reach a self-draw win far more often
+  than random play; reports per-level win rate and timing.
+- `node test/mahjong-e2e.mjs` — headless Edge (WebGL via SwiftShader) loads the
+  page, auto-plays the human seat through full hands, checks the menu's 重开
+  resets scores, and fails on any console error.
+- `node test/mahjong-drag-test.mjs` — drives a real pointer drag and confirms a
+  hand tile is repositioned.
+- `node test/mahjong-screenshot.mjs` — writes mid-game 3D screenshots
+  (`test/mahjong-3d.png`, `-portrait.png`) for visual checks.
 
 ## Test locally (desktop)
 
