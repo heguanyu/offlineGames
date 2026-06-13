@@ -292,15 +292,18 @@ export class MahjongScene {
     // camera reads the faces). `spin` rotates the tile in the table plane (the
     // 3rd Euler angle, applied after rx=-90° — it keeps the face pointing up,
     // which a y-rotation would not).
-    // Out near the table's edge (just outside each seat's wall, toward the wooden
-    // rim) so melds never collide with the discard pool in the middle.
+    // On the brown wooden rim (the felt ends at ±8, the rim runs 8→9.2) so melds
+    // sit off the play area, clear of the central discard pool. The player's are
+    // pushed right so they don't hide behind the bottom-center action bar.
+    const E = 8.5;                       // radius onto the brown rim
     const cfg = {
-      0: { cx: 3.4, cz: 6.4, dx: 1, dz: 0, spin: 0 },           // you: front-right edge
-      1: { cx: 7.4, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },   // 下家 right edge
-      2: { cx: 0, cz: -7.4, dx: 1, dz: 0, spin: 0 },            // 对家 top edge
-      3: { cx: -7.4, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },  // 上家 left edge
+      0: { cx: 5.4, cz: E - 0.6, dx: 1, dz: 0, spin: 0 },       // you: front-right rim, clear of the action bar
+      1: { cx: E, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },     // 下家 right rim
+      2: { cx: 0, cz: -E, dx: 1, dz: 0, spin: 0 },              // 对家 top rim
+      3: { cx: -E, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },    // 上家 left rim
     };
     const MS = 0.72, step = 0.95 * MS, meldGap = 0.5 * MS;
+    const RIM_Y = (TD / 2) * MS - 0.1;   // rest on the rim (slightly below the felt)
     for (let p = 0; p < 4; p++) {
       const melds = game.melds[p];
       if (!melds.length) continue;
@@ -314,7 +317,7 @@ export class MahjongScene {
         const off = pos[i] - span / 2;
         this._place(`m${p}_${i}`, {
           kind: t.kind, scale: MS, from: this._seatCenter(p),
-          x: c.cx + c.dx * off, y: (TD / 2) * MS, z: c.cz + c.dz * off, rx: -Math.PI / 2, ry: 0, rz: c.spin,
+          x: c.cx + c.dx * off, y: RIM_Y, z: c.cz + c.dz * off, rx: -Math.PI / 2, ry: 0, rz: c.spin,
         }, seen);
       });
     }
