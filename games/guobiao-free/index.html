@@ -72,7 +72,7 @@
   #ting-center:empty { display: none; }
   /* both 打出并听牌 (red) and the plain 打出 to its right are presented big here */
   #ting-center .act-btn { pointer-events: auto; cursor: pointer; font-size: 1.9rem; font-weight: 800; padding: 20px 44px; border-radius: 18px; }
-  #ting-center .act-btn.riichi {
+  #ting-center .act-btn.riichi, #ting-center .act-btn.hu {
     background: linear-gradient(180deg, #ff5c5c, #d31f1f); color: #fff; border: 2px solid #ffdada;
     animation: riichi-glow 1.15s ease-in-out infinite;
   }
@@ -80,6 +80,11 @@
     0%, 100% { box-shadow: 0 0 0 2px rgba(255,90,90,0.55), 0 0 16px 4px rgba(255,60,60,0.6); }
     50% { box-shadow: 0 0 0 4px rgba(255,130,130,0.95), 0 0 34px 12px rgba(255,70,70,0.95); }
   }
+  /* 听 waits disclaimer — twice the bottom hint's size, floated just above the hand */
+  #ting-banner { position: absolute; z-index: 6; display: none; transform: translate(-50%, -100%);
+    font-size: 1.56rem; font-weight: 700; color: #ffe6a0; text-align: center; white-space: nowrap;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.85); pointer-events: none; }
+  #ting-banner.show { display: block; }
 
   .overlay { position: fixed; inset: 0; z-index: 20; background: rgba(3,16,11,0.84); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
   .overlay.hidden { display: none; }
@@ -130,6 +135,7 @@
     </div>
   </main>
   <div id="ting-center"></div>
+  <div id="ting-banner"></div>
 
   <div class="overlay" id="start-overlay">
     <div class="panel">

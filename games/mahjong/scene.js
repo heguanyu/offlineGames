@@ -313,7 +313,9 @@ export class MahjongScene {
     });
     // refSpan = a full 14-tile hand (13 gaps + the drawn tile's two half-gaps) so
     // the tile size is fixed regardless of how many tiles are currently held.
-    this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: -0.34, ry: 0, pull: -0.35, refSpan: 13 * GAP + 2 * DRAW_MARGIN }, HAND_HALF, seen);
+    // 听牌 (lockedTing): lay the hand flat on the table, the same rotation as 碰/杠 melds.
+    const flat = !!ui.tingFlat;
+    this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: flat ? -Math.PI / 2 : -0.34, ry: 0, pull: -0.35, flat, refSpan: 13 * GAP + 2 * DRAW_MARGIN }, HAND_HALF, seen);
 
     // Opponents: walls of backs. refSpan = a full 14-tile hand so the back row is
     // a fixed size, not rescaling each time a bot draws/discards (13 ↔ 14 tiles).
@@ -335,8 +337,9 @@ export class MahjongScene {
     // too grazing). Each seat's group sits to that player's side.
     this._meldsFlat(game, seen);
 
-    // central discard pool (faces, lying flat)
-    this._pool(game, seen);
+    // central discard pool (faces, lying flat). In 听牌, the human's tsumogiri tile
+    // reveals deck→center→pool (so it's seen) — _pool gives that one the reveal.
+    this._pool(game, seen, ui.tingRevealDiscardIdx ?? -1);
 
     // remove anything no longer present
     for (const [k, rec] of this.tiles) {
@@ -404,7 +407,8 @@ export class MahjongScene {
     const s = Math.min(1, (2 * maxHalf) / Math.max(ref, 0.001));
     items.forEach((it, i) => {
       const off = (pos[i] - span / 2) * s;
-      const x = cfg.cx + cfg.dx * off, baseY = (TH / 2) * s;
+      // flat rows (听牌 hand, laid like melds) rest on their thickness, not their height
+      const x = cfg.cx + cfg.dx * off, baseY = (cfg.flat ? TD / 2 : TH / 2) * s;
       const lift = it.selected ? 0.55 * s : 0;
       const z = cfg.cz + cfg.dz * off + (it.selected ? cfg.pull : 0);
       this._place(it.key, {
@@ -459,7 +463,7 @@ export class MahjongScene {
     this.deckPos = new THREE.Vector3(live.x, yTop + 0.25, live.z);
   }
 
-  _pool(game, seen) {
+  _pool(game, seen, revealIdx = -1) {
     const log = game.discardLog;
     const POOL = 0.55;                      // discards are smaller than hands (30% bigger than before)
     const subGap = 0.58, typeGap = 0.2;     // within-type subcolumn / between-type spacing
@@ -494,13 +498,15 @@ export class MahjongScene {
         const sub = k % 4, row = Math.floor(k / 4);
         const x = -totalWidth / 2 + tc * (typeWidth + typeGap) + (sub + 0.5) * subGap;
         const z = zFront - row * rowGap;
-        // Your own discards rise up into the pool from your side of the table
-        // (in front of the hand), instead of sliding in from the row's middle.
-        const from = t.player === 0
-          ? new THREE.Vector3(x, TH * 0.35, R_HAND + 0.4)
+        // The 听牌 tsumogiri tile gets the full draw reveal: deck → big in the centre
+        // (facing camera) → its pool slot, so you see what was drawn before it lands.
+        // Other discards rise up into the pool from their player's side of the table.
+        const reveal = t.i === revealIdx;
+        const from = reveal ? this.deckPos
+          : t.player === 0 ? new THREE.Vector3(x, TH * 0.35, R_HAND + 0.4)
           : this._seatCenter(t.player);
         this._place('pool' + t.i, {
-          kind: t.kind, wild: game.isWild(t.kind), emissive: false, scale: POOL, from,
+          kind: t.kind, wild: game.isWild(t.kind), emissive: false, scale: POOL, from, draw: reveal,
           x, y: (TD / 2) * POOL, z, rx: -Math.PI / 2, ry: 0,
         }, seen);
       });

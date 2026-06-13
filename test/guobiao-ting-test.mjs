@@ -49,14 +49,15 @@ try {
   console.log('OK declared: locked =', locked, ', music =', music);
 
   // (3) while 听 the human is offered nothing (autopilot). Force the human's
-  // discard turn again, set 听, and confirm no buttons + 已听 hint.
+  // discard turn again, set 听, and confirm no buttons + the 已听 banner (which
+  // now floats big above the hand, not as the bottom hint).
   await page.evaluate((h) => window.__gb.forceTing(h, 33), TENPAI13);
   await page.evaluate(() => window.__gb.setLocked([27]));
   const lockedActs = await page.evaluate(() => window.__gb.actions());
-  const lockedHint = await page.evaluate(() => window.__gb.hint());
+  const lockedBanner = await page.evaluate(() => document.getElementById('ting-banner').textContent);
   assert(lockedActs.length === 0, 'expected NO action buttons while 听, got: ' + JSON.stringify(lockedActs));
-  assert(/已听/.test(lockedHint), 'expected 已听 hint while 听, got: ' + lockedHint);
-  console.log('OK locked render: no buttons, hint =', JSON.stringify(lockedHint));
+  assert(/已听/.test(lockedBanner), 'expected 已听 banner while 听, got: ' + lockedBanner);
+  console.log('OK locked render: no buttons, banner =', JSON.stringify(lockedBanner));
 
   // Let the tension loop run a few bars so its Web Audio scheduling (heartbeat,
   // drone, tritone swell, 4-bar riser reset) is exercised for runtime errors.

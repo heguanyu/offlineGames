@@ -24,6 +24,7 @@ let game = null, scene = null, level = LEVELS.NORMAL;
 let session = loadSession();
 let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
 let lockedTing = false, tingWaits = []; // once 听, the seat auto-plays (tsumogiri)
+let tingRevealIdx = -1;        // discardLog index of a 听 tsumogiri to reveal deck→center→pool
 let isPortrait = false;        // device held portrait → page force-rotated to landscape
 
 forceLandscape((p) => { isPortrait = p; if (scene) { scene.setRotated(p); scene.resize(); } });
@@ -63,10 +64,16 @@ function render() {
   if (selIndex >= selectable.length) selIndex = Math.max(0, selectable.length - 1);
   const myTurn = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
   const showSel = myTurn && !lockedTing; // no manual selection once 听
+  // Reveal the drawn tile into the hand when it's a live turn, or — in 听 — only
+  // when it WINS (it then stays for the 胡 confirmation). A non-winning 听 draw is
+  // never shown in the hand; it reveals straight into the pool (see tick()).
+  const tingWin = lockedTing && myTurn && game.selfDrawWin;
   if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn: showSel, selRendered: showSel ? selectable[selIndex] : null, claimable: isClaimPhase() && !lockedTing,
-    drawnTile: (showSel && game.drawnTile != null) ? game.drawnTile : null });
+    drawnTile: ((showSel || tingWin) && game.drawnTile != null) ? game.drawnTile : null,
+    tingFlat: lockedTing, tingRevealDiscardIdx: tingRevealIdx });
   renderActions();
   positionClaimUI();
+  positionTingBanner();
   flushLog();
 }
 
@@ -84,6 +91,19 @@ function positionClaimUI() {
   } else {
     hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
+  }
+}
+
+// The 听 waits disclaimer floats big, just above the (flat) hand row — anchored to
+// a world point in front of the player's tiles so it tracks the table in any aspect.
+function positionTingBanner() {
+  const b = $('ting-banner');
+  if (scene && lockedTing && b.textContent) {
+    const a = scene.worldToScreen(0, 0, 6.0); // a touch toward centre from the hand row
+    b.classList.add('show');
+    b.style.left = a.x + 'px'; b.style.top = a.y + 'px';
+  } else {
+    b.classList.remove('show');
   }
 }
 
@@ -117,13 +137,20 @@ function tingDiscards() {
 
 function renderActions() {
   const bar = $('action-bar'); bar.innerHTML = '';
-  const center = $('ting-center'); center.innerHTML = ''; // 打出并听牌 floats here
+  const center = $('ting-center'); center.innerHTML = ''; // 打出并听牌 / 胡 float here
   const hint = $('hand-hint'); hint.textContent = '';
+  const banner = $('ting-banner'); banner.textContent = ''; // 听 waits, floats above the hand
   const buttons = [];
 
   if (lockedTing) {
-    // already 听 — the seat is on autopilot; never offer 吃/碰/杠/打出.
-    hint.textContent = `已听 · 自动出牌（等 ${tingWaits.map(tileName).join(' ')}）`;
+    // already 听 — autopilot. A winning self-draw pauses it for the pending 胡
+    // (shown alone); otherwise the waits disclaimer floats big just above the hand.
+    if (game.selfDrawWin) {
+      const w = game.selfDrawWin;
+      center.appendChild(mkBtn(`胡 · ${w.fans[0].name} · ${w.fan}番`, () => doDeclareWin(), false, 'hu'));
+    } else {
+      banner.textContent = `已听 · 自动出牌（等 ${tingWaits.map(tileName).join(' ')}）`;
+    }
   } else if (game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN) {
     const c = game.currentClaim();
     // 点炮 win — a confirm: take it (胡, showing pattern + score) or 过 to play on.
@@ -188,6 +215,18 @@ function flushLog() {
 
 // ---- orchestration ----
 function tick() {
+  // 听 (locked): a non-winning self-draw is tsumogiri'd BEFORE we render, so it flies
+  // deck→center→pool (the reveal) and is never shown in the hand. A winning draw falls
+  // through to the 胡 confirmation below (no auto-declare).
+  if (lockedTing && game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN
+      && game.drawnTile != null && !game.selfDrawWin) {
+    game.discard(HUMAN, game.drawnTile); sound.discard();
+    tingRevealIdx = game.discardLog.length - 1;
+    render();
+    tingRevealIdx = -1;
+    schedule(() => tick(), AI_DELAY);
+    return;
+  }
   render();
   if (game.phase === PHASE.OVER) { showResult(); return; }
   if (game.phase === PHASE.AWAIT_CLAIM) {
@@ -206,16 +245,10 @@ function tick() {
   }
   if (game.phase === PHASE.AWAIT_DISCARD) {
     if (game.turn === HUMAN) {
-      // Locked 听: auto-claim a self-draw win if it appears, else tsumogiri the
-      // drawn tile so the ready hand is preserved until it wins or the wall runs out.
-      if (lockedTing) {
-        schedule(() => {
-          if (game.selfDrawWin) game.declareWin(); else { game.discard(HUMAN, game.drawnTile); sound.discard(); }
-          tick();
-        }, AI_DELAY);
-        return;
-      }
-      render(); return; // wait for human (胡 button or discard)
+      // 听 + winning draw: pause autopilot and show the pending 胡 confirmation
+      // (render reveals the drawn tile into the hand). A non-winning 听 draw was
+      // already auto-discarded at the top of tick. Otherwise: wait for the human.
+      return; // top render() drew the state; await the human's action / 胡 confirm
     }
     schedule(() => {
       const p = game.turn;
@@ -340,6 +373,12 @@ function onAction(name) {
     else if (name === 'menu') openMenu();
     return;
   }
+  if (lockedTing && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD && game.selfDrawWin) {
+    // 听 paused for a winning self-draw: confirm/win takes the centered 胡.
+    if (name === 'win' || name === 'confirm') doDeclareWin();
+    else if (name === 'menu') openMenu();
+    return;
+  }
   if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD && !lockedTing) {
     const n = selectableHandIndices().length;
     if (name === 'win') doDeclareWin();
@@ -397,6 +436,8 @@ bindUI();
 if (new URLSearchParams(location.search).get('fast')) {
   window.__gb = {
     phase: () => game && game.phase,
+    scene: () => scene,
+    tick: () => tick(),
     claim: () => game && game.currentClaim(),
     humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,
     locked: () => lockedTing,
