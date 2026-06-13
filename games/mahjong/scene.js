@@ -379,12 +379,14 @@ export class MahjongScene {
     // which a y-rotation would not).
     // On the brown wooden rim (the felt ends at ±8, the rim runs 8→9.2) so melds
     // sit off the play area, clear of the central discard pool. The player's are
-    // pushed right so they don't hide behind the bottom-center action bar.
+    // pushed right so they don't hide behind the bottom-center action bar. 对家's
+    // sit further in, where the (now-removed) top wall stood, so the camera reads
+    // their faces clearly instead of at the grazing far rim.
     const E = 8.5;                       // radius onto the brown rim
     const cfg = {
-      0: { cx: 4.8, cz: E - 0.1, dx: 1, dz: 0, spin: 0 },       // you: front rim, just below the hand, right of the action bar
+      0: { cx: 0, cz: E - 0.1, dx: 1, dz: 0, spin: 0 },         // you: front rim, centered just below the hand
       1: { cx: E, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },     // 下家 right rim
-      2: { cx: 0, cz: -E, dx: 1, dz: 0, spin: 0 },              // 对家 top rim
+      2: { cx: 0, cz: -R_WALL, dx: 1, dz: 0, spin: 0 },         // 对家: where the top wall was (on the felt), facing the camera
       3: { cx: -E, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },    // 上家 left rim
     };
     const MS = 0.72, step = 0.95 * MS, meldGap = 0.5 * MS;
@@ -457,15 +459,13 @@ export class MahjongScene {
     const perSide = Math.max(2, Math.floor((2 * h) / WW));
     const cell = (2 * h) / perSide;
     const at = (i) => -h + (i + 0.5) * cell;          // centre of slot i along a side
-    // The deck wraps left → top → part of the right; the player's (front) side is
-    // kept clear. The side walls own the back corners; the top is 2 cards shorter
-    // so it doesn't collide with them. Slot 0 is front-left; the live draw end is
-    // the last slot (right).
+    // The deck is just two side walls (left + right). The front (player) side AND the
+    // top (对家) side are kept clear — the top so 对家's called melds show there in the
+    // camera's view (see _meldsFlat). Slot 0 is front-left; the live draw end is the
+    // last slot (front-right).
     const slots = [];
     for (let i = 0; i < perSide; i++) slots.push({ x: -h, z: -at(i), spin: Math.PI / 2 });  // left: front → back
-    for (let i = 1; i < perSide - 1; i++) slots.push({ x: at(i), z: -h, spin: 0 });         // top: left → right (−2)
-    const rightN = Math.round(perSide * 0.5);
-    for (let i = 0; i < rightN; i++) slots.push({ x: h, z: at(i), spin: Math.PI / 2 });      // right: back → mid
+    for (let i = 0; i < perSide; i++) slots.push({ x: h, z: at(i), spin: Math.PI / 2 });     // right: back → front
     const nStacks = Math.min(slots.length, Math.ceil(game.wall.length / 2));
     const yBot = (TD / 2) * WW - 0.05, yTop = yBot + TD * WW;
     for (let s = 0; s < nStacks; s++) {
