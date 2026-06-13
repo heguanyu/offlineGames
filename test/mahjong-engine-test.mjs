@@ -95,6 +95,19 @@ const xiaohe = [27, S(9), S(9), M(1), M(2), M(3), P(4), P(5), P(6), P(7), P(8), 
 r = analyzeWin(xiaohe, [], { wilds: [27, 28], winningKind: 31 });
 ok(r === null, '小和 (score 1) is rejected by 起和 2番');
 
+// 天和 — dealer's立手 (first-draw) win → flat maximum (28), not the pattern score.
+r = analyzeWin(plain, [], { wilds: [27, 28], winningKind: S(5), tianOrDi: true, dealerWin: true });
+eq(r.score, 28, '天和 = 28 (flat max)');
+ok(r.fans.includes('天和'), '天和 labelled');
+
+// 双混儿捉伍 — single-wait capturing the 5万 of a 4-5-6万 run where the win is a 混儿
+// (the 5万) and the 4万 is also a 混儿 (two wilds in the run) → 捉五(3) × 双混(2) = 6.
+const sszw = [M(6), 27, 28, P(1), P(2), P(3), 31, 31, 31, 32, 32, 32, S(9), S(9)];
+r = analyzeWin(sszw, [], { wilds: [27, 28], winningKind: 28 });
+ok(r && r.meta.zhuoWu, '双混儿捉伍: 捉五 detected when won on a 混儿 for the 5万');
+ok(r && r.meta.shuangHun, '双混儿捉伍: 双混 (wild-completed run) detected');
+eq(r.score, 6, '双混儿捉伍 = 捉五(3) × 双混(2) = 6');
+
 // --- full game state machine: random self-play terminates, scores zero-sum ----
 console.log('state machine:');
 function autoplay(seed) {

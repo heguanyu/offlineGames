@@ -226,7 +226,7 @@ export const FAN = {
   LONG: 4,       // 龙 — full 1-9 run in one suit, as three chows (+)
   BENHUN: 2,     // 本混 — 龙's suit equals the wild's suit; doubles 龙 → 本混龙 = 8 (×2)
   GANGKAI: 2,    // 杠开 — win on a kong-replacement draw (×2)
-  TIANDI: 4,     // 天和 / 地和 — win off the very first draw (+)
+  TIANDI: 28,    // 天和 / 地和 — win off the very first draw → flat max (算龙 + 随意摆, capped)
 };
 export const WIN_MIN = 2; // 起和番: a win must reach 2番 (小和 is disallowed)
 
@@ -240,25 +240,37 @@ function suitHasDragon(seqStartsBySuit, suit) {
 
 // Evaluate one decomposition under the win context and return { score, fans }.
 function scoreFromDecomp(decomp, ctx) {
-  const { winningKind, wildCount, wildSuit, afterKong, lastTile, tianOrDi } = ctx;
-  const fans = [];
+  const { winningKind, wildCount, wildSuit, afterKong, tianOrDi } = ctx;
+  const winIsWild = ctx.wilds.includes(winningKind);
 
+  // 天胡 / 地胡 — a first-draw win. 算龙 + 随意摆, capped at a flat max (no search).
+  if (tianOrDi) {
+    return { score: FAN.TIANDI, fans: [ctx.dealerWin ? '天和' : '地和'],
+      meta: { tian: true, su: wildCount === 0, hunDiao: false, shuangHun: false, zhuoWu: false, long: false, benHunLong: false } };
+  }
+
+  const fans = [];
   // 素 — no wild present in the hand at all (decomposition-independent).
   const su = wildCount === 0;
 
-  // Pair-related fans: the winning tile sits in the pair and the pair used a
-  // wild → 混吊 (单吊 on the pair, completed by a wild). Two wilds → 双混吊.
-  // When the winning tile is itself a wild it belongs to an all-joker pair,
-  // whose `kinds` list is empty — so detect that case explicitly.
-  const winIsWild = ctx.wilds.includes(winningKind);
-  const pair = decomp.find((g) => g.type === 'pair');
-  const winInPair = !!pair && (pair.kinds.includes(winningKind) || (winIsWild && pair.jokers >= 1));
-  const hunDiao = !!(winInPair && pair.jokers >= 1);
-  const shuangHun = !!(winInPair && pair.jokers >= 2);
+  // Wild status of the win: it is "wild-completed" (混吊 / 双混吊 / 双混儿, all ×2)
+  // when the winning tile finishes a group that is all-wild except one tile (a
+  // 单/双吊 on the wilds). A wild merely PARKED in an otherwise-natural meld does
+  // not count — that is "提溜" (the ×1 base). Prefer such a group so the best
+  // reading is credited.
+  const groupSize = (g) => (g.type === 'pair' ? 2 : 3);
+  const winByKind = decomp.filter((g) => g.kinds.includes(winningKind));
+  let winGroup = winByKind.find((g) => g.jokers >= groupSize(g) - 1) || winByKind[0] || null;
+  if (!winGroup && winIsWild) winGroup = decomp.find((g) => g.jokers >= groupSize(g) - 1);
+  const wildCompleted = !su && !!winGroup && winGroup.jokers >= groupSize(winGroup) - 1;
+  const shuangHun = wildCompleted && winGroup.jokers >= 2;
+  const hunDiao = wildCompleted && !shuangHun;
+  const winPair = !!(winGroup && winGroup.type === 'pair');
 
-  // 捉五 — winning tile is 5万 (id 4) sitting as a natural in a 4-5-6万 run.
-  const zhuoWu = winningKind === 4 && decomp.some(
-    (g) => g.type === 'chow' && g.kinds[0] === 3 && g.natural.has(4));
+  // 捉五 — the win captures the 5万 in a 4-5-6万 run: won by a natural 5万 (id 4),
+  // or by a 混儿 filling the 5万 slot. 4/6万 may themselves be 混儿.
+  const zhuoWu = decomp.some((g) => g.type === 'chow' && g.kinds[0] === 3 &&
+    ((winningKind === 4 && g.natural.has(4)) || (winIsWild && !g.natural.has(4))));
 
   // 龙 / 本混龙 — three runs covering 1-9 in a single number suit.
   const seqStartsBySuit = {};
@@ -272,18 +284,19 @@ function scoreFromDecomp(decomp, ctx) {
     if (suitHasDragon(seqStartsBySuit, s)) { long = true; longSuit = s; if (s === wildSuit) benHunLong = true; }
   }
 
-  // --- combine: additive base term (捉五 / 龙 / 天地和), then ×2 fans ---
+  // --- combine: additive base term (捉五 / 龙), then ×2 fans ---
   let add = 0;
   if (zhuoWu) { add += FAN.ZHUOWU; fans.push('捉五'); }
   if (long) { add += FAN.LONG; fans.push(benHunLong ? '本混龙' : '龙'); }
-  if (tianOrDi) { add += FAN.TIANDI; fans.push(ctx.dealerWin ? '天和' : '地和'); }
   const base = add > 0 ? add : 1;
 
   let mult = 1;
   if (benHunLong) mult *= FAN.BENHUN;            // 本混 doubles 龙 → 本混龙 = 8
-  if (shuangHun) { mult *= FAN.SHUANGHUN; fans.push('双混吊'); }
-  else if (hunDiao) { mult *= FAN.HUNDIAO; fans.push('混吊'); }
   if (su) { mult *= FAN.SU; fans.push('素'); }
+  else if (wildCompleted) {                       // 混吊 / 双混吊 / 双混儿 — all ×2
+    mult *= FAN.HUNDIAO;
+    fans.push(shuangHun ? (winPair ? '双混吊' : '双混儿') : '混吊');
+  }
   if (afterKong) { mult *= FAN.GANGKAI; fans.push('杠开'); }
 
   return { score: base * mult, fans, meta: { su, hunDiao, shuangHun, zhuoWu, long, benHunLong, longSuit } };
