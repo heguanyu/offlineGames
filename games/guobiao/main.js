@@ -18,7 +18,6 @@ const $ = (id) => document.getElementById(id);
 let game = null, scene = null, level = LEVELS.NORMAL;
 let session = loadSession();
 let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
-let handOrder = null, handSig = '';
 
 function loadSession() {
   try { const s = JSON.parse(localStorage.getItem('guobiao-session')); if (s && Array.isArray(s.scores)) return s; } catch {}
@@ -50,13 +49,7 @@ function faceTileEl(kind, opts = {}) {
 
 // ---- hand order (no wilds → just sorted, drawn on the right) ----
 const noWild = () => false;
-function currentOrder() {
-  const sig = game.hands[HUMAN].slice().sort((a, b) => a - b).join(',');
-  if (!handOrder || sig !== handSig) handOrder = buildOrder(handOrder, game.hands[HUMAN], noWild, game.turn === HUMAN ? game.drawnTile : null);
-  handSig = sig;
-  return handOrder;
-}
-function renderedHand() { return currentOrder().slice(); }
+function renderedHand() { return buildOrder(game.hands[HUMAN], noWild, game.turn === HUMAN ? game.drawnTile : null); }
 function selectableHandIndices() { return renderedHand().map((_, i) => i); }
 
 // ---- rendering ----
@@ -241,7 +234,7 @@ function startHand() {
   clearTimeout(pendingTimer);
   if (!scene) scene = new MahjongScene($('scene'));
   game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores });
-  lastLogLen = 0; selIndex = 0; focusIndex = 0; handOrder = null; handSig = '';
+  lastLogLen = 0; selIndex = 0; focusIndex = 0;
   saveSession(); tick();
 }
 function newGame() { game = null; session = { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 }; startHand(); }

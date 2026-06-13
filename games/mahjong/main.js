@@ -5,7 +5,7 @@ import { Game, PHASE, tileName } from './engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
 import { MahjongScene, tileFaceUrl } from './scene.js';
 import { Sound } from './sound.js';
-import { buildOrder, moveWild } from './handorder.js';
+import { buildOrder } from './handorder.js';
 
 const sound = new Sound();
 
@@ -28,7 +28,6 @@ let selIndex = 0;              // cursor into the human's selectable (non-wild) 
 let focusIndex = 0;           // cursor into action-bar buttons (claims)
 let pendingTimer = null;
 let lastLogLen = 0;
-let dragId = null;            // id of the hand tile being dragged (for reordering)
 
 // ---------------------------------------------------------------------------
 // Persistence (lightweight prefs + running score; localStorage is fine here)
@@ -71,22 +70,10 @@ function selectableHandIndices() {
   return renderedHand().map((id, i) => (game.isWild(id) ? -1 : i)).filter((i) => i >= 0);
 }
 
-// The human's display order. 混儿 default to the LEFT; the rest sort normally
-// with the freshly drawn tile on the right. The player can drag tiles to reorder
-// (handOrder); the arrangement resets to default whenever the hand set changes.
-let handOrder = null;
-let handSig = '';
+// The human's display order: 混儿 on the left, the rest sorted with the freshly
+// drawn tile on the right.
 const isWildFn = (id) => game.isWild(id);
-function currentOrder() {
-  const sig = game.hands[HUMAN].slice().sort((a, b) => a - b).join(',');
-  if (!handOrder || sig !== handSig) {
-    handOrder = buildOrder(handOrder, game.hands[HUMAN], isWildFn, game.turn === HUMAN ? game.drawnTile : null);
-  }
-  handSig = sig;
-  return handOrder;
-}
-function renderedHand() { return currentOrder().slice(); }
-function reorderHand(id, target) { handOrder = moveWild(currentOrder(), id, target, isWildFn); }
+function renderedHand() { return buildOrder(game.hands[HUMAN], isWildFn, game.turn === HUMAN ? game.drawnTile : null); }
 
 function render() {
   // ---- header ----
@@ -121,7 +108,6 @@ function render() {
     renderedHand: renderedHand(),
     myTurn,
     selRendered: myTurn ? selectable[selIndex] : null,
-    dragId,
     claimable: isClaimPhase(),
   });
 
@@ -392,43 +378,18 @@ function startHand() {
   });
   lastLogLen = 0;
   selIndex = 0; focusIndex = 0;
-  handOrder = null; handSig = ''; // fresh default order (混儿 left) for the new deal
   saveSession();
   tick();
 }
 
-// Touch / mouse on the 3D table. A tap selects the picked tile; a horizontal
-// drag reorders the hand (so 混儿 can be moved freely from their default left).
-let pdown = null; // { idx, id, x, moved }
-const sceneEl = $('scene');
-sceneEl.addEventListener('pointerdown', (e) => {
+// Touch / mouse on the 3D table → raycast → select the picked hand tile.
+$('scene').addEventListener('pointerdown', (e) => {
   if (!scene || !gameStarted) return;
   sound.resume(); // touch is a user gesture — unlock audio
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   const idx = scene.pick(e.clientX, e.clientY);
-  if (idx == null) return;
-  pdown = { idx, id: renderedHand()[idx], x: e.clientX, moved: false };
-  try { sceneEl.setPointerCapture(e.pointerId); } catch {}
+  if (idx != null) onPickTile(idx);
 });
-sceneEl.addEventListener('pointermove', (e) => {
-  if (!pdown) return;
-  if (!game.isWild(pdown.id)) return; // only 混儿 can be dragged; others stay sorted
-  if (!pdown.moved && Math.abs(e.clientX - pdown.x) < 8) return;
-  pdown.moved = true;
-  dragId = pdown.id;
-  const target = scene.nearestHandIndex(e.clientX);
-  if (target != null) reorderHand(pdown.id, target);
-  render();
-});
-function endPointer(cancel) {
-  if (!pdown) return;
-  const { idx, moved } = pdown;
-  pdown = null; dragId = null;
-  if (!cancel && !moved) onPickTile(idx); // a tap → select / confirm
-  else render();
-}
-sceneEl.addEventListener('pointerup', () => endPointer(false));
-sceneEl.addEventListener('pointercancel', () => endPointer(true));
 
 function newGame() {
   // Drop the finished game first: saveSession() derives session.scores from the
@@ -587,14 +548,10 @@ function bindUI() {
 
 bindUI();
 
-// Test hook (only under ?fast=1) so the drag test can read order + tile coords.
+// Debug hook (only under ?fast=1) for visual checks.
 if (new URLSearchParams(location.search).get('fast')) {
   window.__mj = {
     humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,
-    order: () => currentOrder().slice(),
-    isWild: (id) => game.isWild(id),
-    wildIndices: () => currentOrder().map((id, i) => (game.isWild(id) ? i : -1)).filter((i) => i >= 0),
-    tileXY: (pick) => scene && scene.tileScreenXY(pick),
     // visual check: melds for every seat + a full pool + a pending claim
     debugMelds: () => {
       for (let p = 0; p < 4; p++) game.melds[p] = [

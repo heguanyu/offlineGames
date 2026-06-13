@@ -248,7 +248,7 @@ export class MahjongScene {
     const hand = ui.renderedHand;
     const handItems = hand.map((id, i) => ({
       key: 'h' + i, kind: id, wild: game.isWild(id), pick: i,
-      selected: (ui.myTurn && i === ui.selRendered) || (ui.dragId != null && id === ui.dragId),
+      selected: ui.myTurn && i === ui.selRendered,
     }));
     this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: -0.34, ry: 0, pull: -0.35 }, HAND_HALF, seen);
 
@@ -356,32 +356,6 @@ export class MahjongScene {
     const rect = this.canvas.getBoundingClientRect();
     const v = new THREE.Vector3(x, y, z).project(this.camera);
     return { x: rect.left + (v.x * 0.5 + 0.5) * rect.width, y: rect.top + (-v.y * 0.5 + 0.5) * rect.height };
-  }
-
-  // Screen-space center of a hand tile (by its rendered index) — used by the
-  // drag test, and handy for any HUD that wants to point at a tile.
-  tileScreenXY(pick) {
-    const m = this.pickables.find((o) => o.userData.pick === pick);
-    if (!m) return null;
-    const rect = this.canvas.getBoundingClientRect();
-    const v = new THREE.Vector3().setFromMatrixPosition(m.matrixWorld).project(this.camera);
-    return { x: rect.left + (v.x * 0.5 + 0.5) * rect.width, y: rect.top + (-v.y * 0.5 + 0.5) * rect.height };
-  }
-
-  // The rendered hand index whose tile is nearest (in screen x) to a point —
-  // used to find the drop slot while dragging a tile.
-  nearestHandIndex(clientX) {
-    if (!this.pickables.length) return null;
-    const rect = this.canvas.getBoundingClientRect();
-    const v = new THREE.Vector3();
-    let best = null, bestd = Infinity;
-    for (const m of this.pickables) {
-      v.setFromMatrixPosition(m.matrixWorld); v.project(this.camera);
-      const sx = rect.left + (v.x * 0.5 + 0.5) * rect.width;
-      const d = Math.abs(sx - clientX);
-      if (d < bestd) { bestd = d; best = m.userData.pick; }
-    }
-    return best;
   }
 
   _pool(game, seen) {
