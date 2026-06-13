@@ -17,7 +17,7 @@ const GAP = 1.06;
 // the corners. Rows longer than their cap shrink uniformly to fit.
 const R_OPP = 7.1, R_HAND = 7.3;
 const OPP_HALF = 4.5, HAND_HALF = 6.1;
-const R_WALL = 5.4;  // the face-down deck wall sits in a ring at this radius, around the pool
+const R_WALL = 5.8;  // the face-down deck wall sits in a ring at this radius, around the pool
 
 const SUIT_CHAR = { m: '万', p: '筒', s: '条' };
 const SUIT_COLOR = { m: '#15407e', p: '#0e7a48', s: '#b23218' };
@@ -151,6 +151,9 @@ export class MahjongScene {
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
     this.camBase = new THREE.Vector3(0, 11.2, 15.8);
     this.camLook = new THREE.Vector3(0, -1.2, 0.9);
+    // rx that tilts a flat-facing tile back so its face squarely faces the camera
+    // (i.e. perpendicular to the camera's down-pitched view axis).
+    this.faceCamRx = -Math.atan2(this.camBase.y - this.camLook.y, this.camBase.z - this.camLook.z);
     this.camera.position.copy(this.camBase);
     this.camera.lookAt(this.camLook);
 
@@ -420,15 +423,17 @@ export class MahjongScene {
   // as the live wall is drawn down. Sets this.deckPos = the current draw point (in
   // front, where new draws fly from). Rendered before the hands so they read it.
   _wall(game, seen) {
-    const WW = 0.62, h = R_WALL;
+    const WW = 0.54, h = R_WALL;
     const perSide = Math.max(2, Math.floor((2 * h) / WW));
     const cell = (2 * h) / perSide;
     const at = (i) => -h + (i + 0.5) * cell;          // centre of slot i along a side
     // The deck wraps left → top → part of the right; the player's (front) side is
-    // kept clear. Slot 0 is front-left; the live draw end is the last slot (right).
+    // kept clear. The side walls own the back corners; the top is 2 cards shorter
+    // so it doesn't collide with them. Slot 0 is front-left; the live draw end is
+    // the last slot (right).
     const slots = [];
     for (let i = 0; i < perSide; i++) slots.push({ x: -h, z: -at(i), spin: Math.PI / 2 });  // left: front → back
-    for (let i = 0; i < perSide; i++) slots.push({ x: at(i), z: -h, spin: 0 });             // top: left → right
+    for (let i = 1; i < perSide - 1; i++) slots.push({ x: at(i), z: -h, spin: 0 });         // top: left → right (−2)
     const rightN = Math.round(perSide * 0.5);
     for (let i = 0; i < rightN; i++) slots.push({ x: h, z: at(i), spin: Math.PI / 2 });      // right: back → mid
     const nStacks = Math.min(slots.length, Math.ceil(game.wall.length / 2));
@@ -466,7 +471,7 @@ export class MahjongScene {
       const d = log[pendingIdx];
       this._place('pool' + pendingIdx, {
         kind: d.kind, wild: game.isWild(d.kind), emissive: true, scale: 1.5, from: this._seatCenter(d.player),
-        x: 0, y: TH * 0.78, z: 2.6, rx: -0.18, ry: 0, rz: 0,
+        x: 0, y: TH * 0.9, z: 2.6, rx: this.faceCamRx, ry: 0, rz: 0, // face squarely toward the camera
       }, seen);
     }
     // Bucket the remaining discards by suit, then order each column by card id.
@@ -528,8 +533,9 @@ export class MahjongScene {
   // read live, so the slot stays correct even as the hand reflows.
   _animateDraw(rec, m) {
     const d = rec.drawSeq, t = (performance.now() - d.t0) / 1000;
-    // keyframes: [time, x, y, z, scale, rx]
-    const C = [0, TH * 1.35, 3.0, 1.7, -0.05];
+    // keyframes: [time, x, y, z, scale, rx]; at the centre the face squarely faces
+    // the camera (faceCamRx), not just standing upright.
+    const C = [0, TH * 1.35, 3.0, 1.7, this.faceCamRx];
     const kf = [
       [0.00, d.deck.x, d.deck.y, d.deck.z, rec.ts, -Math.PI / 2],
       [0.42, C[0], C[1], C[2], C[3], C[4]],
