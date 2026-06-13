@@ -192,7 +192,7 @@ function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.claim 
 function flushLogToasts() {
   for (let i = lastLogLen; i < game.log.length; i++) {
     const line = game.log[i];
-    if (/自摸/.test(line)) { toast(line, true); sound.win(); }
+    if (/自摸/.test(line)) { toast(line, true); (game.result && game.result.winner === HUMAN ? sound.win() : sound.lose()); }
     else if (/荒牌/.test(line)) { toast(line, true); sound.drawGame(); }
     else if (/杠/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.kong(); }
     else if (/碰/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.pung(); }

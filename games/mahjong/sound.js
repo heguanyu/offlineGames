@@ -82,6 +82,18 @@ export class Sound {
       [1318.5, 1567.98, 2093.0].forEach((f, i) => this._tone(t2 + 0.09 + i * 0.06, f, 1.1, 0.07, 'sine')); // shimmer
     });
   }
+  // Someone else won (you lost / 点炮): a descending minor cadence landing on a
+  // low minor chord + a dull thud — clearly the opposite of the win bloom.
+  lose() {
+    this._play((t) => {
+      this._clack(t, { gain: 0.28, freq: 1050, dur: 0.05 });          // soft tile slap
+      const run = [392.0, 349.23, 311.13, 261.63];                    // G F Eb C — descending
+      run.forEach((f, i) => this._tone(t + 0.05 + i * 0.14, f, 0.34, 0.16, 'triangle'));
+      const t2 = t + 0.05 + run.length * 0.14;
+      [130.81, 155.56, 196.0].forEach((f) => this._tone(t2, f, 1.1, 0.15, 'sine')); // low C-minor chord
+      this._tone(t2, 65, 0.55, 0.2, 'sine');                         // dull low thud
+    });
+  }
   drawGame() { this._play((t) => this._tone(t, 300, 0.28, 0.14, 'sine')); }
 
   // --- Immersive 紧张感 (tension) music, looped while 听牌 ---
