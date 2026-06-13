@@ -1,17 +1,33 @@
-// Makes emulator progress survive page refresh / app close:
+// Makes emulator progress and settings survive page refresh / app close:
 //  - quick-save states (RT / "1") are copied into IndexedDB and restored
 //    into the emulator filesystem on the next game start, so quick load
 //    works across sessions;
 //  - battery saves (in-game saving) are flushed to persistent storage on
 //    every quick save and whenever the page is hidden or closed, instead
-//    of only on EmulatorJS's periodic timer.
+//    of only on EmulatorJS's periodic timer;
+//  - EmulatorJS keeps settings (control bindings, core options, volume) in
+//    localStorage, which iOS treats as disposable for home-screen PWAs
+//    (writes are flushed to disk lazily, so a force-quit can drop them, and
+//    storage pressure purges localStorage while IndexedDB survives). Every
+//    settings write is mirrored into IndexedDB and localStorage is re-seeded
+//    from that mirror before the emulator boots. Control bindings are also
+//    kept as a single shared profile applied to every game on the page —
+//    EmulatorJS scopes its settings per game, so a rebind would otherwise
+//    only affect the ROM it was made in.
 //
-// Usage (inside play(), before injecting loader.js):
-//   setupEmuPersistence({ dbName: DB_NAME, gameName: window.EJS_gameName });
-// The page's database must already define a 'states' object store
-// (keyPath 'key').
-function setupEmuPersistence({ dbName, gameName }) {
-  const STORE = 'states';
+// Usage (inside play(), after the EJS_* globals are set):
+//   setupEmuPersistence({ dbName, gameName: window.EJS_gameName, system: 'gba' })
+//     .then(() => { /* inject loader.js */ });
+// Returns a promise that resolves once settings are back in localStorage
+// (never rejects); inject loader.js after it so the emulator sees them.
+// The page's database must already define 'states' and 'settings' object
+// stores (both keyPath 'key').
+function setupEmuPersistence({ dbName, gameName, system }) {
+  const SHARED_CONTROLS = '__shared-controls__';
+  // The key EmulatorJS reads this game's settings from (getLocalStorageKey):
+  // gameId defaults to 1; the core part is the generic system name ('gba'
+  // covers both the mGBA and VBA-M cores).
+  const gameSettingsKey = 'ejs-1-' + system + '-' + gameName + '-settings';
 
   function openDB() {
     return new Promise((resolve, reject) => {
@@ -21,27 +37,84 @@ function setupEmuPersistence({ dbName, gameName }) {
     });
   }
 
-  async function putState(slot, data) {
+  async function getAllRows(store) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const t = db.transaction(STORE, 'readwrite');
-      t.objectStore(STORE).put({ key: gameName + '|' + slot, slot: String(slot), game: gameName, data });
+      const req = db.transaction(store, 'readonly').objectStore(store).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function putRows(store, rows) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const t = db.transaction(store, 'readwrite');
+      for (const row of rows) t.objectStore(store).put(row);
       t.oncomplete = resolve;
       t.onerror = () => reject(t.error);
     });
   }
 
+  function putState(slot, data) {
+    return putRows('states', [{ key: gameName + '|' + slot, slot: String(slot), game: gameName, data }]);
+  }
+
   async function statesForGame() {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
-      req.onsuccess = () => resolve(req.result.filter((s) => s.game === gameName));
-      req.onerror = () => reject(req.error);
-    });
+    return (await getAllRows('states')).filter((s) => s.game === gameName);
+  }
+
+  // Re-seed localStorage from the IndexedDB mirror — the mirror is the
+  // durable copy; whatever iOS left in localStorage is equal or older.
+  // Then overlay the shared controls profile onto this game's record so a
+  // rebind made in any game applies here too.
+  async function restoreSettings() {
+    let sharedControls = null;
+    for (const row of await getAllRows('settings')) {
+      if (row.key === SHARED_CONTROLS) sharedControls = row.value;
+      else localStorage.setItem(row.key, row.value);
+    }
+    if (!sharedControls) return;
+    let record;
+    try { record = JSON.parse(localStorage.getItem(gameSettingsKey)); } catch (e) { /* corrupt */ }
+    if (!(record instanceof Object) || Array.isArray(record)) record = {};
+    record.controlSettings = sharedControls;
+    // loadSettings discards the record unless all three fields are present.
+    if (!(record.settings instanceof Object)) record.settings = {};
+    if (!Array.isArray(record.cheats)) record.cheats = [];
+    localStorage.setItem(gameSettingsKey, JSON.stringify(record));
+  }
+
+  // Mirror the localStorage keys EmulatorJS just wrote, and publish this
+  // game's control bindings as the shared profile.
+  function mirrorSettings(emulator) {
+    let key = gameSettingsKey;
+    try { key = emulator.getLocalStorageKey(); } catch (e) { /* use computed key */ }
+    const rows = [];
+    const globals = localStorage.getItem('ejs-settings'); // volume / mute
+    if (globals !== null) rows.push({ key: 'ejs-settings', value: globals });
+    const record = localStorage.getItem(key);
+    if (record !== null) {
+      rows.push({ key: key, value: record });
+      try {
+        const controls = JSON.parse(record).controlSettings;
+        if (controls instanceof Object) rows.push({ key: SHARED_CONTROLS, value: controls });
+      } catch (e) { /* unreadable record; skip the profile */ }
+    }
+    if (rows.length) putRows('settings', rows).catch((e) => console.warn('settings mirror failed:', e));
   }
 
   window.EJS_onGameStart = async () => {
-    const gm = window.EJS_emulator.gameManager;
+    const em = window.EJS_emulator;
+    const gm = em.gameManager;
+
+    // EmulatorJS saves settings to localStorage on every change; mirror
+    // each write into IndexedDB.
+    const origSaveSettings = em.saveSettings.bind(em);
+    em.saveSettings = () => {
+      origSaveSettings();
+      mirrorSettings(em);
+    };
 
     // Restore quick states from previous sessions into the emulator FS.
     try {
@@ -81,7 +154,7 @@ function setupEmuPersistence({ dbName, gameName }) {
     // EmulatorJS's exit button fires "exit" and aborts its WASM module,
     // leaving a dead screen. Flush saves and reload to return to the ROM
     // list cleanly (offline-safe — files come from the service worker).
-    window.EJS_emulator.on('exit', () => {
+    em.on('exit', () => {
       flush();
       location.reload();
     });
@@ -92,9 +165,11 @@ function setupEmuPersistence({ dbName, gameName }) {
     // core re-reads the new dimensions. (Desktop handles real resize fine.)
     addEventListener('orientationchange', () => {
       setTimeout(() => {
-        try { window.EJS_emulator.handleResize(); } catch (e) { /* gone */ }
+        try { em.handleResize(); } catch (e) { /* gone */ }
         dispatchEvent(new Event('resize'));
       }, 300);
     });
   };
+
+  return restoreSettings().catch((e) => console.warn('settings restore failed:', e));
 }

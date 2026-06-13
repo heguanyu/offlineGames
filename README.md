@@ -33,7 +33,9 @@ A set of offline-playable PWA games for iPad, with Xbox controller support.
   default (GBA doesn't use the triggers). Keyboard: `1` save, `2` load,
   `3` change slot, 9 slots. States are stored in the browser
   (`save-state-location: browser` is preset). Rebind anything via the in-game
-  gear menu → Control Settings; user bindings persist in localStorage.
+  gear menu → Control Settings; rebinds apply to every ROM of that system
+  (one shared controls profile) and are mirrored to IndexedDB (see
+  Persistence below).
 - **Fast forward:** hold R3 (right stick click) or `Space`. Ratio is 3× by
   default; change it (1.5×–10× or unlimited), or enable slow motion/rewind,
   under gear menu → Speed Options.
@@ -44,7 +46,14 @@ A set of offline-playable PWA games for iPad, with Xbox controller support.
   page reloads/app restarts. Battery saves are flushed to persistent storage
   every 30s, on every quick save, and when the page is hidden or closed
   (refresh, tab switch, swiping the PWA away). Covered by the e2e test's
-  reload step.
+  reload step. EmulatorJS settings (control bindings, core options, volume)
+  live in localStorage, which iOS purges far more readily than IndexedDB
+  (lazy disk flush, storage pressure) — so every settings write is mirrored
+  into IndexedDB and localStorage is re-seeded from the mirror before the
+  emulator boots. Control bindings are kept as one shared profile per
+  system: EmulatorJS scopes settings per game, so without this a rebind
+  would only affect the ROM it was made in. Covered by
+  `node test/settings-persist-test.mjs`.
 - GBA (mGBA) runs full speed single-threaded, so it uses the plain core.
 - **NDS uses the multi-threaded melonDS core** — single-threaded melonDS is
   too slow (lag, and no fast-forward headroom). Threads need SharedArrayBuffer,

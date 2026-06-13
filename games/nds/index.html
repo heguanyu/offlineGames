@@ -113,11 +113,12 @@
 
     function openDB() {
       return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 2);
+        const req = indexedDB.open(DB_NAME, 3);
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'name' });
           if (!db.objectStoreNames.contains('states')) db.createObjectStore('states', { keyPath: 'key' });
+          if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -222,10 +223,10 @@
         'save-state-slot': '1',
         'save-save-interval': '30',
       };
-      setupEmuPersistence({ dbName: DB_NAME, gameName: window.EJS_gameName });
       // Stock EmulatorJS defaults, with our additions: RT = quick save,
       // LT = quick load (DS doesn't use the triggers), hold R3 = fast
-      // forward. Users can rebind in-game; their changes persist.
+      // forward. Users can rebind in-game; rebinds are mirrored to
+      // IndexedDB and shared across all NDS ROMs.
       window.EJS_defaultControls = {
         0: {
           0:  { value: 'x', value2: 'BUTTON_2' },          // DS B
@@ -257,9 +258,13 @@
         1: {}, 2: {}, 3: {},
       };
 
-      const script = document.createElement('script');
-      script.src = '../../emulatorjs/data/loader.js';
-      document.body.appendChild(script);
+      // Restore mirrored settings into localStorage first, so the emulator
+      // boots with the durable copy (and the shared controls profile).
+      setupEmuPersistence({ dbName: DB_NAME, gameName: window.EJS_gameName, system: 'nds' }).then(() => {
+        const script = document.createElement('script');
+        script.src = '../../emulatorjs/data/loader.js';
+        document.body.appendChild(script);
+      });
     }
 
     refreshList();
