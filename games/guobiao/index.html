@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>国标麻将 · MCR Mahjong</title>
+<link rel="apple-touch-icon" href="../../icons/icon-180.png">
+<link rel="icon" href="../../icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0c2a1e">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --gold: #e8c466; }
+  html, body { height: 100%; background: #07150f; color: #f1f5f9; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overflow: hidden; touch-action: manipulation; }
+  body { display: flex; flex-direction: column; height: 100dvh; }
+
+  header { display: flex; align-items: center; gap: 10px 12px; z-index: 5; flex-wrap: wrap; padding: max(8px, env(safe-area-inset-top)) 14px 8px; background: linear-gradient(#06231a, #0a3526); flex: 0 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+  header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
+  #round-info { font-size: 0.82rem; color: #cdeadd; }
+  #round-info b { color: var(--gold); }
+  #wall-count { font-size: 0.74rem; color: #b8dccd; background: rgba(4,18,12,0.4); border: 1px solid #1c5a44; border-radius: 999px; padding: 3px 10px; }
+  #scores { display: flex; gap: 6px; margin-left: auto; }
+  .score-chip { font-size: 0.72rem; padding: 3px 8px; border-radius: 999px; background: #0f3d2e; border: 1px solid #1c5a44; white-space: nowrap; }
+  .score-chip.dealer { border-color: var(--gold); box-shadow: 0 0 6px rgba(232,196,102,0.4); }
+  .score-chip .nm { color: #9fd3bf; } .score-chip .pt { color: #fff; font-weight: 700; } .score-chip .pt.neg { color: #ef9a9a; }
+  #menu-btn, #sound-btn { background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
+
+  #table { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  #scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  .hud { position: absolute; z-index: 3; display: flex; align-items: center; gap: 6px; }
+  .plate-bottom { bottom: 8px; left: 14px; } .plate-top { top: 8px; left: 50%; transform: translateX(-50%); }
+  .plate-left { left: 8px; top: 42%; transform: translateY(-50%); } .plate-right { right: 8px; top: 42%; transform: translateY(-50%); }
+  .nameplate { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #eaf6f0; background: rgba(4,18,12,0.6); border: 1px solid #1c5a44; border-radius: 999px; padding: 4px 11px; backdrop-filter: blur(2px); white-space: nowrap; }
+  .nameplate.active { border-color: var(--gold); box-shadow: 0 0 12px rgba(232,196,102,0.5); }
+  .nameplate .wind { color: var(--gold); font-weight: 800; }
+  .nameplate .dealer-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 5px var(--gold); }
+  .nameplate .think { color: var(--gold); font-size: 0.7rem; animation: blink 1s infinite; }
+  .nameplate .listen { color: #0a3526; background: var(--gold); border-radius: 6px; padding: 0 5px; font-size: 0.72rem; font-weight: 900; }
+  @keyframes blink { 50% { opacity: 0.35; } }
+
+  .tile { position: relative; flex: 0 0 auto; --tw: 23px; --th: 31px; width: var(--tw); height: var(--th); background: linear-gradient(165deg,#fffdf4,#ece2c8); border-radius: 4px; color: #1f2937; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: inset 0 1px 1px rgba(255,255,255,0.85), 0 1px 0 #d6ccb4, 0 2px 0 #c3b99f, 0 3px 4px rgba(0,0,0,0.4); }
+  .tile.lg { --tw: 30px; --th: 41px; border-radius: 5px; }
+  .tile .rk { font-size: calc(var(--th) * 0.44); font-weight: 800; } .tile .st { font-size: calc(var(--th) * 0.26); font-weight: 700; }
+  .tile.suit-m { color: #15407e; } .tile.suit-p { color: #0e7a48; } .tile.suit-s { color: #b23218; }
+  .tile.honor .rk { font-size: calc(var(--th) * 0.5); } .tile.honor.z-c { color: #c0392b; } .tile.honor.z-f { color: #15803d; } .tile.honor.z-b { color: #2563eb; } .tile.honor.wind { color: #2b3a4a; }
+  .tile.face-tile .face { width: 100%; height: 100%; object-fit: contain; padding: 2px; display: block; }
+
+  #action-hud { position: absolute; z-index: 4; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 7px; width: max-content; max-width: 96%; }
+  #action-bar { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .act-btn { font-size: 1rem; font-weight: 700; color: #3a2a00; background: linear-gradient(#f3d785, #e3b94f); border: none; border-radius: 11px; padding: 10px 22px; cursor: pointer; box-shadow: 0 3px 0 #b8902f, 0 5px 12px rgba(0,0,0,0.45); }
+  .act-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #b8902f; }
+  .act-btn.ghost { background: linear-gradient(#1b5e45, #134836); color: #d7efe5; box-shadow: 0 3px 0 #0c3526, 0 5px 12px rgba(0,0,0,0.4); }
+  .act-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
+  .hint { font-size: 0.78rem; color: #bfe0d2; text-align: center; min-height: 1.1em; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+
+  .overlay { position: fixed; inset: 0; z-index: 20; background: rgba(3,16,11,0.84); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .overlay.hidden { display: none; }
+  .panel { background: linear-gradient(#114030, #0c3122); border: 1px solid #2c8160; border-radius: 18px; padding: 24px; max-width: 500px; width: 100%; text-align: center; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
+  .panel h2 { color: var(--gold); margin-bottom: 6px; font-size: 1.5rem; }
+  .panel p.sub { color: #b6d8ca; font-size: 0.88rem; margin-bottom: 16px; }
+  .level-row { display: flex; gap: 10px; justify-content: center; margin: 14px 0; flex-wrap: wrap; }
+  .level-btn { flex: 1 1 120px; background: #16513c; border: 2px solid #2c8160; border-radius: 13px; padding: 15px 10px; cursor: pointer; color: #eaf6f0; }
+  .level-btn.sel { border-color: var(--gold); background: #1c6047; box-shadow: 0 0 14px rgba(232,196,102,0.3); }
+  .level-btn b { display: block; font-size: 1.15rem; margin-bottom: 3px; } .level-btn span { font-size: 0.74rem; color: #a9ccbd; }
+  .panel .big-btn { margin-top: 8px; width: 100%; font-size: 1.05rem; font-weight: 800; color: #3a2a00; background: linear-gradient(#f3d785,#e3b94f); border: none; border-radius: 13px; padding: 14px; cursor: pointer; box-shadow: 0 4px 0 #b8902f; }
+  .panel .link-btn { background: none; border: none; color: #9fd3bf; text-decoration: underline; cursor: pointer; margin-top: 12px; font-size: 0.85rem; }
+  #result-fans { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 12px 0; }
+  .fan-chip { background: linear-gradient(#f3d785,#e3b94f); color: #4a3500; border-radius: 999px; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+  #result-score { font-size: 2.4rem; color: #fff; font-weight: 900; text-shadow: 0 2px 10px rgba(232,196,102,0.5); }
+  #result-hand { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; margin: 14px 0; }
+  .rules-text { text-align: left; font-size: 0.85rem; line-height: 1.65; color: #d7efe5; }
+  .rules-text h3 { color: var(--gold); margin: 12px 0 4px; font-size: 0.98rem; }
+  #toast { position: fixed; left: 50%; top: 15%; transform: translateX(-50%) scale(0.9); background: rgba(0,0,0,0.8); color: #fff; padding: 11px 22px; border-radius: 14px; font-size: 1.15rem; font-weight: 800; z-index: 15; pointer-events: none; opacity: 0; transition: opacity 0.18s, transform 0.18s; text-align: center; }
+  #toast.show { opacity: 1; transform: translateX(-50%) scale(1); }
+  #toast.big { font-size: 1.7rem; color: var(--gold); text-shadow: 0 2px 12px rgba(232,196,102,0.6); }
+</style>
+</head>
+<body>
+  <header>
+    <a class="back" href="../../">&larr;</a>
+    <div id="round-info"></div>
+    <span id="wall-count"></span>
+    <div id="scores"></div>
+    <button id="sound-btn" title="音效">🔊</button>
+    <button id="menu-btn" title="菜单">≡</button>
+  </header>
+
+  <main id="table">
+    <canvas id="scene"></canvas>
+    <div class="hud plate-bottom" id="plate-0"></div>
+    <div class="hud plate-right"  id="plate-1"></div>
+    <div class="hud plate-top"    id="plate-2"></div>
+    <div class="hud plate-left"   id="plate-3"></div>
+    <div id="action-hud">
+      <div id="action-bar"></div>
+      <div class="hint" id="hand-hint"></div>
+    </div>
+  </main>
+
+  <div class="overlay" id="start-overlay">
+    <div class="panel">
+      <h2>国标麻将</h2>
+      <p class="sub">中国国标 (MCR) · 可吃碰杠 · 自摸/点炮 · 起和 8 番</p>
+      <div class="level-row" id="level-row">
+        <div class="level-btn" data-level="1"><b>新手</b><span>随手出牌</span></div>
+        <div class="level-btn sel" data-level="2"><b>普通</b><span>看张做番</span></div>
+        <div class="level-btn" data-level="3"><b>高手</b><span>做大牌、防点炮</span></div>
+      </div>
+      <button class="big-btn" id="start-btn">开始牌局</button>
+      <button class="link-btn" id="rules-link">查看规则 / Rules</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="result-overlay">
+    <div class="panel">
+      <h2 id="result-title"></h2>
+      <div id="result-fans"></div>
+      <div id="result-score"></div>
+      <div id="result-hand"></div>
+      <div id="result-payments" class="sub"></div>
+      <button class="big-btn" id="next-hand-btn">下一局</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="menu-overlay">
+    <div class="panel">
+      <h2>菜单</h2>
+      <button class="big-btn" id="resume-btn">继续</button>
+      <button class="big-btn" id="newgame-btn" style="background:linear-gradient(#1b5e45,#134836);color:#eaf6f0;box-shadow:0 4px 0 #0c3526;margin-top:10px;">重开（清零比分）</button>
+      <button class="link-btn" id="menu-rules-link">规则</button>
+      <div style="margin-top:14px;"><a class="back" href="../../">← 返回大厅</a></div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="rules-overlay">
+    <div class="panel">
+      <h2>国标麻将规则</h2>
+      <div class="rules-text" id="rules-body"></div>
+      <button class="big-btn" id="rules-close" style="margin-top:16px;">明白了</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

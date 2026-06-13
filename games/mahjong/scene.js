@@ -217,7 +217,7 @@ export class MahjongScene {
       const mesh = new THREE.Mesh(this.geo, this._mats(spec.kind, spec.wild, spec.emissive));
       mesh.castShadow = mesh.receiveShadow = true;
       mesh.position.set(spec.x, spec.y + (spec.drop ? 6 : 0), spec.z);
-      mesh.rotation.set(spec.rx, spec.ry, 0);
+      mesh.rotation.set(spec.rx, spec.ry, spec.rz || 0);
       mesh.scale.setScalar(0.001); // grow in
       this.tilesGroup.add(mesh);
       rec = { mesh, faceKey };
@@ -227,7 +227,7 @@ export class MahjongScene {
       rec.faceKey = faceKey;
     }
     rec.tp = new THREE.Vector3(spec.x, spec.y, spec.z);
-    rec.trx = spec.rx; rec.try_ = spec.ry; rec.ts = spec.scale ?? 1;
+    rec.trx = spec.rx; rec.try_ = spec.ry; rec.trz = spec.rz || 0; rec.ts = spec.scale ?? 1;
     if (spec.pick != null) { rec.mesh.userData.pick = spec.pick; this.pickables.push(rec.mesh); }
     else delete rec.mesh.userData.pick;
   }
@@ -273,14 +273,18 @@ export class MahjongScene {
   }
 
   _meldsFlat(game, seen) {
-    // center + lay-direction of each seat's flat meld area (face-up, visible)
+    // Each seat's exposed melds, laid flat and face-up in a row BESIDE that
+    // seat's tiles (parallel to their wall, pulled in toward the center so the
+    // camera reads the faces). `spin` rotates the tile in the table plane (the
+    // 3rd Euler angle, applied after rx=-90° — it keeps the face pointing up,
+    // which a y-rotation would not).
     const cfg = {
-      0: { cx: 2.4, cz: 4.4, dx: 1, dz: 0, ry: 0 },          // you: front-right
-      1: { cx: 4.4, cz: -2.2, dx: 0, dz: 1, ry: Math.PI / 2 }, // 下家 (right)
-      2: { cx: -2.4, cz: -4.4, dx: 1, dz: 0, ry: 0 },         // 对家 (top)
-      3: { cx: -4.4, cz: 2.2, dx: 0, dz: 1, ry: Math.PI / 2 }, // 上家 (left)
+      0: { cx: 2.6, cz: 4.6, dx: 1, dz: 0, spin: 0 },           // you: front, along X
+      1: { cx: 4.7, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },   // 下家 right: beside right wall, along Z
+      2: { cx: 0, cz: -4.6, dx: 1, dz: 0, spin: 0 },            // 对家 top: beside top wall, along X
+      3: { cx: -4.7, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },  // 上家 left: beside left wall, along Z
     };
-    const MS = 0.74, step = 0.95 * MS, meldGap = 0.5 * MS;
+    const MS = 0.72, step = 0.95 * MS, meldGap = 0.5 * MS;
     for (let p = 0; p < 4; p++) {
       const melds = game.melds[p];
       if (!melds.length) continue;
@@ -294,7 +298,7 @@ export class MahjongScene {
         const off = pos[i] - span / 2;
         this._place(`m${p}_${i}`, {
           kind: t.kind, scale: MS,
-          x: c.cx + c.dx * off, y: (TD / 2) * MS, z: c.cz + c.dz * off, rx: -Math.PI / 2, ry: c.ry,
+          x: c.cx + c.dx * off, y: (TD / 2) * MS, z: c.cz + c.dz * off, rx: -Math.PI / 2, ry: 0, rz: c.spin,
         }, seen);
       });
     }
@@ -408,6 +412,7 @@ export class MahjongScene {
         m.position.lerp(rec.tp, a);
         m.rotation.x += (rec.trx - m.rotation.x) * a;
         m.rotation.y += (rec.try_ - m.rotation.y) * a;
+        m.rotation.z += ((rec.trz || 0) - m.rotation.z) * a;
       }
       // selection glow follow + fade
       const gt = this.glowTarget, gs = this.glow;

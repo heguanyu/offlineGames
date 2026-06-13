@@ -1,0 +1,329 @@
+// 国标麻将 — UI glue. Reuses the mahjong rendering (scene.js), audio (sound.js)
+// and hand-order (handorder.js) layers; brings its own rules engine + AI and the
+// claim-queue orchestration (胡 > 碰/杠 > 吃 priority, win off discards, 听).
+import { Game, PHASE, tileName, MIN_FAN } from './engine.js';
+import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
+import { MahjongScene, tileFaceUrl } from '../mahjong/scene.js';
+import { Sound } from '../mahjong/sound.js';
+import { buildOrder } from '../mahjong/handorder.js';
+import { suitOf, rankOf } from '../mahjong/engine.js';
+
+const sound = new Sound();
+const HUMAN = 0;
+const SEAT_LABEL = ['你', '下家', '对家', '上家'];
+const WIND = ['东', '南', '西', '北'];
+const AI_DELAY = new URLSearchParams(location.search).get('fast') ? 35 : 650;
+const $ = (id) => document.getElementById(id);
+
+let game = null, scene = null, level = LEVELS.NORMAL;
+let session = loadSession();
+let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
+let handOrder = null, handSig = '';
+
+function loadSession() {
+  try { const s = JSON.parse(localStorage.getItem('guobiao-session')); if (s && Array.isArray(s.scores)) return s; } catch {}
+  return { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 };
+}
+function saveSession() {
+  session.scores = game ? game.scores.slice() : session.scores;
+  localStorage.setItem('guobiao-session', JSON.stringify(session));
+  localStorage.setItem('guobiao-level', String(level));
+}
+{ const lv = parseInt(localStorage.getItem('guobiao-level'), 10); if (lv >= 1 && lv <= 3) level = lv; }
+
+// ---- small DOM tile (result panel + 听 display) ----
+const SUIT_CHAR = { m: '万', p: '筒', s: '条' };
+const DRAGON_CLASS = ['z-c', 'z-f', 'z-b'];
+function tileEl(id, opts = {}) {
+  const el = document.createElement('div');
+  el.className = 'tile' + (opts.size ? ' ' + opts.size : '');
+  if (id < 27) { el.classList.add('suit-' + suitOf(id)); el.innerHTML = `<span class="rk">${rankOf(id)}</span><span class="st">${SUIT_CHAR[suitOf(id)]}</span>`; }
+  else if (id < 31) { el.classList.add('honor', 'wind'); el.innerHTML = `<span class="rk">${WIND[id - 27]}</span>`; }
+  else { el.classList.add('honor', DRAGON_CLASS[id - 31]); el.innerHTML = `<span class="rk">${['中', '發', '白'][id - 31]}</span>`; }
+  return el;
+}
+function faceTileEl(kind) {
+  const el = document.createElement('div'); el.className = 'tile face-tile';
+  const img = document.createElement('img'); img.className = 'face'; img.src = tileFaceUrl(kind); el.appendChild(img);
+  return el;
+}
+
+// ---- hand order (no wilds → just sorted, drawn on the right) ----
+const noWild = () => false;
+function currentOrder() {
+  const sig = game.hands[HUMAN].slice().sort((a, b) => a - b).join(',');
+  if (!handOrder || sig !== handSig) handOrder = buildOrder(handOrder, game.hands[HUMAN], noWild, game.turn === HUMAN ? game.drawnTile : null);
+  handSig = sig;
+  return handOrder;
+}
+function renderedHand() { return currentOrder().slice(); }
+function selectableHandIndices() { return renderedHand().map((_, i) => i); }
+
+// ---- rendering ----
+function render() {
+  $('round-info').innerHTML = `<b>${WIND[session.roundWind]}圈</b> · 第 ${session.hand} 局 · 难度 <b>${LEVEL_NAMES[level]}</b> · 起和 ${MIN_FAN}番`;
+  const scoresEl = $('scores'); scoresEl.innerHTML = '';
+  for (let p = 0; p < 4; p++) {
+    const chip = document.createElement('div');
+    chip.className = 'score-chip' + (p === game.dealer ? ' dealer' : '');
+    const pts = game.scores[p];
+    chip.innerHTML = `<span class="nm">${SEAT_LABEL[p]}</span> <span class="pt ${pts < 0 ? 'neg' : ''}">${pts >= 0 ? '+' : ''}${pts}</span>`;
+    scoresEl.appendChild(chip);
+  }
+  $('wall-count').textContent = `余 ${game.wall.length} 张`;
+  for (let p = 0; p < 4; p++) renderPlate(p);
+
+  const selectable = selectableHandIndices();
+  if (selIndex >= selectable.length) selIndex = Math.max(0, selectable.length - 1);
+  const myTurn = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
+  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn, selRendered: myTurn ? selectable[selIndex] : null, dragId: null });
+  renderActions();
+  flushLog();
+}
+
+function renderPlate(p) {
+  const seat = $('plate-' + p);
+  const thinking = game.phase !== PHASE.OVER && game.turn === p && p !== HUMAN;
+  const listen = game.tenpaiInfo(p).tenpai && (p === HUMAN);
+  seat.innerHTML =
+    `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}">` +
+    `<span class="wind">${WIND[game.seatWind(p)]}</span><span>${SEAT_LABEL[p]}</span>` +
+    (p === game.dealer ? '<span class="dealer-dot" title="庄"></span>' : '') +
+    (listen ? '<span class="listen">听</span>' : '') +
+    (thinking ? '<span class="think">思考中…</span>' : '') + `</div>`;
+}
+
+function renderActions() {
+  const bar = $('action-bar'); bar.innerHTML = '';
+  const hint = $('hand-hint'); hint.textContent = '';
+  const buttons = [];
+
+  if (game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN) {
+    const c = game.currentClaim();
+    if (c.type === 'win') { buttons.push(mkBtn(`胡 (${c.result.fan}番)`, () => doClaimTake())); }
+    else if (c.type === 'pung') buttons.push(mkBtn('碰', () => doClaimTake()));
+    else if (c.type === 'kong') buttons.push(mkBtn('杠', () => doClaimTake()));
+    else if (c.type === 'chow') {
+      c.options.forEach((opt) => buttons.push(mkBtn(`吃 ${tileName(opt[0])}${tileName(opt[1])}`, () => doClaimTake(opt))));
+    }
+    buttons.push(mkBtn('过', () => doClaimPass(), true));
+    hint.textContent = `${SEAT_LABEL[game.lastDiscard.player]} 打出 ${tileName(game.lastDiscard.kind)}`;
+  } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
+    for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
+    buttons.push(mkBtn('打出', () => discardSelected()));
+    // 听牌提示: would discarding the selected tile leave a ready hand?
+    const sel = renderedHand()[selectableHandIndices()[selIndex]];
+    if (sel != null) {
+      const rest = game.hands[HUMAN].slice(); rest.splice(rest.indexOf(sel), 1);
+      const waits = game.handWaits(rest, HUMAN);
+      hint.textContent = waits.length ? `打 ${tileName(sel)} 即听（${waits.map(tileName).join(' ')}）` : '选牌后按「打出」/ A 键';
+    }
+  } else if (game.phase !== PHASE.OVER) {
+    hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
+  }
+  if (focusIndex >= buttons.length) focusIndex = buttons.length - 1;
+  buttons.forEach((b, i) => { if (i === focusIndex && isClaimPhase()) b.classList.add('focus'); bar.appendChild(b); });
+}
+function mkBtn(label, fn, ghost) {
+  const b = document.createElement('button'); b.className = 'act-btn' + (ghost ? ' ghost' : ''); b.textContent = label;
+  b.addEventListener('click', fn); return b;
+}
+function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN; }
+
+function flushLog() {
+  for (let i = lastLogLen; i < game.log.length; i++) {
+    const line = game.log[i];
+    if (/自摸|和牌/.test(line)) { toast(line, true); sound.win(); }
+    else if (/荒牌/.test(line)) { toast(line, true); sound.drawGame(); }
+    else if (/杠/.test(line)) { toast(line, false); sound.kong(); }
+    else if (/碰/.test(line)) { toast(line, false); sound.pung(); }
+    else if (/吃/.test(line)) { toast(line, false); sound.select(); }
+  }
+  lastLogLen = game.log.length;
+}
+let toastTimer = null;
+function toast(msg, big) {
+  const t = $('toast'); t.textContent = msg; t.className = 'show' + (big ? ' big' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = big ? 'big' : ''; }, 1100);
+}
+
+// ---- orchestration ----
+function tick() {
+  render();
+  if (game.phase === PHASE.OVER) { showResult(); return; }
+  if (game.phase === PHASE.AWAIT_CLAIM) {
+    const c = game.currentClaim();
+    if (c.player === HUMAN) { focusIndex = 0; render(); return; }
+    schedule(() => {
+      const dec = chooseClaim(game, c.player, c, level);
+      if (dec.take) game.claimTake(dec.option); else game.claimPass();
+      tick();
+    }, AI_DELAY);
+    return;
+  }
+  if (game.phase === PHASE.AWAIT_DISCARD) {
+    if (game.turn === HUMAN) { render(); return; }
+    schedule(() => {
+      const p = game.turn;
+      const kong = chooseSelfKong(game, p, level);
+      if (kong != null) { game.selfKong(p, kong); tick(); return; }
+      game.discard(p, chooseDiscard(game, p, level)); sound.discard(); tick();
+    }, AI_DELAY);
+  }
+}
+function schedule(fn, delay) { clearTimeout(pendingTimer); pendingTimer = setTimeout(fn, delay); }
+
+// ---- human actions ----
+function onPickTile(idx) {
+  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
+  const id = renderedHand()[idx];
+  if (id == null) return;
+  const pos = selectableHandIndices().indexOf(idx);
+  if (pos < 0) return;
+  if (pos === selIndex) discardSelected();
+  else { selIndex = pos; sound.select(); render(); }
+}
+function discardSelected() {
+  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
+  const id = renderedHand()[selectableHandIndices()[selIndex]];
+  if (id == null) return;
+  game.discard(HUMAN, id); sound.discard();
+  selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
+  tick();
+}
+function doSelfKong(kind) { if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) { game.selfKong(HUMAN, kind); tick(); } }
+function doClaimTake(opt) { if (isClaimPhase()) { game.claimTake(opt); tick(); } }
+function doClaimPass() { if (isClaimPhase()) { game.claimPass(); tick(); } }
+
+// ---- result / new hand ----
+function showResult() {
+  const r = game.result, ov = $('result-overlay');
+  const fansEl = $('result-fans'), scoreEl = $('result-score'), handEl = $('result-hand'), payEl = $('result-payments');
+  fansEl.innerHTML = ''; handEl.innerHTML = '';
+  if (r.type === 'draw') {
+    $('result-title').textContent = '荒牌 · 流局'; scoreEl.textContent = ''; payEl.textContent = '本局无人和牌';
+  } else {
+    const w = r.winner;
+    $('result-title').textContent = `${SEAT_LABEL[w]}（${WIND[game.seatWind(w)]}）${r.byDiscard ? '和牌' : '自摸'}！`;
+    for (const f of r.fans) { const c = document.createElement('span'); c.className = 'fan-chip'; c.textContent = `${f.name} ${f.points}`; fansEl.appendChild(c); }
+    scoreEl.textContent = r.fan + ' 番';
+    const hand = game.hands[w].slice().sort((a, b) => a - b);
+    for (const id of hand) handEl.appendChild(tileEl(id, { size: 'lg' }));
+    for (const m of game.melds[w]) for (const t of m.tiles) handEl.appendChild(tileEl(t, { size: 'lg' }));
+    payEl.innerHTML = r.payments.map((amt, p) => `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`).join('　');
+  }
+  saveSession(); ov.classList.remove('hidden');
+}
+function nextHand() {
+  $('result-overlay').classList.add('hidden');
+  const nd = game.nextDealer();
+  session.hand += 1;
+  if (nd === 0 && game.dealer !== 0) session.roundWind = (session.roundWind + 1) % 4;
+  session.dealer = nd;
+  startHand();
+}
+function startHand() {
+  clearTimeout(pendingTimer);
+  if (!scene) scene = new MahjongScene($('scene'));
+  game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores });
+  lastLogLen = 0; selIndex = 0; focusIndex = 0; handOrder = null; handSig = '';
+  saveSession(); tick();
+}
+function newGame() { game = null; session = { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 }; startHand(); }
+
+$('scene').addEventListener('pointerdown', (e) => {
+  if (!scene || !gameStarted) return;
+  sound.resume();
+  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
+  const idx = scene.pick(e.clientX, e.clientY);
+  if (idx != null) onPickTile(idx);
+});
+
+// ---- input dispatch (keyboard + gamepad) ----
+function onAction(name) {
+  if (!gameStarted) return;
+  sound.resume();
+  if (!$('menu-overlay').classList.contains('hidden') || !$('rules-overlay').classList.contains('hidden') || !$('start-overlay').classList.contains('hidden')) {
+    if (name === 'cancel' || name === 'menu') closeOverlays();
+    return;
+  }
+  if (!$('result-overlay').classList.contains('hidden')) { if (name === 'confirm' || name === 'menu') nextHand(); return; }
+  if (isClaimPhase()) {
+    const btns = [...$('action-bar').children];
+    if (name === 'left') { focusIndex = (focusIndex - 1 + btns.length) % btns.length; render(); }
+    else if (name === 'right') { focusIndex = (focusIndex + 1) % btns.length; render(); }
+    else if (name === 'confirm') btns[focusIndex]?.click();
+    else if (name === 'cancel' || name === 'pass') doClaimPass();
+    else if (name === 'menu') openMenu();
+    return;
+  }
+  if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) {
+    const n = selectableHandIndices().length;
+    if (name === 'left') { selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
+    else if (name === 'right') { selIndex = (selIndex + 1) % n; sound.select(); render(); }
+    else if (name === 'confirm') discardSelected();
+    else if (name === 'kong') { const o = game.selfKongOptions(HUMAN)[0]; if (o) doSelfKong(o.kind); }
+    else if (name === 'menu' || name === 'cancel') openMenu();
+    return;
+  }
+  if (name === 'menu') openMenu();
+}
+addEventListener('keydown', (e) => {
+  const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right', Enter: 'confirm', ' ': 'confirm', Escape: 'cancel', Backspace: 'pass', m: 'menu', M: 'menu', g: 'kong', G: 'kong', k: 'kong', K: 'kong' };
+  const a = map[e.key]; if (a) { e.preventDefault(); onAction(a); }
+});
+const padPrev = {}; let axisLatch = false;
+function pollGamepad() {
+  const pad = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).find((p) => p && p.connected);
+  if (pad) {
+    const press = (i) => { const d = !!pad.buttons[i]?.pressed, was = padPrev[i]; padPrev[i] = d; return d && !was; };
+    if (press(14) || press(12)) onAction('left');
+    if (press(15) || press(13)) onAction('right');
+    if (press(0)) onAction('confirm'); if (press(1)) onAction('cancel'); if (press(3)) onAction('kong'); if (press(9)) onAction('menu');
+    const x = pad.axes[0] || 0;
+    if (Math.abs(x) > 0.5) { if (!axisLatch) { onAction(x < 0 ? 'left' : 'right'); axisLatch = true; } } else axisLatch = false;
+  }
+  requestAnimationFrame(pollGamepad);
+}
+requestAnimationFrame(pollGamepad);
+
+// ---- overlays + boot ----
+function openMenu() { $('menu-overlay').classList.remove('hidden'); }
+function closeOverlays() { for (const id of ['menu-overlay', 'rules-overlay']) $(id).classList.add('hidden'); }
+function fillRules() {
+  $('rules-body').innerHTML = `
+    <h3>基本</h3>136 张牌（无花）。可<b>吃、碰、杠</b>；和牌可<b>自摸</b>或<b>点炮</b>（食他人打出之牌）。
+    <h3>起和</h3>和牌至少 <b>${MIN_FAN} 番</b>（番种总和），不足 8 番不可和。
+    <h3>番种</h3>采用国标 81 番的常见番种子集：清一色24、混一色6、碰碰和6、字一色88、清/混幺九、大小三元、大小四喜、
+    四/三/双暗刻、三色三同顺8、花龙8、一色三步高16、平和2、门前清/不求人、五门齐6、箭/风/幺九刻、单钓/边/坎张等。
+    <h3>计分</h3>和牌得 (番 + 8)；自摸三家各付，点炮则点炮者付 (番+8)，余两家各付 8。
+    <h3>操作</h3>点牌选中、再点或按「打出」/<b>A</b> 出牌。轮到可<b>胡/碰/杠/吃</b>时点对应按钮，或<b>过</b>。`;
+}
+function bindUI() {
+  $('level-row').addEventListener('click', (e) => {
+    const btn = e.target.closest('.level-btn'); if (!btn) return;
+    [...$('level-row').children].forEach((c) => c.classList.remove('sel')); btn.classList.add('sel');
+    level = parseInt(btn.dataset.level, 10);
+  });
+  [...$('level-row').children].forEach((c) => c.classList.toggle('sel', parseInt(c.dataset.level, 10) === level));
+  $('start-btn').addEventListener('click', () => { $('start-overlay').classList.add('hidden'); gameStarted = true; sound.resume(); startHand(); });
+  $('rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
+  $('menu-rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
+  $('rules-close').addEventListener('click', () => $('rules-overlay').classList.add('hidden'));
+  $('menu-btn').addEventListener('click', openMenu);
+  const sb = $('sound-btn'); const upd = () => { sb.textContent = sound.muted ? '🔇' : '🔊'; };
+  sb.addEventListener('click', () => { sound.resume(); sound.toggleMuted(); upd(); }); upd();
+  $('resume-btn').addEventListener('click', closeOverlays);
+  $('newgame-btn').addEventListener('click', () => { closeOverlays(); newGame(); });
+  $('next-hand-btn').addEventListener('click', nextHand);
+  fillRules();
+}
+bindUI();
+
+if (new URLSearchParams(location.search).get('fast')) {
+  window.__gb = {
+    phase: () => game && game.phase,
+    claim: () => game && game.currentClaim(),
+    humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,
+  };
+}

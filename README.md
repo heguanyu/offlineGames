@@ -12,6 +12,7 @@ A set of offline-playable PWA games for iPad, with Xbox controller support.
 - `games/gba/` — GBA emulator (mGBA core)
 - `games/nds/` — Nintendo DS emulator (melonDS core) — gen 4/5 Pokémon etc.
 - `games/mahjong/` — 天津麻将 (Tianjin mahjong), a native game vs. 3 AI bots
+- `games/guobiao/` — 国标麻将 (Chinese Official / MCR), reuses the mahjong render layer
 - `emulatorjs/data/` — shared [EmulatorJS](https://github.com/EmulatorJS/EmulatorJS)
   v4.2.3 frontend + wasm cores, used by all emulator pages
 
@@ -132,6 +133,32 @@ Tests:
   hand tile is repositioned.
 - `node test/mahjong-screenshot.mjs` — writes mid-game 3D screenshots
   (`test/mahjong-3d.png`, `-portrait.png`) for visual checks.
+
+## 国标麻将 (Chinese Official / MCR)
+
+A second mahjong game under `games/guobiao/` that **reuses** the mahjong 3D
+renderer (`../mahjong/scene.js`), audio (`sound.js`), hand-order (`handorder.js`)
+and tile assets, but brings its own rules:
+
+- `engine.js` — MCR rules: **吃 (chow), 碰, 杠**, win by **self-draw or off a
+  discard (点炮)**, no wilds, and an **8-fan minimum** (起和8番). A claim queue
+  resolves priority (胡 > 碰/杠 > 吃). Reuses the shared tile model +
+  decomposition from `../mahjong/engine.js`.
+- `score.js` — fan scoring: a substantial, commonly-occurring subset of the
+  official 81 fans (清/混一色, 碰碰和, 字一色, 清/混幺九, 大小三元/四喜, 四/三/双暗刻,
+  三色三同顺, 花龙, 一色三步高, 平和, 门前清/不求人, 五门齐, 箭/风/幺九刻, 单钓/边/坎张,
+  七对, 十三幺, …), with the major non-repeat exclusions. Pure + Node-tested.
+- `ai.js` — bots that 吃/碰/杠, take any ≥8-fan win, and steer toward high-fan
+  shapes (one-suit flush, honor pungs, all-pungs) so hands clear the 8-fan bar.
+- `main.js` — claim-queue orchestration, a 听 (ready) indicator with a discard
+  hint, and the MCR payment (winner gets fan+8; self-draw → all pay it, discard
+  → the 点炮者 pays it and the other two pay the 8 base).
+
+Scope note: 136 tiles (no flowers), a fan **subset** (not all 81), and no
+robbing-kong — documented simplifications for a playable, reasonably authentic
+v1. Tests: `node test/guobiao-engine-test.mjs` (scoring + random self-play:
+terminate, zero-sum, wins ≥ 8 fan) and `node test/guobiao-e2e.mjs` (headless
+WebGL, plays full hands, fails on any console error).
 
 ## Test locally (desktop)
 
