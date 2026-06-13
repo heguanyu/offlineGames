@@ -575,12 +575,14 @@ if (new URLSearchParams(location.search).get('fast')) {
     isWild: (id) => game.isWild(id),
     wildIndices: () => currentOrder().map((id, i) => (game.isWild(id) ? i : -1)).filter((i) => i >= 0),
     tileXY: (pick) => scene && scene.tileScreenXY(pick),
-    // visual check: give every seat melds (a pung + a kong) and re-render
+    // visual check: give every seat melds + a full discard pool, then re-render
     debugMelds: () => {
       for (let p = 0; p < 4; p++) game.melds[p] = [
         { type: 'pung', kind: p * 4, tiles: [p * 4, p * 4, p * 4] },
         { type: 'kong', kind: 9 + p * 3, tiles: [9 + p * 3, 9 + p * 3, 9 + p * 3, 9 + p * 3] },
       ];
+      game.discardLog = [];
+      for (let i = 0; i < 34; i++) game.discardLog.push({ player: i % 4, kind: (i * 7) % 27 });
       render();
     },
   };

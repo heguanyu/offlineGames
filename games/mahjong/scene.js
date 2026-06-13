@@ -216,9 +216,14 @@ export class MahjongScene {
     if (!rec) {
       const mesh = new THREE.Mesh(this.geo, this._mats(spec.kind, spec.wild, spec.emissive));
       mesh.castShadow = mesh.receiveShadow = true;
-      mesh.position.set(spec.x, spec.y + (spec.drop ? 6 : 0), spec.z);
+      if (spec.from) {            // slide in from a player's hand (discard / 碰 / 杠)
+        mesh.position.copy(spec.from);
+        mesh.scale.setScalar(spec.scale ?? 1);
+      } else {
+        mesh.position.set(spec.x, spec.y + (spec.drop ? 6 : 0), spec.z);
+        mesh.scale.setScalar(0.001); // grow in
+      }
       mesh.rotation.set(spec.rx, spec.ry, spec.rz || 0);
-      mesh.scale.setScalar(0.001); // grow in
       this.tilesGroup.add(mesh);
       rec = { mesh, faceKey };
       this.tiles.set(key, rec);
@@ -272,17 +277,28 @@ export class MahjongScene {
     }
   }
 
+  // Approx world position of a seat's hand/wall — where discards and claimed
+  // tiles animate from.
+  _seatCenter(p) {
+    if (p === 0) return new THREE.Vector3(0, TH / 2, R_HAND);
+    if (p === 1) return new THREE.Vector3(R_OPP, TH / 2, 0);
+    if (p === 2) return new THREE.Vector3(0, TH / 2, -R_OPP);
+    return new THREE.Vector3(-R_OPP, TH / 2, 0);
+  }
+
   _meldsFlat(game, seen) {
     // Each seat's exposed melds, laid flat and face-up in a row BESIDE that
     // seat's tiles (parallel to their wall, pulled in toward the center so the
     // camera reads the faces). `spin` rotates the tile in the table plane (the
     // 3rd Euler angle, applied after rx=-90° — it keeps the face pointing up,
     // which a y-rotation would not).
+    // Out near the table's edge (just outside each seat's wall, toward the wooden
+    // rim) so melds never collide with the discard pool in the middle.
     const cfg = {
-      0: { cx: 2.6, cz: 4.6, dx: 1, dz: 0, spin: 0 },           // you: front, along X
-      1: { cx: 4.7, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },   // 下家 right: beside right wall, along Z
-      2: { cx: 0, cz: -4.6, dx: 1, dz: 0, spin: 0 },            // 对家 top: beside top wall, along X
-      3: { cx: -4.7, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },  // 上家 left: beside left wall, along Z
+      0: { cx: 3.4, cz: 6.4, dx: 1, dz: 0, spin: 0 },           // you: front-right edge
+      1: { cx: 7.4, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },   // 下家 right edge
+      2: { cx: 0, cz: -7.4, dx: 1, dz: 0, spin: 0 },            // 对家 top edge
+      3: { cx: -7.4, cz: 0, dx: 0, dz: 1, spin: Math.PI / 2 },  // 上家 left edge
     };
     const MS = 0.72, step = 0.95 * MS, meldGap = 0.5 * MS;
     for (let p = 0; p < 4; p++) {
@@ -297,7 +313,7 @@ export class MahjongScene {
       tiles.forEach((t, i) => {
         const off = pos[i] - span / 2;
         this._place(`m${p}_${i}`, {
-          kind: t.kind, scale: MS,
+          kind: t.kind, scale: MS, from: this._seatCenter(p),
           x: c.cx + c.dx * off, y: (TD / 2) * MS, z: c.cz + c.dz * off, rx: -Math.PI / 2, ry: 0, rz: c.spin,
         }, seen);
       });
@@ -359,14 +375,14 @@ export class MahjongScene {
   _pool(game, seen) {
     const log = game.discardLog;
     const POOL = 0.82;                 // discards are smaller than hands
-    const perRow = 12, sx = 0.82, sz = 1.06;
+    const perRow = 9, sx = 0.74, sz = 0.98; // keep the pool compact in the middle
     const rows = Math.max(1, Math.ceil(log.length / perRow));
     log.forEach((d, i) => {
       const r = Math.floor(i / perRow), col = i % perRow;
       const inRow = Math.min(perRow, log.length - r * perRow);
       const last = i === log.length - 1 && game.phase === 'await-claim';
       this._place('pool' + i, {
-        kind: d.kind, wild: game.isWild(d.kind), emissive: last, drop: true, scale: POOL,
+        kind: d.kind, wild: game.isWild(d.kind), emissive: last, scale: POOL, from: this._seatCenter(d.player),
         x: (col - (inRow - 1) / 2) * sx, y: (TD / 2) * POOL + (last ? 0.12 : 0), z: (r - (rows - 1) / 2) * sz - 0.2,
         rx: -Math.PI / 2, ry: 0,
       }, seen);
