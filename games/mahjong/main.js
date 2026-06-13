@@ -154,12 +154,16 @@ function renderActions() {
     buttons.push(mkBtn('过', () => doPass(), true));
     hint.textContent = `${SEAT_LABEL[c.player === HUMAN ? game.lastDiscard.player : c.player]} 打出 ${tileName(c.kind)}`;
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
+    // self-draw win available → offer 胡 (but you may still play on)
+    if (game.selfDrawWin) {
+      const w = game.selfDrawWin;
+      buttons.push(mkBtn(`胡 · ${w.fans[0]} · ${w.score}分`, () => doDeclareWin(), false, 'hu'));
+    }
     // self-kong options
     for (const k of game.selfKongOptions(HUMAN)) {
       buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
     }
     buttons.push(mkBtn('打出', () => discardSelected()));
-    // no disclaimer — 打出 sits in the bottom bar under the hand
   } else if (game.phase !== PHASE.OVER) {
     hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
   }
@@ -203,9 +207,10 @@ function tick() {
   }
 
   if (game.phase === PHASE.AWAIT_DISCARD) {
-    if (game.turn === HUMAN) { ensureSelection(); render(); return; } // wait for human
+    if (game.turn === HUMAN) { ensureSelection(); render(); return; } // wait for human (胡 button or discard)
     schedule(() => {
       const p = game.turn;
+      if (game.selfDrawWin) { game.declareWin(); tick(); return; } // bots take their self-draw win
       const kong = chooseSelfKong(game, p, level);
       if (kong !== null) { game.selfKong(p, kong); tick(); return; }
       game.discard(p, chooseDiscard(game, p, level));
@@ -254,6 +259,9 @@ function discardSelected() {
   tick();
 }
 
+function doDeclareWin() {
+  if (game.declareWin()) tick();
+}
 function doSelfKong(kind) {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   game.selfKong(HUMAN, kind);
@@ -422,7 +430,8 @@ function onAction(name) {
 
   if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) {
     const n = selectableHandIndices().length;
-    if (name === 'left') { selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
+    if (name === 'win') doDeclareWin();
+    else if (name === 'left') { selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
     else if (name === 'right') { selIndex = (selIndex + 1) % n; sound.select(); render(); }
     else if (name === 'confirm') discardSelected();
     else if (name === 'kong') { const o = game.selfKongOptions(HUMAN)[0]; if (o) doSelfKong(o.kind); }
@@ -437,7 +446,7 @@ function onAction(name) {
 bindKeys(onAction, {
   ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right',
   Enter: 'confirm', ' ': 'confirm',
-  p: 'pung', P: 'pung', g: 'kong', G: 'kong', k: 'kong', K: 'kong',
+  p: 'pung', P: 'pung', g: 'kong', G: 'kong', k: 'kong', K: 'kong', h: 'win', H: 'win',
   Escape: 'cancel', Backspace: 'pass', m: 'menu', M: 'menu',
 });
 // Xbox: A=confirm B=cancel X=pung Y=kong, d-pad/stick = left/right, Menu = menu.
@@ -535,6 +544,13 @@ if (new URLSearchParams(location.search).get('fast')) {
         game.discardLog.push({ player: k % 4, kind: base[s] + (order[k] % (s === 3 ? 7 : 9)) });
       }
       game.phase = PHASE.AWAIT_DISCARD; game.claim = null; game.turn = HUMAN;
+      render();
+    },
+    // visual check: the self-draw 胡 button (win available, not yet claimed)
+    debugHu: () => {
+      game.hands[HUMAN] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 26, 26];
+      game.turn = HUMAN; game.phase = PHASE.AWAIT_DISCARD; game.drawnTile = 26; game.claim = null;
+      game.selfDrawWin = { score: 8, fans: ['龙'], decomp: null };
       render();
     },
     // visual check: a 混吊 win — the 混 (here 1万) stands in the 9条 pair but is

@@ -93,6 +93,7 @@ export class Game {
     this.firstGoAround = true;
     this.claimQueue = null;
     this.result = null;
+    this.selfDrawWin = null; // a detected-but-unclaimed self-draw win (the 胡 button)
     this._draw(this.dealer, false);
   }
 
@@ -117,9 +118,19 @@ export class Game {
     this.afterKong = fromKong;
     this.turn = player;
 
+    // Detect a self-draw win but DON'T fire it — the player may decline and play
+    // on, or claim it via declareWin() (the 胡 button).
     const r = analyzeWin(this.hands[player], this.melds[player], this._winCtx(player, tile, false));
-    if (r && r.fan >= this.minFan) { this._win(player, r, false, null); return; }
+    this.selfDrawWin = (r && r.fan >= this.minFan) ? r : null;
     this.phase = PHASE.AWAIT_DISCARD;
+  }
+
+  // Claim the pending self-draw win (the 胡 button). Returns true if a win fired.
+  declareWin() {
+    if (this.phase !== PHASE.AWAIT_DISCARD || !this.selfDrawWin) return false;
+    const r = this.selfDrawWin; this.selfDrawWin = null;
+    this._win(this.turn, r, false, null);
+    return true;
   }
 
   // ---- self kong (concealed / added) ----
@@ -147,6 +158,7 @@ export class Game {
 
   discard(player, tile) {
     if (this.turn !== player || this.phase !== PHASE.AWAIT_DISCARD) throw new Error('not your turn');
+    this.selfDrawWin = null; // declined any pending self-draw win
     const hand = this.hands[player];
     const i = hand.indexOf(tile);
     if (i < 0) throw new Error('tile not in hand');

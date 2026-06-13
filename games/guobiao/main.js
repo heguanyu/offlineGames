@@ -126,7 +126,8 @@ function renderActions() {
     hint.textContent = `已听 · 自动出牌（等 ${tingWaits.map(tileName).join(' ')}）`;
   } else if (game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN) {
     const c = game.currentClaim();
-    if (c.type === 'win') { buttons.push(mkBtn(`胡 (${c.result.fan}番)`, () => doClaimTake())); }
+    // 点炮 win — a confirm: take it (胡, showing pattern + score) or 过 to play on.
+    if (c.type === 'win') { buttons.push(mkBtn(`胡 · ${c.result.fans[0].name} · ${c.result.fan}番`, () => doClaimTake(), false, 'hu')); }
     else if (c.type === 'pung') buttons.push(mkBtn('碰', () => doClaimTake()));
     else if (c.type === 'kong') buttons.push(mkBtn('杠', () => doClaimTake()));
     else if (c.type === 'chow') {
@@ -135,6 +136,10 @@ function renderActions() {
     buttons.push(mkBtn('过', () => doClaimPass(), true));
     hint.textContent = `${SEAT_LABEL[game.lastDiscard.player]} 打出 ${tileName(game.lastDiscard.kind)}`;
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
+    if (game.selfDrawWin) { // self-draw win available — offer 胡 (you may still play on)
+      const w = game.selfDrawWin;
+      buttons.push(mkBtn(`胡 · ${w.fans[0].name} · ${w.fan}番`, () => doDeclareWin(), false, 'hu'));
+    }
     for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
     // If the selected discard would leave a ready hand, present 打出并听牌 (declare
     // 听, red) at screen center with the plain 打出 to its right; otherwise 打出
@@ -200,13 +205,20 @@ function tick() {
   }
   if (game.phase === PHASE.AWAIT_DISCARD) {
     if (game.turn === HUMAN) {
-      // Locked 听: auto-discard the drawn tile (a self-draw win already fired in
-      // the engine), so the hand is preserved until it wins or the wall runs out.
-      if (lockedTing) { schedule(() => { game.discard(HUMAN, game.drawnTile); sound.discard(); tick(); }, AI_DELAY); return; }
-      render(); return;
+      // Locked 听: auto-claim a self-draw win if it appears, else tsumogiri the
+      // drawn tile so the ready hand is preserved until it wins or the wall runs out.
+      if (lockedTing) {
+        schedule(() => {
+          if (game.selfDrawWin) game.declareWin(); else { game.discard(HUMAN, game.drawnTile); sound.discard(); }
+          tick();
+        }, AI_DELAY);
+        return;
+      }
+      render(); return; // wait for human (胡 button or discard)
     }
     schedule(() => {
       const p = game.turn;
+      if (game.selfDrawWin) { game.declareWin(); tick(); return; } // bots take their self-draw win
       const kong = chooseSelfKong(game, p, level);
       if (kong != null) { game.selfKong(p, kong); tick(); return; }
       game.discard(p, chooseDiscard(game, p, level)); sound.discard(); tick();
@@ -242,6 +254,7 @@ function discardSelected(declare) {
   if (declare) { lockedTing = true; tingWaits = waits; toast('听！自动出牌', true); sound.startMusic(); }
   tick();
 }
+function doDeclareWin() { if (game.declareWin()) tick(); }
 function doSelfKong(kind) { if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) { game.selfKong(HUMAN, kind); tick(); } }
 function doClaimTake(opt) { if (isClaimPhase()) { game.claimTake(opt); tick(); } }
 function doClaimPass() { if (isClaimPhase()) { game.claimPass(); tick(); } }
@@ -320,7 +333,8 @@ function onAction(name) {
   }
   if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD && !lockedTing) {
     const n = selectableHandIndices().length;
-    if (name === 'left') { selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
+    if (name === 'win') doDeclareWin();
+    else if (name === 'left') { selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
     else if (name === 'right') { selIndex = (selIndex + 1) % n; sound.select(); render(); }
     else if (name === 'confirm') discardSelected(false);
     else if (name === 'declare') discardSelected(true); // 打出并听牌 (falls back to plain if not 听)
@@ -333,7 +347,7 @@ function onAction(name) {
 bindKeys(onAction, {
   ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right',
   Enter: 'confirm', ' ': 'confirm', Escape: 'cancel', Backspace: 'pass',
-  m: 'menu', M: 'menu', g: 'kong', G: 'kong', k: 'kong', K: 'kong', t: 'declare', T: 'declare',
+  m: 'menu', M: 'menu', g: 'kong', G: 'kong', k: 'kong', K: 'kong', t: 'declare', T: 'declare', h: 'win', H: 'win',
 });
 // Xbox: A=confirm B=cancel X=declare(听) Y=kong, d-pad/stick = left/right, Menu = menu.
 startGamepad(onAction, { 14: 'left', 12: 'left', 15: 'right', 13: 'right', 0: 'confirm', 1: 'cancel', 2: 'declare', 3: 'kong', 9: 'menu' });

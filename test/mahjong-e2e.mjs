@@ -34,6 +34,8 @@ try {
       const btn = (txt) => [...document.querySelectorAll('#action-bar .act-btn')]
         .find((b) => b.textContent.includes(txt));
       if (vis('result-overlay')) return { phase: 'result' };
+      const hu = btn('胡');
+      if (hu) { hu.click(); return { phase: 'win' }; }   // take a self-draw win
       const pass = btn('过');
       if (pass) { pass.click(); return { phase: 'claim' }; }
       const discard = [...document.querySelectorAll('#action-bar .act-btn')]

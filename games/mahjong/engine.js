@@ -370,6 +370,7 @@ export class Game {
     this.afterKong = false;
     this.firstGoAround = true; // for 天和 / 地和
     this.result = null;
+    this.selfDrawWin = null; // a detected-but-unclaimed self-draw win (the 胡 button)
 
     // Dealer starts by drawing their 14th tile.
     this._draw(this.dealer, false);
@@ -393,11 +394,18 @@ export class Game {
     this.turn = player;
     this.lastTileDraw = this.wall.length === 0; // this draw emptied the wall → 海底
 
-    // Auto self-draw win check.
-    const win = this._checkSelfDraw(player);
-    if (win) { this._win(player, win); return; }
-
+    // Detect a self-draw win but DON'T fire it — the player may decline it and
+    // play on (or declare it via declareWin()). The UI offers a 胡 button.
+    this.selfDrawWin = this._checkSelfDraw(player) || null;
     this.phase = PHASE.AWAIT_DISCARD;
+  }
+
+  // Claim the pending self-draw win (the 胡 button). Returns true if a win fired.
+  declareWin() {
+    if (this.phase !== PHASE.AWAIT_DISCARD || !this.selfDrawWin) return false;
+    const win = this.selfDrawWin; this.selfDrawWin = null;
+    this._win(this.turn, win);
+    return true;
   }
 
   _checkSelfDraw(player) {
@@ -456,6 +464,7 @@ export class Game {
   discard(player, tile) {
     if (this.turn !== player || this.phase !== PHASE.AWAIT_DISCARD) throw new Error('not your turn');
     if (this.isWild(tile)) throw new Error('cannot discard a wild (混儿)');
+    this.selfDrawWin = null; // declined any pending self-draw win
     const hand = this.hands[player];
     const i = hand.indexOf(tile);
     if (i < 0) throw new Error('tile not in hand');

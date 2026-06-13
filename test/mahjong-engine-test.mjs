@@ -105,6 +105,7 @@ function autoplay(seed) {
   while (g.phase !== PHASE.OVER && guard++ < 5000) {
     if (g.phase === PHASE.AWAIT_CLAIM) { g.passClaim(); continue; }
     if (g.phase === PHASE.AWAIT_DISCARD) {
+      if (g.selfDrawWin) { g.declareWin(); continue; } // self-draw no longer auto-fires
       const hand = g.hands[g.turn];
       const tile = hand.find((t) => !g.isWild(t));
       ok(tile !== undefined, 'always a non-wild tile to discard');
