@@ -46,7 +46,7 @@ let r = analyzeWin(plain, [], { wilds: [S(5), S(6)], winningKind: S(5) });
 // plain DOES contain S(5). Use a wild set disjoint from the hand to test 素.
 r = analyzeWin(plain, [], { wilds: [27, 28], winningKind: S(5) });
 ok(r && r.meta.su, '素 detected when no wild tile held');
-eq(r.score, 2, '提溜×素 = 2');
+eq(r.score, 2, '没混儿(素) = 2');
 
 // 龙 + 素: 123m456m789m (full 1-9 m) + 123p + 99p. winning on 9m.
 const longHand = [M(1), M(2), M(3), M(4), M(5), M(6), M(7), M(8), M(9), P(1), P(2), P(3), P(9), P(9)];
@@ -67,11 +67,34 @@ const hunDiao = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(4), P(5
 r = analyzeWin(hunDiao, [], { wilds: [S(5), S(6)], winningKind: S(9) });
 ok(r && r.meta.hunDiao, '混吊 detected');
 ok(!r.meta.su, '混吊 hand is not 素');
-eq(r.score, 2, '提溜 × 混吊(2) = 2');
+eq(r.score, 2, '混吊(2) = 2');
 
-// 杠开 multiplier on the 素 baseline → 提溜×素×杠开 = 4.
+// Two wilds available for the 将: 123m 456m 123p 456p (four natural melds) + a
+// pair drawing on two wilds. Both 混吊 and 双混吊 are 2番 per the wiki, so this
+// scores 2 — never the old 4. (The solver may label it 混吊, since a 2-joker pair
+// can always be re-read as a 1-joker pair + a joker in a meld; both are 2番.)
+const twoWild = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(4), P(5), P(6), 27, 28];
+r = analyzeWin(twoWild, [], { wilds: [27, 28], winningKind: 28 });
+ok(r && (r.meta.shuangHun || r.meta.hunDiao), '将含混儿 (混吊/双混吊) detected');
+eq(r.score, 2, '将含混儿 = 2番（双混吊不再是 4）');
+
+// 本混龙: full 1-9万 with two m-suit wilds (8万/9万) filling 8,9; pair 99p. The
+// wild suit equals 龙's suit, so 本混 doubles 龙 → 8 (the combination-table value;
+// the old engine wrongly added it as a flat +8).
+const benHun = [M(1), M(2), M(3), M(4), M(5), M(6), M(7), M(8), M(8), P(1), P(2), P(3), P(9), P(9)];
+r = analyzeWin(benHun, [], { wilds: [M(8), M(9)], winningKind: P(9) });
+ok(r && r.meta.benHunLong, '本混龙 detected');
+eq(r.score, 8, '本混龙 = 龙(4) × 本混(2) = 8');
+
+// 杠开 multiplier on the 素 baseline → 素(2)×杠开(2) = 4.
 r = analyzeWin(plain, [], { wilds: [27, 28], winningKind: S(5), afterKong: true });
-eq(r.score, 4, '提溜×素×杠开 = 4');
+eq(r.score, 4, '素×杠开 = 4');
+
+// 起和 2番: a fan-less win (a wild buried in a pung, natural pair, no 捉五/龙/杠开)
+// scores only 1 — a 小和, which is NOT a legal win.
+const xiaohe = [27, S(9), S(9), M(1), M(2), M(3), P(4), P(5), P(6), P(7), P(8), P(9), 31, 31];
+r = analyzeWin(xiaohe, [], { wilds: [27, 28], winningKind: 31 });
+ok(r === null, '小和 (score 1) is rejected by 起和 2番');
 
 // --- full game state machine: random self-play terminates, scores zero-sum ----
 console.log('state machine:');

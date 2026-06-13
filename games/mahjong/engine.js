@@ -10,10 +10,12 @@
 //     kind AND the next kind in its cycle both become wild. Wilds substitute for
 //     any tile when completing a winning hand, but may NOT be used to pung/kong,
 //     and may NOT be discarded.
-//   - Scoring fans: 提溜 (base), 混吊 / 双混吊, 素 (no wild used), 捉五 (win the
-//     5-of-characters into a 4-5-6 run), 龙 (full 1-9 run in one suit), 本混龙
-//     (龙 in the wild's suit), 杠开, 海底, 天和/地和. See scoreFromDecomp() for
-//     how they add vs. multiply.
+//   - 起和 2番: a win must reach 2番, so a fan-less 小和 is NOT a legal win.
+//     Fans: 混吊 / 双混吊 (both 2番), 素 (没混儿, no wild at all), 捉五 (self-draw
+//     the 5万 into a 4-5-6万 run), 龙 (full 1-9 run in one suit), 本混龙 (龙 in the
+//     wild's suit, doubles 龙), 杠开, 天和/地和. 捉五/龙/天地和 ADD into a base term;
+//     本混/混吊/素/杠开 each ×2. See scoreFromDecomp(). Matches the zh.wikipedia
+//     《天津麻将》 combination table (双混儿伍儿 6 … 双混儿捉伍儿本混儿龙 28).
 //
 // Tile id scheme (34 kinds, 4 copies each = 136):
 //   0..8   characters 万 (m) ranks 1..9
@@ -211,22 +213,22 @@ export function isWinningHand(naturalIds, jokers, needMelds) {
 // Scoring
 // ---------------------------------------------------------------------------
 
-// Fan constants — tuned to the documented Tianjin combination rule:
-//   捉五 and 龙 ADD together to form the base term; everything else MULTIPLIES.
-//   "add first, then multiply." 提溜 (1) is the floor when no additive fan is
-//   present. These are the single source of truth — adjust here to retune.
+// Fan constants — the documented Tianjin combination rule, verified against the
+// wiki's full combination table: 捉五 / 龙 / 天地和 ADD into a base term; 本混 (本混龙),
+// 混吊 / 双混吊, 素, 杠开 each MULTIPLY by 2. "Add first, then multiply." When no
+// additive fan is present the base is 1, so a fan-less win scores 1 — below 起和
+// (WIN_MIN), i.e. a 小和, which analyzeWin() rejects. Single source of truth.
 export const FAN = {
-  TILIU: 1,      // 提溜 — plain win
-  HUNDIAO: 2,    // 混吊 — pair completed by a wild on a single wait (×)
-  SHUANGHUN: 4,  // 双混吊 — pair is two wilds (×)
-  SU: 2,         // 素 — no wild used at all (×)
+  HUNDIAO: 2,    // 混吊 — winning tile pairs the 将 via a wild, single wait (×2)
+  SHUANGHUN: 2,  // 双混吊 — that pair uses two wilds; still 2番 per wiki (×2)
+  SU: 2,         // 素 / 没混儿 — no wild in the hand at all (×2)
   ZHUOWU: 3,     // 捉五 — self-draw the 5万 into a 4-5-6万 run (+)
-  LONG: 4,       // 龙 — full 1-9 run in one suit (+)
-  BENHUNLONG: 8, // 本混龙 — 龙 in the wild's suit (+ replaces LONG)
-  GANGKAI: 2,    // 杠开 — win on a kong replacement draw (×)
-  HAIDI: 2,      // 海底 — win on the last wall tile (×)
-  TIANDI: 4,     // 天和 / 地和 multiplier (×)
+  LONG: 4,       // 龙 — full 1-9 run in one suit, as three chows (+)
+  BENHUN: 2,     // 本混 — 龙's suit equals the wild's suit; doubles 龙 → 本混龙 = 8 (×2)
+  GANGKAI: 2,    // 杠开 — win on a kong-replacement draw (×2)
+  TIANDI: 4,     // 天和 / 地和 — win off the very first draw (+)
 };
+export const WIN_MIN = 2; // 起和番: a win must reach 2番 (小和 is disallowed)
 
 function suitHasDragon(seqStartsBySuit, suit) {
   const starts = seqStartsBySuit[suit];
@@ -270,23 +272,19 @@ function scoreFromDecomp(decomp, ctx) {
     if (suitHasDragon(seqStartsBySuit, s)) { long = true; longSuit = s; if (s === wildSuit) benHunLong = true; }
   }
 
-  // --- combine: additive base term, then multiplicative fans ---
+  // --- combine: additive base term (捉五 / 龙 / 天地和), then ×2 fans ---
   let add = 0;
   if (zhuoWu) { add += FAN.ZHUOWU; fans.push('捉五'); }
-  if (long) {
-    if (benHunLong) { add += FAN.BENHUNLONG; fans.push('本混龙'); }
-    else { add += FAN.LONG; fans.push('龙'); }
-  }
-  let base = add > 0 ? add : FAN.TILIU;
-  if (add === 0) fans.push('提溜');
+  if (long) { add += FAN.LONG; fans.push(benHunLong ? '本混龙' : '龙'); }
+  if (tianOrDi) { add += FAN.TIANDI; fans.push(ctx.dealerWin ? '天和' : '地和'); }
+  const base = add > 0 ? add : 1;
 
   let mult = 1;
+  if (benHunLong) mult *= FAN.BENHUN;            // 本混 doubles 龙 → 本混龙 = 8
   if (shuangHun) { mult *= FAN.SHUANGHUN; fans.push('双混吊'); }
   else if (hunDiao) { mult *= FAN.HUNDIAO; fans.push('混吊'); }
   if (su) { mult *= FAN.SU; fans.push('素'); }
   if (afterKong) { mult *= FAN.GANGKAI; fans.push('杠开'); }
-  if (lastTile) { mult *= FAN.HAIDI; fans.push('海底'); }
-  if (tianOrDi) { mult *= FAN.TIANDI; fans.push(ctx.dealerWin ? '天和' : '地和'); }
 
   return { score: base * mult, fans, meta: { su, hunDiao, shuangHun, zhuoWu, long, benHunLong, longSuit } };
 }
@@ -313,6 +311,8 @@ export function analyzeWin(concealedIds, exposedMelds, ctx) {
     const r = scoreFromDecomp(d, full);
     if (!best || r.score > best.score) best = { ...r, decomp: d };
   }
+  // 起和番: a hand that cannot reach 2番 is a 小和 and not a legal win.
+  if (!best || best.score < WIN_MIN) return null;
   return best;
 }
 
