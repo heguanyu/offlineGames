@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 
 const NIGHTLY = process.argv.includes('--nightly');
+const CORE = (process.argv.find((a) => a.startsWith('--core=')) || '').split('=')[1] || 'mgba';
 const ROM = process.argv.find((a) => a.endsWith('.gba')) || 'Emerald386CN.gba';
 const PORT = 8126;
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
@@ -38,13 +39,15 @@ try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1024, height: 768 });
   page.on('console', (m) => console.log(`[console.${m.type()}]`, m.text().slice(0, 300)));
+  page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 400)));
+  page.on('response', (r) => { if (r.status() >= 400) console.log(`[HTTP ${r.status()}]`, r.url()); });
   await page.goto(`http://localhost:${PORT}/games/gba/`, { waitUntil: 'load' });
-  await page.evaluate(async (rom) => {
+  await page.evaluate(async (rom, core) => {
     const data = await (await fetch('/roms/' + rom)).arrayBuffer();
-    play({ name: rom, data });
-  }, ROM);
+    play({ name: rom, data, core });
+  }, ROM, CORE);
   await page.waitForFunction('window.EJS_emulator && window.EJS_emulator.started === true', { timeout: 120000, polling: 500 });
-  console.log('emulator started', NIGHTLY ? '(NIGHTLY core)' : '(shipped core)');
+  console.log('emulator started — core:', CORE, NIGHTLY ? '(NIGHTLY mgba)' : '');
 
   // Crank fast-forward so the long intro takes seconds, not minutes.
   await page.evaluate(() => {
@@ -53,9 +56,10 @@ try {
     gm.toggleFastForward(1);
   });
 
-  const canvas = await page.$('#game canvas');
   const shot = async (name) => {
-    await canvas.screenshot({ path: path.join(outDir, name + '.png') });
+    const c = await page.$('#game canvas'); // grab fresh each time (canvas may be recreated)
+    if (c) await c.screenshot({ path: path.join(outDir, name + '.png') });
+    else await page.screenshot({ path: path.join(outDir, name + '.png') });
     console.log('shot:', name);
   };
   const tap = async (key, hold = 70) => {
@@ -74,7 +78,7 @@ try {
     await sleep(150);
   };
 
-  const statePath = path.join(root, 'test', 'fixtures', ROM + '.state');
+  const statePath = path.join(root, 'test', 'fixtures', ROM + '.' + CORE + '.state');
   if (fs.existsSync(statePath)) {
     // Resume from the in-game fixture state, skipping the whole intro.
     const state = Array.from(fs.readFileSync(statePath));
@@ -108,10 +112,14 @@ try {
     await mash('x', 4, 120); // close anything left open
     await shot('t6-ingame');
 
-    // Save an emulator state fixture so future runs skip the intro.
-    const state = await page.evaluate(() => Array.from(window.EJS_emulator.gameManager.getState()));
-    fs.writeFileSync(statePath, Buffer.from(state));
-    console.log('fixture state saved:', statePath);
+    // Save an emulator state fixture so future runs skip the intro (optional).
+    try {
+      const state = await page.evaluate(() => Array.from(window.EJS_emulator.gameManager.getState()));
+      fs.writeFileSync(statePath, Buffer.from(state));
+      console.log('fixture state saved:', statePath);
+    } catch (e) {
+      console.log('fixture state save skipped:', String(e).slice(0, 120));
+    }
   }
 
   // In-game save: ensure the START menu is closed, open it fresh (cursor on
@@ -134,11 +142,13 @@ try {
     await shot(`t7e-check-${i}`);
     const nonFF = await page.evaluate(() => {
       const gm = window.EJS_emulator.gameManager;
-      gm.saveSaveFiles();
-      const data = gm.FS.readFile(gm.getSaveFilePath());
-      let n = 0;
-      for (let j = 0; j < data.length; j++) if (data[j] !== 0xFF) n++;
-      return n;
+      try { gm.saveSaveFiles(); } catch (e) {}
+      try {
+        const data = gm.FS.readFile(gm.getSaveFilePath());
+        let n = 0;
+        for (let j = 0; j < data.length; j++) if (data[j] !== 0xFF) n++;
+        return n + '/' + data.length;
+      } catch (e) { return 'no-save-file'; }
     });
     console.log(`check ${i}: non-FF bytes in save = ${nonFF}`);
   }
