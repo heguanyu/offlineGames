@@ -177,10 +177,18 @@ export class MahjongScene {
 
     this.raycaster = new THREE.Raycaster();
     this.clock = new THREE.Clock();
+    this.rotated = false; // true when the page is force-rotated 90° (portrait iPad)
     this._resize();
     new ResizeObserver(() => this._resize()).observe(canvas.parentElement);
     this._loop();
   }
+
+  // The page may be CSS-rotated 90° to force landscape on a portrait device; the
+  // canvas still renders landscape, but pointer events arrive in viewport space,
+  // so pick() must un-rotate them. (worldToScreen needs no change — the HUD is in
+  // the same rotated frame as the canvas.)
+  setRotated(r) { this.rotated = !!r; }
+  resize() { this._resize(); }
 
   _lights() {
     this.scene.add(new THREE.HemisphereLight(0xbfe6d8, 0x223026, 1.0));
@@ -284,11 +292,13 @@ export class MahjongScene {
     // size is fixed regardless of how many tiles are currently held.
     this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: -0.34, ry: 0, pull: -0.35, refSpan: 13 * GAP + 0.8 }, HAND_HALF, seen);
 
-    // Opponents: walls of backs.
+    // Opponents: walls of backs. refSpan = a full 14-tile hand so the back row is
+    // a fixed size, not rescaling each time a bot draws/discards (13 ↔ 14 tiles).
+    const oppRef = 13 * GAP;
     const oppCfg = {
-      1: { cx: R_OPP, cz: 0, dx: 0, dz: 1, rx: 0, ry: -Math.PI / 2, pull: 0 },
-      2: { cx: 0, cz: -R_OPP, dx: 1, dz: 0, rx: 0, ry: Math.PI, pull: 0 },
-      3: { cx: -R_OPP, cz: 0, dx: 0, dz: 1, rx: 0, ry: Math.PI / 2, pull: 0 },
+      1: { cx: R_OPP, cz: 0, dx: 0, dz: 1, rx: 0, ry: -Math.PI / 2, pull: 0, refSpan: oppRef },
+      2: { cx: 0, cz: -R_OPP, dx: 1, dz: 0, rx: 0, ry: Math.PI, pull: 0, refSpan: oppRef },
+      3: { cx: -R_OPP, cz: 0, dx: 0, dz: 1, rx: 0, ry: Math.PI / 2, pull: 0, refSpan: oppRef },
     };
     for (const p of [1, 2, 3]) {
       const backs = [];
@@ -386,12 +396,13 @@ export class MahjongScene {
     return s;
   }
 
-  // Project a world point to CSS pixel coords (viewport-relative). The pending
-  // claim tile sits at PENDING_AT, so HUD can be pinned under it.
+  // Project a world point to canvas-local CSS pixels. The claim HUD lives in the
+  // same box as the canvas (and is moved by the page's force-landscape transform
+  // along with it), so local coords are correct in both orientations — and this
+  // also drops a stale header-height offset the old viewport-based math carried.
   worldToScreen(x, y, z) {
-    const rect = this.canvas.getBoundingClientRect();
     const v = new THREE.Vector3(x, y, z).project(this.camera);
-    return { x: rect.left + (v.x * 0.5 + 0.5) * rect.width, y: rect.top + (-v.y * 0.5 + 0.5) * rect.height };
+    return { x: (v.x * 0.5 + 0.5) * this.canvas.clientWidth, y: (-v.y * 0.5 + 0.5) * this.canvas.clientHeight };
   }
 
   _pool(game, seen) {
@@ -444,9 +455,12 @@ export class MahjongScene {
 
   pick(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
-    const v = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1);
+    const rx = clientX - rect.left, ry = clientY - rect.top;
+    // When the page is rotated 90° CW (force-landscape on portrait), the canvas's
+    // bbox is the rotated rectangle, so map viewport→NDC through the rotation.
+    const v = this.rotated
+      ? new THREE.Vector2((ry / rect.height) * 2 - 1, (rx / rect.width) * 2 - 1)
+      : new THREE.Vector2((rx / rect.width) * 2 - 1, -((ry / rect.height) * 2 - 1));
     this.raycaster.setFromCamera(v, this.camera);
     const hits = this.raycaster.intersectObjects(this.pickables, false);
     return hits.length ? hits[0].object.userData.pick : null;

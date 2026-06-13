@@ -6,7 +6,7 @@ import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from 
 import { MahjongScene } from '../mahjong/scene.js';
 import { Sound } from '../mahjong/sound.js';
 import { buildOrder } from '../mahjong/handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad } from '../mahjong/ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape } from '../mahjong/ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -24,6 +24,9 @@ let game = null, scene = null, level = LEVELS.NORMAL;
 let session = loadSession();
 let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
 let lockedTing = false, tingWaits = []; // once 听, the seat auto-plays (tsumogiri)
+let isPortrait = false;        // device held portrait → page force-rotated to landscape
+
+forceLandscape((p) => { isPortrait = p; if (scene) { scene.setRotated(p); scene.resize(); } });
 
 function loadSession() {
   try { const s = JSON.parse(localStorage.getItem(CFG.sessionKey + '-session')); if (s && Array.isArray(s.scores)) return s; } catch {}
@@ -72,10 +75,12 @@ function render() {
 function positionClaimUI() {
   const hud = $('action-hud');
   if (scene && isClaimPhase() && !lockedTing) {
-    const p = scene.worldToScreen(0, 0, 3.9);
+    // Anchor the buttons' BOTTOM just above the hand row so the 吃/碰 prompt never
+    // covers the hand, in any aspect/orientation.
+    const a = scene.worldToScreen(0, 0, 5.0);
     hud.classList.add('claim');
-    hud.style.left = p.x + 'px'; hud.style.top = p.y + 'px';
-    hud.style.bottom = 'auto'; hud.style.transform = 'translate(-50%, 0)';
+    hud.style.left = a.x + 'px'; hud.style.top = a.y + 'px';
+    hud.style.bottom = 'auto'; hud.style.transform = 'translate(-50%, -100%)';
   } else {
     hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
@@ -276,7 +281,7 @@ function nextHand() {
 }
 function startHand() {
   clearTimeout(pendingTimer);
-  if (!scene) scene = new MahjongScene($('scene'));
+  if (!scene) { scene = new MahjongScene($('scene')); scene.setRotated(isPortrait); scene.resize(); }
   game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan });
   lastLogLen = 0; selIndex = 0; focusIndex = 0; lockedTing = false; tingWaits = [];
   sound.stopMusic();

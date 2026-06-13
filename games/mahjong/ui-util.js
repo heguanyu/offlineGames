@@ -41,6 +41,33 @@ export function bindKeys(onAction, keyMap) {
   addEventListener('keydown', (e) => { const a = keyMap[e.key]; if (a) { e.preventDefault(); onAction(a); } });
 }
 
+// Force the page to render landscape (width > height): when the device is held
+// portrait, CSS-rotate <body> 90° so it fills the screen as landscape (iOS Safari
+// has no orientation-lock API and ignores the manifest's orientation). Never
+// upside-down — we only rotate in portrait, always the same way. Calls
+// apply(isPortrait) on every change so the caller can tell the 3D scene.
+export function forceLandscape(apply) {
+  const b = document.body;
+  function update() {
+    const portrait = window.innerHeight > window.innerWidth;
+    if (portrait) {
+      const w = window.innerWidth, h = window.innerHeight;
+      Object.assign(b.style, {
+        position: 'fixed', top: '0', left: '0', overflow: 'hidden',
+        width: h + 'px', height: w + 'px',
+        transformOrigin: '0 0', transform: `translateX(${w}px) rotate(90deg)`,
+      });
+    } else {
+      for (const k of ['position', 'top', 'left', 'overflow', 'width', 'height', 'transformOrigin', 'transform']) b.style[k] = '';
+    }
+    apply(portrait);
+  }
+  addEventListener('resize', update);
+  addEventListener('orientationchange', () => setTimeout(update, 50)); // metrics settle late
+  update();
+  return () => window.innerHeight > window.innerWidth; // query current state
+}
+
 // Poll the gamepad each frame (edge-detected) and dispatch to onAction. `buttonMap`
 // is { buttonIndex: actionName }; the left-stick X axis also emits left/right.
 export function startGamepad(onAction, buttonMap) {

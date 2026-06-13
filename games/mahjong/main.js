@@ -6,7 +6,7 @@ import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from 
 import { MahjongScene } from './scene.js';
 import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad } from './ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape } from './ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -28,6 +28,10 @@ let selIndex = 0;              // cursor into the human's selectable (non-wild) 
 let focusIndex = 0;           // cursor into action-bar buttons (claims)
 let pendingTimer = null;
 let lastLogLen = 0;
+let isPortrait = false;        // device held portrait → page force-rotated to landscape
+
+// Always render landscape; when the scene exists, keep it in sync with the rotation.
+forceLandscape((p) => { isPortrait = p; if (scene) { scene.setRotated(p); scene.resize(); } });
 
 // ---------------------------------------------------------------------------
 // Persistence (lightweight prefs + running score; localStorage is fine here)
@@ -110,12 +114,14 @@ function render() {
 function positionClaimUI() {
   const hud = $('action-hud');
   if (scene && isClaimPhase()) {
-    const p = scene.worldToScreen(0, 0, 3.9);
+    // Anchor the buttons' BOTTOM just above the hand row (z=5, in front of the
+    // central pending tile) so the prompt never covers the hand, in any aspect.
+    const a = scene.worldToScreen(0, 0, 5.0);
     hud.classList.add('claim');
-    hud.style.left = p.x + 'px';
-    hud.style.top = p.y + 'px';
+    hud.style.left = a.x + 'px';
+    hud.style.top = a.y + 'px';
     hud.style.bottom = 'auto';
-    hud.style.transform = 'translate(-50%, 0)';
+    hud.style.transform = 'translate(-50%, -100%)';
   } else {
     hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
@@ -350,7 +356,7 @@ function nextHand() {
 
 function startHand() {
   clearTimeout(pendingTimer);
-  if (!scene) scene = new MahjongScene($('scene'));
+  if (!scene) { scene = new MahjongScene($('scene')); scene.setRotated(isPortrait); scene.resize(); }
   game = new Game({
     dealer: session.dealer,
     prevailingWind: session.prevailingWind,
