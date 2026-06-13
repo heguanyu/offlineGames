@@ -136,12 +136,15 @@ function renderActions() {
     hint.textContent = `${SEAT_LABEL[game.lastDiscard.player]} 打出 ${tileName(game.lastDiscard.kind)}`;
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
     for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
-    buttons.push(mkBtn('打出', () => discardSelected(false)));
-    // If the selected discard would leave a ready hand, float 打出并听牌 (declare
-    // 听) at screen center. No text disclaimer — the red button is the 听 signal.
+    // If the selected discard would leave a ready hand, present 打出并听牌 (declare
+    // 听, red) at screen center with the plain 打出 to its right; otherwise 打出
+    // stays in the bottom bar. No text disclaimer — the red button is the 听 signal.
     const sel = renderedHand()[selectableHandIndices()[selIndex]];
     if (tingDiscards().some((t) => t.kind === sel)) {
       center.appendChild(mkBtn('打出并听牌', () => discardSelected(true), false, 'riichi'));
+      center.appendChild(mkBtn('打出', () => discardSelected(false)));
+    } else {
+      buttons.push(mkBtn('打出', () => discardSelected(false)));
     }
   } else if (game.phase !== PHASE.OVER) {
     hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;

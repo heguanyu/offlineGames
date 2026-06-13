@@ -67,11 +67,11 @@
   .chow-cell.claimed::before { content: '▼'; position: absolute; top: 0; left: 50%; transform: translateX(-50%); color: #ff3b3b; font-size: 1.3rem; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.7); animation: chow-arrow 0.8s ease-in-out infinite; }
   @keyframes chow-arrow { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(3px); } }
   /* 打出并听牌 (declare 听): a body-level overlay so it truly centers on screen */
-  #ting-center { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  #ting-center { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; gap: 16px; pointer-events: none; }
   #ting-center:empty { display: none; }
+  /* both 打出并听牌 (red) and the plain 打出 to its right are presented big here */
+  #ting-center .act-btn { pointer-events: auto; cursor: pointer; font-size: 1.9rem; font-weight: 800; padding: 20px 44px; border-radius: 18px; }
   #ting-center .act-btn.riichi {
-    pointer-events: auto; cursor: pointer;
-    font-size: 2rem; font-weight: 800; padding: 22px 50px; border-radius: 18px;
     background: linear-gradient(180deg, #ff5c5c, #d31f1f); color: #fff; border: 2px solid #ffdada;
     animation: riichi-glow 1.15s ease-in-out infinite;
   }
