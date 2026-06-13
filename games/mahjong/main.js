@@ -276,8 +276,13 @@ function doPass() {
 // ---------------------------------------------------------------------------
 
 // Render the winning hand grouped by meld + pair from the decomposition. Each
-// 混儿 is placed in its slot and drawn as the tile it stands for, marked 混.
+// 混儿 is placed in its slot but shown with its ORIGINAL wildcard face (the round's
+// 混 tile the player actually held), marked 混 — not the tile it stands for.
 function renderWinningHand(handEl, w, r) {
+  // The actual 混 tiles the winner held (incl. a wild winning tile), in order.
+  const heldWilds = game.hands[w].filter((id) => game.isWild(id)).sort((a, b) => a - b);
+  let wp = 0;
+  const wildFace = () => (heldWilds.length ? heldWilds[wp++ % heldWilds.length] : game.wilds[0]);
   const meldTilesOf = (g) => {
     if (g.type === 'pung') { const k = g.kinds[0], nat = 3 - g.jokers; return [0, 1, 2].map((i) => ({ kind: k, wild: i >= nat })); }
     return g.kinds.map((id) => ({ kind: id, wild: !g.natural.has(id) })); // chow
@@ -289,7 +294,8 @@ function renderWinningHand(handEl, w, r) {
   const addGroup = (tiles, extra) => {
     const wrap = document.createElement('div');
     wrap.className = 'meld-group' + (extra || '');
-    for (const t of tiles) wrap.appendChild(faceTileEl(t.kind, { lg: true, wild: t.wild }));
+    // wild slots show the original 混 face; natural slots show their own tile.
+    for (const t of tiles) wrap.appendChild(faceTileEl(t.wild ? wildFace() : t.kind, { lg: true, wild: t.wild }));
     handEl.appendChild(wrap);
   };
   if (!r.decomp) { // fallback: plain sorted hand
@@ -530,6 +536,27 @@ if (new URLSearchParams(location.search).get('fast')) {
       }
       game.phase = PHASE.AWAIT_DISCARD; game.claim = null; game.turn = HUMAN;
       render();
+    },
+    // visual check: a 混吊 win — the 混 (here 1万) stands in the 9条 pair but is
+    // shown with its original 1万 face + 混 badge, not as 9条.
+    debugWin: () => {
+      game.wilds = [0, 1]; game.wildSet = new Set([0, 1]);
+      game.hands[HUMAN] = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 26, 0];
+      game.melds[HUMAN] = [];
+      game.phase = PHASE.OVER;
+      const S = (...a) => new Set(a);
+      game.result = {
+        type: 'win', winner: HUMAN, score: 2, fans: ['混吊'], winningTile: 26,
+        decomp: [
+          { type: 'chow', kinds: [3, 4, 5], jokers: 0, natural: S(3, 4, 5) },
+          { type: 'chow', kinds: [6, 7, 8], jokers: 0, natural: S(6, 7, 8) },
+          { type: 'chow', kinds: [9, 10, 11], jokers: 0, natural: S(9, 10, 11) },
+          { type: 'chow', kinds: [12, 13, 14], jokers: 0, natural: S(12, 13, 14) },
+          { type: 'pair', kinds: [26], jokers: 1, natural: S(26) },
+        ],
+        payments: [6, -2, -2, -2],
+      };
+      showResult();
     },
   };
 }

@@ -121,7 +121,7 @@ function cloneCounts(c) { return c.slice(); }
 
 // Cap on decompositions kept per analysis — 14 tiles never produce many, but
 // guard against pathological joker-heavy hands.
-const MAX_DECOMPS = 200;
+const MAX_DECOMPS = 2000;
 
 function searchDecomps(counts, jokers, needMelds, needPair, groups, out) {
   if (out.length >= MAX_DECOMPS) return;
@@ -306,10 +306,14 @@ export function analyzeWin(concealedIds, exposedMelds, ctx) {
   const wildSuit = isNumberSuit(ctx.wilds[0]) ? suitOf(ctx.wilds[0]) : null;
   const full = { ...ctx, wildCount, wildSuit };
 
-  let best = null;
+  // Pick the highest-scoring decomposition. On a score tie, prefer the more
+  // valuable wild pattern (双混吊 over 混吊, 本混龙) then the richer fan set — so a
+  // hand is always credited its best reading rather than the first one found.
+  let best = null, bestQ = -1;
   for (const d of decomps) {
     const r = scoreFromDecomp(d, full);
-    if (!best || r.score > best.score) best = { ...r, decomp: d };
+    const q = r.score * 1000 + (r.meta.shuangHun ? 200 : 0) + (r.meta.benHunLong ? 100 : 0) + r.fans.length;
+    if (q > bestQ) { bestQ = q; best = { ...r, decomp: d }; }
   }
   // 起和番: a hand that cannot reach 2番 is a 小和 and not a legal win.
   if (!best || best.score < WIN_MIN) return null;

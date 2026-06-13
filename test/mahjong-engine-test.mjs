@@ -70,12 +70,11 @@ ok(!r.meta.su, '混吊 hand is not 素');
 eq(r.score, 2, '混吊(2) = 2');
 
 // Two wilds available for the 将: 123m 456m 123p 456p (four natural melds) + a
-// pair drawing on two wilds. Both 混吊 and 双混吊 are 2番 per the wiki, so this
-// scores 2 — never the old 4. (The solver may label it 混吊, since a 2-joker pair
-// can always be re-read as a 1-joker pair + a joker in a meld; both are 2番.)
+// pair drawing on two wilds. This can be read as 混吊 OR 双混吊 (both 2番); the
+// tie-break must credit the better pattern, 双混吊.
 const twoWild = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(4), P(5), P(6), 27, 28];
 r = analyzeWin(twoWild, [], { wilds: [27, 28], winningKind: 28 });
-ok(r && (r.meta.shuangHun || r.meta.hunDiao), '将含混儿 (混吊/双混吊) detected');
+ok(r && r.meta.shuangHun, '双混吊 credited over 混吊 on a score tie');
 eq(r.score, 2, '将含混儿 = 2番（双混吊不再是 4）');
 
 // 本混龙: full 1-9万 with two m-suit wilds (8万/9万) filling 8,9; pair 99p. The
