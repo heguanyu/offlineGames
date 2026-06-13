@@ -15,8 +15,9 @@ const GAP = 1.06;
 // Seats sit on a ring; the player's row is pushed forward (toward the camera)
 // and each row's half-length is capped so neighbouring rows never collide at
 // the corners. Rows longer than their cap shrink uniformly to fit.
-const R_OPP = 6.0, R_HAND = 7.3;
+const R_OPP = 7.1, R_HAND = 7.3;
 const OPP_HALF = 4.5, HAND_HALF = 6.1;
+const R_WALL = 5.4;  // the face-down deck wall sits in a ring at this radius, around the pool
 
 const SUIT_CHAR = { m: '万', p: '筒', s: '条' };
 const SUIT_COLOR = { m: '#15407e', p: '#0e7a48', s: '#b23218' };
@@ -262,6 +263,9 @@ export class MahjongScene {
       this.tilesGroup.add(mesh);
       rec = { mesh, faceKey };
       this.tiles.set(key, rec);
+      // The human's freshly-drawn tile gets a reveal: deck → big in the centre,
+      // facing the camera → its slot in the hand. (Handled in the animation loop.)
+      if (spec.draw && spec.from) rec.drawSeq = { t0: performance.now(), deck: spec.from.clone() };
     } else if (rec.faceKey !== faceKey) {
       rec.mesh.material = this._mats(spec.kind, spec.wild, spec.emissive);
       rec.faceKey = faceKey;
@@ -279,14 +283,19 @@ export class MahjongScene {
     const seen = new Set();
     const HUMAN = 0;
 
+    // Deck wall first, so it sets this.deckPos (where draws fly from).
+    this._wall(game, seen);
+
     // Player hand (upright, pickable). The freshly-drawn tile sits apart from the
-    // sorted row (a gap) so it's easy to spot.
+    // sorted row (a gap) so it's easy to spot, and is presented from the deck.
     const hand = ui.renderedHand;
     const drawnIdx = ui.drawnTile != null ? hand.lastIndexOf(ui.drawnTile) : -1;
     const handItems = hand.map((id, i) => ({
       key: 'h' + i, kind: id, wild: game.isWild(id), pick: i,
       selected: ui.myTurn && i === ui.selRendered,
       gapBefore: i === drawnIdx ? 0.8 : 0,
+      from: i === drawnIdx ? this.deckPos : null,  // the drawn tile flies from the deck
+      draw: i === drawnIdx,                        // ...with the deck→center→slot reveal
     }));
     // refSpan = a full 14-tile hand (13 gaps + the drawn-tile gap) so the tile
     // size is fixed regardless of how many tiles are currently held.
@@ -302,7 +311,8 @@ export class MahjongScene {
     };
     for (const p of [1, 2, 3]) {
       const backs = [];
-      for (let i = 0; i < game.hands[p].length; i++) backs.push({ key: `o${p}_${i}`, kind: null });
+      // from: the deck → a newly-drawn back tile flies in from the deck wall.
+      for (let i = 0; i < game.hands[p].length; i++) backs.push({ key: `o${p}_${i}`, kind: null, from: this.deckPos });
       this._placeRow(backs, oppCfg[p], OPP_HALF, seen);
     }
 
@@ -386,6 +396,7 @@ export class MahjongScene {
       this._place(it.key, {
         kind: it.kind, wild: it.wild, pick: it.pick, emissive: it.emissive, scale: s,
         x, y: baseY + lift, z, rx: cfg.rx + (it.selected ? 0.16 : 0), ry: cfg.ry, rz: it.rz || 0,
+        from: it.from, draw: it.draw,
       }, seen);
       if (it.selected) {
         this.glowTarget.on = true;
@@ -403,6 +414,33 @@ export class MahjongScene {
   worldToScreen(x, y, z) {
     const v = new THREE.Vector3(x, y, z).project(this.camera);
     return { x: (v.x * 0.5 + 0.5) * this.canvas.clientWidth, y: (-v.y * 0.5 + 0.5) * this.canvas.clientHeight };
+  }
+
+  // The face-down deck wall: a 2-layer ring of backs around the pool that depletes
+  // as the live wall is drawn down. Sets this.deckPos = the current draw point (in
+  // front, where new draws fly from). Rendered before the hands so they read it.
+  _wall(game, seen) {
+    const WW = 0.62, h = R_WALL;
+    const perSide = Math.max(2, Math.floor((2 * h) / WW));
+    const cell = (2 * h) / perSide;
+    const at = (i) => -h + (i + 0.5) * cell;          // centre of slot i along a side
+    // The deck wraps left → top → part of the right; the player's (front) side is
+    // kept clear. Slot 0 is front-left; the live draw end is the last slot (right).
+    const slots = [];
+    for (let i = 0; i < perSide; i++) slots.push({ x: -h, z: -at(i), spin: Math.PI / 2 });  // left: front → back
+    for (let i = 0; i < perSide; i++) slots.push({ x: at(i), z: -h, spin: 0 });             // top: left → right
+    const rightN = Math.round(perSide * 0.5);
+    for (let i = 0; i < rightN; i++) slots.push({ x: h, z: at(i), spin: Math.PI / 2 });      // right: back → mid
+    const nStacks = Math.min(slots.length, Math.ceil(game.wall.length / 2));
+    const yBot = (TD / 2) * WW - 0.05, yTop = yBot + TD * WW;
+    for (let s = 0; s < nStacks; s++) {
+      const c = slots[s];
+      this._place('wb' + s, { kind: null, scale: WW, x: c.x, y: yBot, z: c.z, rx: -Math.PI / 2, ry: 0, rz: c.spin }, seen);
+      if (game.wall.length - s * 2 >= 2) // odd remainder → last stack has no top tile
+        this._place('wt' + s, { kind: null, scale: WW, x: c.x, y: yTop, z: c.z, rx: -Math.PI / 2, ry: 0, rz: c.spin }, seen);
+    }
+    const live = slots[Math.max(0, nStacks - 1)];
+    this.deckPos = new THREE.Vector3(live.x, yTop + 0.25, live.z);
   }
 
   _pool(game, seen) {
@@ -484,6 +522,31 @@ export class MahjongScene {
     this.camera.updateProjectionMatrix();
   }
 
+  // The human draw reveal: deck (flat) → big in the centre facing the camera (hold)
+  // → the tile's slot in the hand. Drives the mesh directly; returns false (and
+  // clears the sequence) once finished, so normal lerp takes over. tp/ts/trx are
+  // read live, so the slot stays correct even as the hand reflows.
+  _animateDraw(rec, m) {
+    const d = rec.drawSeq, t = (performance.now() - d.t0) / 1000;
+    // keyframes: [time, x, y, z, scale, rx]
+    const C = [0, TH * 1.35, 3.0, 1.7, -0.05];
+    const kf = [
+      [0.00, d.deck.x, d.deck.y, d.deck.z, rec.ts, -Math.PI / 2],
+      [0.42, C[0], C[1], C[2], C[3], C[4]],
+      [0.95, C[0], C[1], C[2], C[3], C[4]],
+      [1.45, rec.tp.x, rec.tp.y, rec.tp.z, rec.ts, rec.trx],
+    ];
+    if (t >= kf[kf.length - 1][0]) { delete rec.drawSeq; return false; }
+    let i = 0; while (i < kf.length - 1 && t > kf[i + 1][0]) i++;
+    const A = kf[i], B = kf[i + 1];
+    let u = (t - A[0]) / (B[0] - A[0]); u = u * u * (3 - 2 * u); // smoothstep
+    const lp = (j) => A[j] + (B[j] - A[j]) * u;
+    m.position.set(lp(1), lp(2), lp(3));
+    m.scale.setScalar(lp(4));
+    m.rotation.set(lp(5), 0, 0);
+    return true;
+  }
+
   _loop() {
     const tick = () => {
       const dt = Math.min(this.clock.getDelta(), 0.05);
@@ -491,6 +554,7 @@ export class MahjongScene {
       for (const rec of this.tiles.values()) {
         const m = rec.mesh;
         const ts = rec.ts ?? 1;
+        if (rec.drawSeq && this._animateDraw(rec, m)) continue; // reveal in progress
         m.scale.setScalar(m.scale.x + (ts - m.scale.x) * a); // grow in + match target scale
         m.position.lerp(rec.tp, a);
         m.rotation.x += (rec.trx - m.rotation.x) * a;
