@@ -210,6 +210,11 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 
 .panel .link-btn { background: none; border: none; color: #9fd3bf; text-decoration: underline; cursor: pointer; margin-top: 12px; font-size: 0.85rem; }
 
+/* 快速模式 (skip bot-discard animation) checkbox row in the menu panel */
+.chk-row { display: flex; align-items: center; gap: 9px; justify-content: center; margin-top: 14px; cursor: pointer; color: #d7efe5; font-size: 0.95rem; }
+.chk-row input { width: 20px; height: 20px; accent-color: var(--gold); cursor: pointer; }
+.chk-row small { color: #8fb4a4; font-size: 0.74rem; }
+
 #result-fans { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 12px 0; }
 
 /* winning modal: lighter blur than other overlays */
@@ -371,6 +376,10 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
 
 .b2-pending .tile { --tw: 69px; --th: 93px;
   box-shadow: 0 0 0 3px rgba(232,196,102,0.85), 0 0 22px 6px rgba(232,196,102,0.55); }
+
+/* a bot's discard flying seat → center halt → pool (transform-animated; see scene2d) */
+.b2-fly { position: absolute; left: 0; top: 0; z-index: 5; pointer-events: none; will-change: transform;
+  box-shadow: 0 0 0 2px rgba(232,196,102,0.7), 0 6px 16px rgba(0,0,0,0.5); }
 
 /* the human's exposed melds, above the hand on the right */
 .b2-mymelds { position: absolute; right: 8px; bottom: 88px; display: flex; gap: 6px; }

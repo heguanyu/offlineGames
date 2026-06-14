@@ -14,6 +14,11 @@ const FELT = 16;
 const GAP = 1.06;
 const DRAW_MARGIN = 0.4;  // half-gap flanking the freshly-drawn tile on each side
 const CLAIM_DEMO_MS = 2000; // a bot's 吃/碰/杠 is held up facing the camera this long
+// Center "show-off" pose (per claiming seat) where a bot's just-claimed 吃/碰/杠 — and
+// now also its discard — halts facing the camera before settling. Reused by both the
+// claim-meld lift (_meldsFlat) and the discard fly (_pool).
+const DEMO_POS = { 1: { x: 3.8, y: 2.6, z: 1.8 }, 2: { x: 0, y: 2.95, z: -2.2 }, 3: { x: -3.8, y: 2.6, z: 1.8 } };
+const DEMO_SCALE = 1.3;
 // Initial deal: one tile launches from the wall every DEAL_SERVE_MS, round-robin
 // from the dealer; each flies ~DEAL_LAND_MS (the loop's lerp) so several are in
 // transit at once. The onLand callback fires DEAL_LAND_MS after a human tile is
@@ -198,6 +203,7 @@ export class MahjongScene {
 
     this.tiles = new Map();   // key -> { mesh, tp:Vector3, trx, try_, ts }
     this.claimDemo = null;    // { player, t0 } — a bot's just-claimed meld being shown off
+    this.discardDemo = null;  // { player, idx, t0, ms } — a bot's discard flying via the center halt
     this.deal = null;         // initial-deal animation state (see beginDeal)
     this.pickables = [];
     this.scene.add(this.tilesGroup = new THREE.Group());
@@ -317,6 +323,13 @@ export class MahjongScene {
       // 吃/碰/杠 demo: fly up from the seat, hold facing the camera, then settle flat.
       if (spec.claim) {
         rec.claimSeq = { t0: spec.claim.t0, ms: spec.claim.ms, demo: spec.claim.demo,
+          from: spec.from ? spec.from.clone() : new THREE.Vector3(spec.x, spec.y, spec.z),
+          rx0: spec.rx, rz0: spec.rz || 0 };
+      }
+      // Bot-discard demo: fly from the seat up to the same center halt, hold, then
+      // release to lerp down into the pool slot (rec.tp). Same rise/hold/release shape.
+      if (spec.discard) {
+        rec.discardSeq = { t0: spec.discard.t0, ms: spec.discard.ms, demo: spec.discard.demo,
           from: spec.from ? spec.from.clone() : new THREE.Vector3(spec.x, spec.y, spec.z),
           rx0: spec.rx, rz0: spec.rz || 0 };
       }
@@ -538,6 +551,10 @@ export class MahjongScene {
   // for `ms` before it settles into the flat meld row. Call right after the claim is
   // applied (before the sync that first renders the new meld).
   beginClaimDemo(player, ms = CLAIM_DEMO_MS) { this.claimDemo = { player, t0: performance.now(), ms }; }
+  // Mark a bot's discard (discardLog index `idx`) to fly from its seat up to the
+  // center halt, hold, then drop into the pool. Call right after game.discard, before
+  // the sync that first places the new pool tile.
+  beginDiscardDemo(player, idx, ms = CLAIM_DEMO_MS) { this.discardDemo = { player, idx, t0: performance.now(), ms }; }
 
   _meldsFlat(game, seen) {
     // Each seat's exposed melds, laid flat and face-up in a row BESIDE that
@@ -563,12 +580,7 @@ export class MahjongScene {
     // 吃/碰/杠 demo pose: the just-claimed meld lifts to a camera-facing row above
     // the claiming seat for CLAIM_DEMO_MS, then settles into the flat row.
     const demoActive = this.claimDemo && (performance.now() - this.claimDemo.t0 < this.claimDemo.ms);
-    const DEMO_SCALE = 1.3, DEMO_STEP = TW * DEMO_SCALE * 1.05;
-    const DEMO = {
-      1: { cx: 3.8, cy: 2.6, cz: 1.8 },   // 下家 (right)
-      2: { cx: 0,   cy: 2.95, cz: -2.2 }, // 对家 (top)
-      3: { cx: -3.8, cy: 2.6, cz: 1.8 },  // 上家 (left)
-    };
+    const DEMO_STEP = TW * DEMO_SCALE * 1.05;
     for (let p = 0; p < 4; p++) {
       const melds = game.melds[p];
       if (!melds.length) continue;
@@ -591,8 +603,8 @@ export class MahjongScene {
         const mo = meldOf[i];
         let claim = null;
         if (demoOn && mo.mi === lastMi) {
-          const dc = DEMO[p] || DEMO[2];
-          claim = { t0: this.claimDemo.t0, ms: this.claimDemo.ms, demo: { x: dc.cx + (mo.j - (mo.n - 1) / 2) * DEMO_STEP, y: dc.cy, z: dc.cz, s: DEMO_SCALE, rx: this.faceCamRx } };
+          const dc = DEMO_POS[p] || DEMO_POS[2];
+          claim = { t0: this.claimDemo.t0, ms: this.claimDemo.ms, demo: { x: dc.x + (mo.j - (mo.n - 1) / 2) * DEMO_STEP, y: dc.y, z: dc.z, s: DEMO_SCALE, rx: this.faceCamRx } };
         }
         this._place(`m${p}_${i}`, {
           kind: t.kind, scale: MS, from: this._seatCenter(p),
@@ -771,6 +783,10 @@ export class MahjongScene {
       const s = suitOf(kind);
       return s === 'm' ? 0 : s === 'p' ? 1 : s === 's' ? 2 : 3;
     };
+    // A bot's discard flying via the center halt (beginDiscardDemo) — it animates to
+    // its pool slot, so it's NOT pulled out as a pending tile while the demo runs.
+    const dd = this.discardDemo;
+    const demoIdx = (dd && performance.now() - dd.t0 < dd.ms) ? dd.idx : -1;
     // The just-discarded tile that YOU can claim (碰/杠/胡) is pulled out of the grid
     // and shown big/upright, front-center, so the choice is obvious.
     const pendingIdx = this.claimable && log.length ? log.length - 1 : -1;
@@ -798,11 +814,15 @@ export class MahjongScene {
         // (facing camera) → its pool slot, so you see what was drawn before it lands.
         // Other discards rise up into the pool from their player's side of the table.
         const reveal = t.i === revealIdx;
+        const isDemo = t.i === demoIdx;
         const from = reveal ? this.deckPos
+          : isDemo ? this._seatCenter(t.player)
           : t.player === 0 ? new THREE.Vector3(x, TH * 0.35, R_HAND + 0.4)
           : this._seatCenter(t.player);
+        const dc = isDemo ? (DEMO_POS[t.player] || DEMO_POS[2]) : null;
         this._place('pool' + t.i, {
-          kind: t.kind, wild: game.isWild(t.kind), emissive: false, scale: POOL, from, draw: reveal,
+          kind: t.kind, wild: game.isWild(t.kind), emissive: false, scale: POOL, from, draw: reveal && !isDemo,
+          discard: isDemo ? { t0: dd.t0, ms: dd.ms, demo: { x: dc.x, y: dc.y, z: dc.z, s: DEMO_SCALE, rx: this.faceCamRx } } : null,
           x, y: (TD / 2) * POOL, z, rx: -Math.PI / 2, ry: 0,
         }, seen);
       });
@@ -871,18 +891,20 @@ export class MahjongScene {
     return true;
   }
 
-  // A bot's claimed meld (吃/碰/杠): rise from the seat to a camera-facing row, hold,
-  // then release to normal lerp (which carries it down into the flat meld row).
-  _animateClaim(rec, m) {
-    const d = rec.claimSeq, t = (performance.now() - d.t0) / 1000;
-    const RISE = 0.4, HOLD_END = (d.ms ?? CLAIM_DEMO_MS) / 1000;
-    if (t >= HOLD_END) { delete rec.claimSeq; return false; }
-    const dm = d.demo;
+  // A bot's claimed meld (吃/碰/杠) OR its discard: rise from the seat to a
+  // camera-facing center pose, hold, then return false to release it to the normal
+  // lerp (which carries the meld into the flat row, or the discard down into the pool).
+  // `seq` = { t0, ms, demo:{x,y,z,s,rx}, from, rx0, rz0 }.
+  _animateDemoSeq(seq, rec, m) {
+    const t = (performance.now() - seq.t0) / 1000;
+    const RISE = 0.4, HOLD_END = (seq.ms ?? CLAIM_DEMO_MS) / 1000;
+    if (t >= HOLD_END) return false;
+    const dm = seq.demo;
     if (t < RISE) {
       let u = t / RISE; u = u * u * (3 - 2 * u); // smoothstep
-      m.position.set(d.from.x + (dm.x - d.from.x) * u, d.from.y + (dm.y - d.from.y) * u, d.from.z + (dm.z - d.from.z) * u);
+      m.position.set(seq.from.x + (dm.x - seq.from.x) * u, seq.from.y + (dm.y - seq.from.y) * u, seq.from.z + (dm.z - seq.from.z) * u);
       m.scale.setScalar((rec.ts ?? 1) + (dm.s - (rec.ts ?? 1)) * u);
-      m.rotation.set(d.rx0 + (dm.rx - d.rx0) * u, 0, d.rz0 * (1 - u));
+      m.rotation.set(seq.rx0 + (dm.rx - seq.rx0) * u, 0, seq.rz0 * (1 - u));
     } else {
       m.position.set(dm.x, dm.y, dm.z);
       m.scale.setScalar(dm.s);
@@ -900,7 +922,8 @@ export class MahjongScene {
         const m = rec.mesh;
         const ts = rec.ts ?? 1;
         if (rec.drawSeq && this._animateDraw(rec, m)) continue; // reveal in progress
-        if (rec.claimSeq && this._animateClaim(rec, m)) continue; // 吃/碰/杠 demo in progress
+        if (rec.claimSeq) { if (this._animateDemoSeq(rec.claimSeq, rec, m)) continue; delete rec.claimSeq; } // 吃/碰/杠 demo
+        if (rec.discardSeq) { if (this._animateDemoSeq(rec.discardSeq, rec, m)) continue; delete rec.discardSeq; } // discard fly
         m.scale.setScalar(m.scale.x + (ts - m.scale.x) * a); // grow in + match target scale
         m.position.lerp(rec.tp, a);
         m.rotation.x += (rec.trx - m.rotation.x) * a;

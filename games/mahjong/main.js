@@ -46,6 +46,12 @@ const Renderer = FLAT ? MahjongScene2D : MahjongScene;
 // meld has settled (+ CLAIM_SETTLE_MS). Both collapse to ~0 under ?fast=1 for tests.
 const CLAIM_DEMO_MS = FAST ? 60 : 2000;
 const CLAIM_SETTLE_MS = FAST ? 20 : 380;
+// A bot's discard flies from its hand to the center halt, holds ~1s, then drops into
+// the pool; the tick is locked for the whole duration. 快速模式 (fastMode) or ?fast=1
+// turns the animation + lock off.
+const DISCARD_DEMO_MS = 1100; // 0.4s rise + ~0.7s halt at the center
+const DISCARD_SETTLE_MS = 360;
+let fastMode = localStorage.getItem('mahjong-fast') === '1';
 
 let game = null;
 let scene = null;             // MahjongScene (3D table)
@@ -57,6 +63,7 @@ let focusIndex = 0;           // cursor into action-bar buttons (claims)
 let pendingTimer = null;
 let lastLogLen = 0;
 let dealing = false;          // the initial-deal animation is running (input is held)
+let animating = false;        // a bot's discard fly is playing — tick + input are held
 let isPortrait = false;        // device held portrait → page force-rotated to landscape
 
 // Always render landscape; when the scene exists, keep it in sync with the rotation.
@@ -137,12 +144,21 @@ function render() {
   const rh = renderedHand();
   const drawnWildIdx = (game.drawnTile != null && game.isWild(game.drawnTile)) ? rh.lastIndexOf(game.drawnTile) : -1;
   const selRendered = (drawnWildSelected && drawnWildIdx >= 0) ? drawnWildIdx : selectable[selIndex];
+  // While a bot's discard fly is playing, hold the human's turn: the turn has already
+  // advanced (the human drew), but we don't reveal that draw or allow selection yet —
+  // show the pre-draw 13 tiles, and let the reveal play when the tick resumes.
+  const mt = myTurn && !animating;
+  let handForSync = rh;
+  if (animating && game.drawnTile != null) {
+    const di = rh.lastIndexOf(game.drawnTile);
+    if (di >= 0) handForSync = rh.slice(0, di).concat(rh.slice(di + 1));
+  }
   if (scene) scene.sync(game, {
-    renderedHand: rh,
-    myTurn,
-    selRendered: myTurn && !revealing ? selRendered : null,
-    claimable: isClaimPhase(),
-    drawnTile: (myTurn && game.drawnTile != null) ? game.drawnTile : null,
+    renderedHand: handForSync,
+    myTurn: mt,
+    selRendered: mt && !revealing ? selRendered : null,
+    claimable: !animating && isClaimPhase(),
+    drawnTile: (mt && game.drawnTile != null) ? game.drawnTile : null,
     reveal: game.phase === PHASE.OVER,
   });
 
@@ -156,7 +172,7 @@ function render() {
 // 打出 button stays in the default bottom bar, under the player's hand.
 function positionClaimUI() {
   const hud = $('action-hud');
-  if (scene && isClaimPhase()) {
+  if (scene && !animating && isClaimPhase()) {
     // Anchor the buttons' BOTTOM just above the hand row (z=5, in front of the
     // central pending tile) so the prompt never covers the hand, in any aspect.
     const a = scene.worldToScreen(0, 0, 5.0);
@@ -169,7 +185,7 @@ function positionClaimUI() {
     hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
   }
-  showClaimArrow(scene); // points from the discarder to the centred pending tile
+  showClaimArrow(animating ? null : scene); // points from the discarder to the centred pending tile
 }
 
 function renderPlate(p) {
@@ -191,6 +207,7 @@ function renderActions() {
   const center = $('ting-center'); center.innerHTML = ''; // the 和牌(胡) button floats here
   const hint = $('hand-hint');
   hint.textContent = '';
+  if (animating) return; // a bot's discard fly is playing — show no action UI yet
   const buttons = [];
 
   if (game.phase === PHASE.AWAIT_CLAIM && game.claim && game.claim.player === HUMAN) {
@@ -268,6 +285,13 @@ function tick() {
       if (kong !== null) { game.selfKong(p, kong); tick(); return; }
       game.discard(p, chooseDiscard(game, p, level));
       sound.discard();
+      if (scene && !FAST && !fastMode) { // fly the discard to the center halt, hold, then drop to pool
+        animating = true;
+        scene.beginDiscardDemo(p, game.discardLog.length - 1, DISCARD_DEMO_MS);
+        render();                                              // place the flying tile; claim UI suppressed
+        schedule(() => { animating = false; tick(); }, DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
+        return;
+      }
       tick();
     }, AI_DELAY);
   }
@@ -290,7 +314,7 @@ function ensureSelection() {
 // Tapping a tile only SELECTS it (lifts + highlights); discarding is a separate
 // confirm (打出 button / A / Enter). Tapping the already-selected tile confirms.
 function onPickTile(renderedIdx) {
-  if (dealing) return;
+  if (dealing || animating) return;
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const id = renderedHand()[renderedIdx];
@@ -564,7 +588,7 @@ function startHand() {
 
 // Touch / mouse on the 3D table → raycast → select the picked hand tile.
 $('scene').addEventListener('pointerdown', (e) => {
-  if (!scene || !gameStarted || dealing) return;
+  if (!scene || !gameStarted || dealing || animating) return;
   sound.resume(); // touch is a user gesture — unlock audio
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   const idx = scene.pick(e.clientX, e.clientY);
@@ -573,7 +597,7 @@ $('scene').addEventListener('pointerdown', (e) => {
 // PC only: hovering a hand tile selects it (same as a click-to-select). Mouse-only
 // so touch is unaffected; 混儿 aren't selectable so hovering them is ignored.
 $('scene').addEventListener('pointermove', (e) => {
-  if (e.pointerType !== 'mouse' || !scene || !gameStarted || dealing) return;
+  if (e.pointerType !== 'mouse' || !scene || !gameStarted || dealing || animating) return;
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || scene.handDrawRevealing) return;
   const idx = scene.pick(e.clientX, e.clientY);
   if (idx == null) return;
@@ -609,7 +633,7 @@ function onAction(name) {
     return;
   }
 
-  if (dealing) return; // tiles are still being served — hold gameplay input
+  if (dealing || animating) return; // serving tiles / a discard fly is playing — hold input
 
   if (isClaimPhase()) {
     const btns = [...$('action-bar').children];
@@ -706,6 +730,11 @@ function bindUI() {
   const updateSoundIcon = () => { soundBtn.textContent = sound.muted ? '🔇' : '🔊'; };
   soundBtn.addEventListener('click', () => { sound.resume(); sound.toggleMuted(); updateSoundIcon(); });
   updateSoundIcon();
+  const fastChk = $('fast-mode-chk');
+  if (fastChk) {
+    fastChk.checked = fastMode;
+    fastChk.addEventListener('change', () => { fastMode = fastChk.checked; localStorage.setItem('mahjong-fast', fastMode ? '1' : '0'); });
+  }
   $('resume-btn').addEventListener('click', closeOverlays);
   $('newgame-btn').addEventListener('click', () => { closeOverlays(); newGame(); });
   $('next-hand-btn').addEventListener('click', nextHand);

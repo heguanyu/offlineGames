@@ -39,6 +39,7 @@ export class MahjongScene2D {
     this.pending = null;     // { el } the big claimable tile, for worldToScreen/arrow
     this.handEl = null;
     this.claimDemo = null;   // { player, until } a bot's just-claimed meld, highlighted
+    this.discardDemo = null; // { player, idx, t0, ms } a bot's discard flying via the center halt
     this._last = null;       // last { game, ui } so resize() can re-render
     this._lastDrawn = undefined;
 
@@ -70,6 +71,10 @@ export class MahjongScene2D {
   beginDeal(game, done) { this._render(game, { renderedHand: game.hands[HUMAN], myTurn: false }); requestAnimationFrame(() => done()); }
 
   beginClaimDemo(player, ms = 2000) { this.claimDemo = { player, until: performance.now() + ms }; if (this._last) this._render(this._last.game, this._last.ui); }
+  // A bot's discard (discardLog index `idx`) flies from its seat to the center halt,
+  // holds, then drops into the pool. The fly element is built in _render; main.js holds
+  // the tick for `ms`, so no re-sync interrupts it until it's done.
+  beginDiscardDemo(player, idx, ms = 1350) { this.discardDemo = { player, idx, t0: performance.now(), ms }; }
 
   // Anchor for the claim prompt (碰/杠/过): centred horizontally, just above the
   // hand row. main.js calls this only as worldToScreen(0,0,5). Table-local px.
@@ -150,12 +155,16 @@ export class MahjongScene2D {
     // then bottom→top (oldest/lowest at the bottom, the block growing upward). ----
     const log = game.discardLog || [];
     const pendingIdx = ui.claimable && log.length ? log.length - 1 : -1;
+    // A bot's discard flying via the center halt is drawn as a separate fly element
+    // (below), so it's left out of the static pool until it lands.
+    const dd = this.discardDemo;
+    const demoIdx = (dd && performance.now() < dd.t0 + dd.ms) ? dd.idx : -1;
     const POOL_COLS = 5;
     const pool = document.createElement('div');
     pool.className = 'b2-pool';
     const cols = [[], [], [], []]; // 万 筒 条 字
     const colOf = (kind) => (kind < 9 ? 0 : kind < 18 ? 1 : kind < 27 ? 2 : 3);
-    log.forEach((d, i) => { if (i !== pendingIdx) cols[colOf(d.kind)].push(d); });
+    log.forEach((d, i) => { if (i !== pendingIdx && i !== demoIdx) cols[colOf(d.kind)].push(d); });
     for (const list of cols) {
       list.sort((a, b2) => a.kind - b2.kind);
       const block = document.createElement('div');
@@ -244,7 +253,38 @@ export class MahjongScene2D {
       this.oppAnchor[p] = { x: r.left + r.width / 2 - mr.left, y: r.top + r.height / 2 - mr.top };
     }
 
+    // ---- a bot's discard flying via the center halt: seat → center (hold) → pool ----
+    if (demoIdx >= 0) this._flyDiscard(log[demoIdx], dd, pool);
+
     b.classList.toggle('over', !!over);
+  }
+
+  // Build + animate the flying discard tile with CSS transitions (no rAF loop). The
+  // tick is held by main.js for dd.ms, so the next _render (which clears the board)
+  // only happens after the tile has landed.
+  _flyDiscard(d, dd, pool) {
+    const isWild = (id) => !!(this._last.game.isWild && this._last.game.isWild(id));
+    const mr = this.mount.getBoundingClientRect();
+    const start = this.oppAnchor[dd.player] || { x: mr.width / 2, y: 24 };
+    const center = { x: mr.width / 2, y: mr.height * 0.4 };
+    const pr = pool.getBoundingClientRect();
+    const end = { x: pr.left + pr.width / 2 - mr.left, y: pr.top + pr.height / 2 - mr.top };
+    const fly = faceTileEl(d.kind, { wild: isWild(d.kind) });
+    fly.className += ' b2-fly';
+    fly.style.setProperty('--tw', '40px');
+    fly.style.setProperty('--th', '54px');
+    const at = (pt, s) => `translate(${pt.x}px, ${pt.y}px) translate(-50%, -50%) scale(${s})`;
+    fly.style.transform = at(start, 0.6);
+    this.board.appendChild(fly);
+    fly.getBoundingClientRect(); // force reflow so the first transition runs
+    requestAnimationFrame(() => {        // phase 1: rise to the center halt, enlarged (~0.4s)
+      fly.style.transition = 'transform 0.4s ease-out';
+      fly.style.transform = at(center, 1.5);
+    });
+    setTimeout(() => {                    // phase 3: after the halt, drop into the pool
+      fly.style.transition = 'transform 0.32s ease-in';
+      fly.style.transform = at(end, 0.55);
+    }, dd.ms); // halt ends at dd.ms (= 0.4s rise + ~0.7s hold); drop runs into the settle window
   }
 
   _meld(m, isWild) {

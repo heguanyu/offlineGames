@@ -20,6 +20,10 @@ const AI_DELAY = FAST ? 35 : 650;
 // (+ CLAIM_SETTLE_MS). Both collapse to ~0 under ?fast=1 for tests.
 const CLAIM_DEMO_MS = FAST ? 60 : 2000;
 const CLAIM_SETTLE_MS = FAST ? 20 : 380;
+// A bot's discard flies from its hand to the center halt, holds ~1s, then drops into
+// the pool; the tick is locked for the duration. 快速模式 (fastMode) / ?fast=1 disables it.
+const DISCARD_DEMO_MS = 1100; // 0.4s rise + ~0.7s halt at the center
+const DISCARD_SETTLE_MS = 360;
 
 // Per-page config (set by each index.html before this module loads). The 无定番
 // variant uses minFan: 0 and its own storage key so the two games keep separate
@@ -42,6 +46,8 @@ let game = null, scene = null, level = LEVELS.NORMAL;
 let session = loadSession();
 let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
 let dealing = false;           // the initial-deal animation is running (input is held)
+let animating = false;         // a bot's discard fly is playing — tick + input are held
+let fastMode = localStorage.getItem(CFG.sessionKey + '-fast') === '1';
 let lockedTing = false, tingWaits = []; // once 听, the seat auto-plays (tsumogiri)
 let tingRevealIdx = -1;        // discardLog index of a 听 tsumogiri to reveal deck→center→pool
 let isPortrait = false;        // device held portrait → page force-rotated to landscape
@@ -93,8 +99,17 @@ function render() {
   // never shown in the hand; it reveals straight into the pool (see tick()).
   const tingWin = lockedTing && myTurn && game.selfDrawWin;
   const revealing = scene && scene.handDrawRevealing; // drawn tile still flying in → no selection yet
-  if (scene) scene.sync(game, { renderedHand: renderedHand(), myTurn: showSel, selRendered: showSel && !revealing ? selectable[selIndex] : null, claimable: isClaimPhase() && !lockedTing,
-    drawnTile: ((showSel || tingWin) && game.drawnTile != null) ? game.drawnTile : null,
+  // While a bot's discard fly is playing, hold the human's turn: the turn may have
+  // advanced (the human drew), but we don't reveal that draw or allow selection yet —
+  // show the pre-draw 13 tiles; the reveal plays when the tick resumes.
+  const mtSel = showSel && !animating;
+  let handForSync = renderedHand();
+  if (animating && game.drawnTile != null) {
+    const di = handForSync.lastIndexOf(game.drawnTile);
+    if (di >= 0) handForSync = handForSync.slice(0, di).concat(handForSync.slice(di + 1));
+  }
+  if (scene) scene.sync(game, { renderedHand: handForSync, myTurn: mtSel, selRendered: mtSel && !revealing ? selectable[selIndex] : null, claimable: !animating && isClaimPhase() && !lockedTing,
+    drawnTile: (!animating && (showSel || tingWin) && game.drawnTile != null) ? game.drawnTile : null,
     tingFlat: lockedTing, tingRevealDiscardIdx: tingRevealIdx, reveal: game.phase === PHASE.OVER });
   renderActions();
   positionClaimUI();
@@ -106,7 +121,7 @@ function render() {
 // The 打出 button stays in the bottom bar; 打出并听牌 floats at screen center (CSS).
 function positionClaimUI() {
   const hud = $('action-hud');
-  if (scene && isClaimPhase() && !lockedTing) {
+  if (scene && !animating && isClaimPhase() && !lockedTing) {
     // Anchor the buttons' BOTTOM just above the hand row so the 吃/碰 prompt never
     // covers the hand, in any aspect/orientation.
     const a = scene.worldToScreen(0, 0, 5.0);
@@ -117,7 +132,7 @@ function positionClaimUI() {
     hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
   }
-  showClaimArrow(scene); // points from the discarder to the centred pending tile
+  showClaimArrow(animating ? null : scene); // points from the discarder to the centred pending tile
 }
 
 // The 听 waits disclaimer floats big, just above the (flat) hand row — anchored to
@@ -177,6 +192,9 @@ function renderActions() {
     } else {
       banner.textContent = `已听 · 自动出牌（等 ${tingWaits.map(tileName).join(' ')}）`;
     }
+  } else if (animating) {
+    // a bot's discard fly is playing — hold all action UI (the 听 banner above still
+    // shows via the lockedTing branch when applicable)
   } else if (game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN) {
     const c = game.currentClaim();
     // 点炮 win — a confirm: take it (胡, showing pattern + score) or 过 to play on.
@@ -287,7 +305,15 @@ function tick() {
       if (game.selfDrawWin) { game.declareWin(); tick(); return; } // bots take their self-draw win
       const kong = chooseSelfKong(game, p, level);
       if (kong != null) { game.selfKong(p, kong); tick(); return; }
-      game.discard(p, chooseDiscard(game, p, level)); sound.discard(); tick();
+      game.discard(p, chooseDiscard(game, p, level)); sound.discard();
+      if (scene && !FAST && !fastMode) { // fly the discard to the center halt, hold, then drop to pool
+        animating = true;
+        scene.beginDiscardDemo(p, game.discardLog.length - 1, DISCARD_DEMO_MS);
+        render();                                              // place the flying tile; claim UI suppressed
+        schedule(() => { animating = false; tick(); }, DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
+        return;
+      }
+      tick();
     }, AI_DELAY);
   }
 }
@@ -295,7 +321,7 @@ function schedule(fn, delay) { clearTimeout(pendingTimer); pendingTimer = setTim
 
 // ---- human actions ----
 function onPickTile(idx) {
-  if (dealing) return;
+  if (dealing || animating) return;
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing) return;
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const id = renderedHand()[idx];
@@ -445,7 +471,7 @@ function startHand() {
 function newGame() { game = null; session = { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 }; startHand(); }
 
 $('scene').addEventListener('pointerdown', (e) => {
-  if (!scene || !gameStarted || dealing) return;
+  if (!scene || !gameStarted || dealing || animating) return;
   sound.resume();
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   const idx = scene.pick(e.clientX, e.clientY);
@@ -454,7 +480,7 @@ $('scene').addEventListener('pointerdown', (e) => {
 // PC only: hovering a hand tile selects it (same as a click-to-select). Mouse-only
 // so touch is unaffected; respects the same turn/听/draw-settle guards.
 $('scene').addEventListener('pointermove', (e) => {
-  if (e.pointerType !== 'mouse' || !scene || !gameStarted || dealing) return;
+  if (e.pointerType !== 'mouse' || !scene || !gameStarted || dealing || animating) return;
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing || scene.handDrawRevealing) return;
   const idx = scene.pick(e.clientX, e.clientY);
   if (idx == null) return;
@@ -477,7 +503,7 @@ function onAction(name) {
     else if (name === 'menu') nextHand();
     return;
   }
-  if (dealing) return; // tiles are still being served — hold gameplay input
+  if (dealing || animating) return; // serving tiles / a discard fly is playing — hold input
   if (isClaimPhase()) {
     // 点炮 win: the 胡 floats centered (not in the bar), so confirm/win takes it and
     // cancel/pass declines — no bar navigation. (Pad has no 'win' key, so A=confirm.)
@@ -550,6 +576,11 @@ function bindUI() {
   $('menu-btn').addEventListener('click', openMenu);
   const sb = $('sound-btn'); const upd = () => { sb.textContent = sound.muted ? '🔇' : '🔊'; };
   sb.addEventListener('click', () => { sound.resume(); sound.toggleMuted(); upd(); }); upd();
+  const fastChk = $('fast-mode-chk');
+  if (fastChk) {
+    fastChk.checked = fastMode;
+    fastChk.addEventListener('change', () => { fastMode = fastChk.checked; localStorage.setItem(CFG.sessionKey + '-fast', fastMode ? '1' : '0'); });
+  }
   $('resume-btn').addEventListener('click', closeOverlays);
   $('newgame-btn').addEventListener('click', () => { closeOverlays(); newGame(); });
   $('next-hand-btn').addEventListener('click', nextHand);
