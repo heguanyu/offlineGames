@@ -18,7 +18,12 @@ const WIND = ['东', '南', '西', '北'];
 
 // Pace between AI moves so the human can follow; `?fast=1` speeds it up for the
 // automated e2e test.
-const AI_DELAY = new URLSearchParams(location.search).get('fast') ? 35 : 600;
+const FAST = !!new URLSearchParams(location.search).get('fast');
+const AI_DELAY = FAST ? 35 : 600;
+// A bot's 碰/杠 is shown lifted for CLAIM_DEMO_MS; the game logic is held until the
+// meld has settled (+ CLAIM_SETTLE_MS). Both collapse to ~0 under ?fast=1 for tests.
+const CLAIM_DEMO_MS = FAST ? 60 : 2000;
+const CLAIM_SETTLE_MS = FAST ? 20 : 380;
 
 let game = null;
 let scene = null;             // MahjongScene (3D table)
@@ -211,8 +216,15 @@ function tick() {
     schedule(() => {
       const c = game.claim;
       const dec = chooseClaim(game, c.player, c, level);
-      if (dec) { game.claimDiscard(dec); if (scene) scene.beginClaimDemo(c.player); } // show the bot's 碰/杠 off
-      else game.passClaim();
+      if (dec) {
+        game.claimDiscard(dec);
+        if (scene) { // show the bot's 碰/杠 off, then HOLD all logic until it settles
+          scene.beginClaimDemo(c.player, CLAIM_DEMO_MS);
+          render();                                        // lift the meld + play the voice now
+          schedule(tick, CLAIM_DEMO_MS + CLAIM_SETTLE_MS); // pause draws/turns until the animation ends
+          return;
+        }
+      } else game.passClaim();
       tick();
     }, AI_DELAY);
     return;
@@ -675,7 +687,8 @@ bindUI();
 if (new URLSearchParams(location.search).get('fast')) {
   window.__mj = {
     humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,
-    discard: () => discardSelected(),
+    // emulate a real user: a drawn 混儿 can't be discarded, so fall back to a non-wild tile
+    discard: () => { drawnWildSelected = false; discardSelected(); },
     scene: () => scene,
     // visual check: melds for every seat + a full pool + a pending claim
     debugMelds: () => {

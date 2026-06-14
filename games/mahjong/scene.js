@@ -307,7 +307,7 @@ export class MahjongScene {
       }
       // 吃/碰/杠 demo: fly up from the seat, hold facing the camera, then settle flat.
       if (spec.claim) {
-        rec.claimSeq = { t0: spec.claim.t0, demo: spec.claim.demo,
+        rec.claimSeq = { t0: spec.claim.t0, ms: spec.claim.ms, demo: spec.claim.demo,
           from: spec.from ? spec.from.clone() : new THREE.Vector3(spec.x, spec.y, spec.z),
           rx0: spec.rx, rz0: spec.rz || 0 };
       }
@@ -409,9 +409,9 @@ export class MahjongScene {
   }
 
   // Mark a bot's just-claimed meld so the next render lifts it up facing the camera
-  // for CLAIM_DEMO_MS before it settles into the flat meld row. Call right after the
-  // claim is applied (before the sync that first renders the new meld).
-  beginClaimDemo(player) { this.claimDemo = { player, t0: performance.now() }; }
+  // for `ms` before it settles into the flat meld row. Call right after the claim is
+  // applied (before the sync that first renders the new meld).
+  beginClaimDemo(player, ms = CLAIM_DEMO_MS) { this.claimDemo = { player, t0: performance.now(), ms }; }
 
   _meldsFlat(game, seen) {
     // Each seat's exposed melds, laid flat and face-up in a row BESIDE that
@@ -436,7 +436,7 @@ export class MahjongScene {
     const kongSeen = new Set();
     // 吃/碰/杠 demo pose: the just-claimed meld lifts to a camera-facing row above
     // the claiming seat for CLAIM_DEMO_MS, then settles into the flat row.
-    const demoActive = this.claimDemo && (performance.now() - this.claimDemo.t0 < CLAIM_DEMO_MS);
+    const demoActive = this.claimDemo && (performance.now() - this.claimDemo.t0 < this.claimDemo.ms);
     const DEMO_SCALE = 1.3, DEMO_STEP = TW * DEMO_SCALE * 1.05;
     const DEMO = {
       1: { cx: 3.8, cy: 2.6, cz: 1.8 },   // 下家 (right)
@@ -466,7 +466,7 @@ export class MahjongScene {
         let claim = null;
         if (demoOn && mo.mi === lastMi) {
           const dc = DEMO[p] || DEMO[2];
-          claim = { t0: this.claimDemo.t0, demo: { x: dc.cx + (mo.j - (mo.n - 1) / 2) * DEMO_STEP, y: dc.cy, z: dc.cz, s: DEMO_SCALE, rx: this.faceCamRx } };
+          claim = { t0: this.claimDemo.t0, ms: this.claimDemo.ms, demo: { x: dc.cx + (mo.j - (mo.n - 1) / 2) * DEMO_STEP, y: dc.cy, z: dc.cz, s: DEMO_SCALE, rx: this.faceCamRx } };
         }
         this._place(`m${p}_${i}`, {
           kind: t.kind, scale: MS, from: this._seatCenter(p),
@@ -716,7 +716,7 @@ export class MahjongScene {
   // then release to normal lerp (which carries it down into the flat meld row).
   _animateClaim(rec, m) {
     const d = rec.claimSeq, t = (performance.now() - d.t0) / 1000;
-    const RISE = 0.4, HOLD_END = CLAIM_DEMO_MS / 1000;
+    const RISE = 0.4, HOLD_END = (d.ms ?? CLAIM_DEMO_MS) / 1000;
     if (t >= HOLD_END) { delete rec.claimSeq; return false; }
     const dm = d.demo;
     if (t < RISE) {

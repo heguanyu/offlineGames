@@ -13,7 +13,12 @@ const toast = makeToast();
 const HUMAN = 0;
 const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
 const WIND = ['东', '南', '西', '北'];
-const AI_DELAY = new URLSearchParams(location.search).get('fast') ? 35 : 650;
+const FAST = !!new URLSearchParams(location.search).get('fast');
+const AI_DELAY = FAST ? 35 : 650;
+// A bot's 吃/碰/杠 is shown lifted for CLAIM_DEMO_MS; logic is held until it settles
+// (+ CLAIM_SETTLE_MS). Both collapse to ~0 under ?fast=1 for tests.
+const CLAIM_DEMO_MS = FAST ? 60 : 2000;
+const CLAIM_SETTLE_MS = FAST ? 20 : 380;
 
 // Per-page config (set by each index.html before this module loads). The 无定番
 // variant uses minFan: 0 and its own storage key so the two games keep separate
@@ -238,8 +243,15 @@ function tick() {
     }
     schedule(() => {
       const dec = chooseClaim(game, c.player, c, level);
-      if (dec.take) { game.claimTake(dec.option); if (c.type !== 'win' && scene) scene.beginClaimDemo(c.player); } // show the bot's 吃/碰/杠 off
-      else game.claimPass();
+      if (dec.take) {
+        game.claimTake(dec.option);
+        if (c.type !== 'win' && scene) { // show the bot's 吃/碰/杠 off, then HOLD logic until it settles
+          scene.beginClaimDemo(c.player, CLAIM_DEMO_MS);
+          render();                                        // lift the meld + play the voice now
+          schedule(tick, CLAIM_DEMO_MS + CLAIM_SETTLE_MS); // pause draws/turns until the animation ends
+          return;
+        }
+      } else game.claimPass();
       tick();
     }, AI_DELAY);
     return;
