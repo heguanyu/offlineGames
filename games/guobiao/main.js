@@ -299,7 +299,7 @@ function selectDrawnTile() {
   if (si >= 0) selIndex = si;
   render();
 }
-function doClaimTake(opt) { if (isClaimPhase()) { game.claimTake(opt); tick(); } }
+function doClaimTake(opt) { if (isClaimPhase()) { game.claimTake(opt); selIndex = 0; tick(); } } // after 碰/吃/杠, select the first tile
 function doClaimPass() { if (isClaimPhase()) { game.claimPass(); tick(); } }
 
 // ---- result / new hand ----

@@ -25,6 +25,7 @@ let scene = null;             // MahjongScene (3D table)
 let level = LEVELS.NORMAL;
 let session = loadSession();   // { scores, dealer, prevailingWind, hand }
 let selIndex = 0;              // cursor into the human's selectable (non-wild) tiles
+let drawnWildSelected = false; // a freshly-drawn 混儿 is the lifted tile (can't discard)
 let focusIndex = 0;           // cursor into action-bar buttons (claims)
 let pendingTimer = null;
 let lastLogLen = 0;
@@ -96,12 +97,18 @@ function render() {
   if (selIndex >= selectable.length) selIndex = Math.max(0, selectable.length - 1);
   const myTurn = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
   const revealing = scene && scene.handDrawRevealing; // drawn tile still flying in → no selection yet
+  // A freshly-drawn 混儿 is still shown drawn (gap + reveal) and CAN be the lifted/
+  // highlighted tile even though it can't be discarded; picking any normal tile drops
+  // that selection back onto the non-wild cursor.
+  const rh = renderedHand();
+  const drawnWildIdx = (game.drawnTile != null && game.isWild(game.drawnTile)) ? rh.lastIndexOf(game.drawnTile) : -1;
+  const selRendered = (drawnWildSelected && drawnWildIdx >= 0) ? drawnWildIdx : selectable[selIndex];
   if (scene) scene.sync(game, {
-    renderedHand: renderedHand(),
+    renderedHand: rh,
     myTurn,
-    selRendered: myTurn && !revealing ? selectable[selIndex] : null,
+    selRendered: myTurn && !revealing ? selRendered : null,
     claimable: isClaimPhase(),
-    drawnTile: (myTurn && game.drawnTile != null && !game.isWild(game.drawnTile)) ? game.drawnTile : null,
+    drawnTile: (myTurn && game.drawnTile != null) ? game.drawnTile : null,
     reveal: game.phase === PHASE.OVER,
   });
 
@@ -245,16 +252,19 @@ function onPickTile(renderedIdx) {
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const id = renderedHand()[renderedIdx];
   if (id == null) return;
-  if (game.isWild(id)) { toast('混儿不能打出'); return; }
+  if (game.isWild(id)) { toast('混儿不能打出'); return; } // 混儿 (incl. the drawn one): complain, no action
+  const wasWildSel = drawnWildSelected;
+  drawnWildSelected = false;                  // picking a normal tile drops the drawn-混儿 selection
   const pos = selectableHandIndices().indexOf(renderedIdx);
   if (pos < 0) return;
-  if (pos === selIndex) discardSelected();   // second tap on the lifted tile confirms
+  if (pos === selIndex && !wasWildSel) discardSelected(); // second tap on the lifted tile confirms
   else { selIndex = pos; sound.select(); render(); }
 }
 
 function discardSelected() {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
+  if (drawnWildSelected) { toast('混儿不能打出'); return; } // the lifted tile is the drawn 混儿
   const hand = renderedHand();
   const sel = selectableHandIndices();
   const id = hand[sel[selIndex]];
@@ -270,10 +280,17 @@ function doDeclareWin() {
   if (game.declareWin()) tick();
 }
 // When the freshly-drawn tile finishes its reveal, auto-select it (ready to discard).
+// A drawn 混儿 is selected too (lifted/highlighted) but isn't discardable — it stays
+// flagged so confirm/tap on it just complains; picking any normal tile clears it.
 function selectDrawnTile() {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || game.drawnTile == null) return;
-  const si = selectableHandIndices().indexOf(renderedHand().lastIndexOf(game.drawnTile));
-  if (si >= 0) selIndex = si;
+  if (game.isWild(game.drawnTile)) {
+    drawnWildSelected = true;
+  } else {
+    drawnWildSelected = false;
+    const si = selectableHandIndices().indexOf(renderedHand().lastIndexOf(game.drawnTile));
+    if (si >= 0) selIndex = si;
+  }
   render();
 }
 function doSelfKong(kind) {
@@ -286,6 +303,9 @@ function doClaim(type) {
   if (!isClaimPhase()) return;
   if (!game.claim.options.includes(type)) return;
   game.claimDiscard(type);
+  // After 碰/杠 the player must discard — default-select the first non-混 tile. (A 杠's
+  // replacement draw re-fires selectDrawnTile afterwards, which overrides this.)
+  selIndex = 0; drawnWildSelected = false;
   tick();
 }
 function doPass() {
@@ -483,7 +503,7 @@ function startHand() {
     scores: session.scores,
   });
   lastLogLen = 0;
-  selIndex = 0; focusIndex = 0;
+  selIndex = 0; focusIndex = 0; drawnWildSelected = false;
   saveSession();
   tick();
 }
@@ -504,7 +524,7 @@ $('scene').addEventListener('pointermove', (e) => {
   const idx = scene.pick(e.clientX, e.clientY);
   if (idx == null) return;
   const pos = selectableHandIndices().indexOf(idx);
-  if (pos >= 0 && pos !== selIndex) { selIndex = pos; sound.select(); render(); }
+  if (pos >= 0 && (pos !== selIndex || drawnWildSelected)) { drawnWildSelected = false; selIndex = pos; sound.select(); render(); }
 });
 
 function newGame() {
@@ -550,8 +570,8 @@ function onAction(name) {
   if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) {
     const n = selectableHandIndices().length;
     if (name === 'win') doDeclareWin();
-    else if (name === 'left') { selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
-    else if (name === 'right') { selIndex = (selIndex + 1) % n; sound.select(); render(); }
+    else if (name === 'left') { drawnWildSelected = false; selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
+    else if (name === 'right') { drawnWildSelected = false; selIndex = (selIndex + 1) % n; sound.select(); render(); }
     else if (name === 'confirm') discardSelected();
     else if (name === 'kong') { const o = game.selfKongOptions(HUMAN)[0]; if (o) doSelfKong(o.kind); }
     else if (name === 'menu') openMenu();
