@@ -29,17 +29,25 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 
 #round-info b { color: var(--gold); }
 
-#scores { display: flex; gap: 6px; margin-left: auto; }
+/* Scoreboard — a square panel pinned to the top-right corner of the table, with the
+   four seats laid out as a cross that mirrors the table (对家 top, 上家 left, 下家 right,
+   玩家 bottom). Floats over the canvas/board in both the 3D and flat layouts. */
+#scores {
+  position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
+  z-index: 6; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(0, auto);
+  gap: 1px 6px; padding: 7px 9px; border-radius: 13px;
+  background: rgba(4,18,12,0.66); border: 1px solid #1c5a44; backdrop-filter: blur(3px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+}
+.sb-seat { display: flex; flex-direction: column; align-items: center; min-width: 3.4em; line-height: 1.12; }
+.sb-seat.me .sb-name { color: var(--gold); }
+.sb-name { font-size: 0.66rem; color: #9fd3bf; white-space: nowrap; }
+.sb-pt { font-size: 0.86rem; font-weight: 800; }
 
-.score-chip { font-size: 0.72rem; padding: 3px 8px; border-radius: 999px; background: #0f3d2e; border: 1px solid #1c5a44; white-space: nowrap; }
-
-.score-chip.dealer { border-color: var(--gold); box-shadow: 0 0 6px rgba(232,196,102,0.4); }
-
-.score-chip .nm { color: #9fd3bf; }
-
-.score-chip .pt { color: #fff; font-weight: 700; }
-
-.score-chip .pt.neg { color: #ef9a9a; }
+/* 快速模式 toggle in the nav bar, just left of the mute button */
+#fast-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; cursor: pointer;
+  font-size: 0.8rem; color: #cdeadd; white-space: nowrap; }
+#fast-toggle input { width: 16px; height: 16px; accent-color: var(--gold); cursor: pointer; }
 
 #menu-btn, #sound-btn { background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
 
@@ -69,9 +77,6 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 .nameplate.active { border-color: var(--gold); box-shadow: 0 0 12px rgba(232,196,102,0.5); }
 
 .nameplate .wind { color: var(--gold); font-weight: 800; }
-
-/* bot portrait emoji (matches the seat's TTS voiceline) */
-.nameplate .portrait, .b2-plate .portrait { font-size: 1.15em; line-height: 1; margin-right: 1px; }
 
 .nameplate .think { color: var(--gold); font-size: 0.7rem; animation: blink 1s infinite; }
 
@@ -212,11 +217,10 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 .panel .big-btn { margin-top: 8px; width: 100%; font-size: 1.05rem; font-weight: 800; color: #3a2a00; background: linear-gradient(#f3d785,#e3b94f); border: none; border-radius: 13px; padding: 14px; cursor: pointer; box-shadow: 0 4px 0 #b8902f; }
 
 .panel .link-btn { background: none; border: none; color: #9fd3bf; text-decoration: underline; cursor: pointer; margin-top: 12px; font-size: 0.85rem; }
-
-/* 快速模式 (skip bot-discard animation) checkbox row in the menu panel */
-.chk-row { display: flex; align-items: center; gap: 9px; justify-content: center; margin-top: 14px; cursor: pointer; color: #d7efe5; font-size: 0.95rem; }
-.chk-row input { width: 20px; height: 20px; accent-color: var(--gold); cursor: pointer; }
-.chk-row small { color: #8fb4a4; font-size: 0.74rem; }
+/* menu buttons: a bigger gap before the red 重开, and 返回大厅 as a button (not a link,
+   which would turn purple once visited) */
+.panel .big-btn.danger { background: linear-gradient(#a83232, #7e2020); color: #ffecec; box-shadow: 0 4px 0 #561414; margin-top: 26px; }
+.panel .big-btn.hub { background: linear-gradient(#1b5e45, #134836); color: #eaf6f0; box-shadow: 0 4px 0 #0c3526; margin-top: 18px; }
 
 #result-fans { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 12px 0; }
 
@@ -293,11 +297,14 @@ body.flat header {
 
 body.flat header a.back { font-size: 1.25rem; }
 
-body.flat #scores { flex-direction: column; gap: 4px; margin-left: 0; }
+/* the scoreboard floats over the board (top-right) in flat mode too — compact it a touch */
+body.flat #scores { gap: 0 4px; padding: 5px 7px; }
+body.flat .sb-name { font-size: 0.6rem; }
+body.flat .sb-pt { font-size: 0.78rem; }
 
-body.flat .score-chip { font-size: 0.64rem; text-align: center; }
-
-body.flat #sound-btn { margin-top: auto; }
+/* keep 快速 + mute + menu grouped at the bottom of the rail */
+body.flat #fast-toggle { margin-left: 0; margin-top: auto; justify-content: center; }
+body.flat #sound-btn { margin-top: 4px; }
 
 /* hide the 3D-only floating nameplates — board2d draws compact ones itself */
 body.flat .hud.plate-bottom, body.flat .hud.plate-top,

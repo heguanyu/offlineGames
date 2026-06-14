@@ -12,6 +12,8 @@ async function run(url, vp, shot, flat) {
   await page.setViewport(vp);
   page.on('pageerror', e => errors.push(url+' '+e.message));
   page.on('console', m => { if (m.type()==='error') errors.push(url+' console: '+m.text()); });
+  // fast mode is on by default now — turn it off so the discard animation runs.
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('mahjong-fast', '0'); localStorage.setItem('guobiao-fast', '0'); } catch {} });
   await page.goto(`http://localhost:${PORT}${url}`, { waitUntil: 'networkidle0' });
   await page.waitForSelector('#start-btn'); await page.click('#start-btn');
   let done = false;

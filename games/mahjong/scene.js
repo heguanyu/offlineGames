@@ -17,7 +17,7 @@ const CLAIM_DEMO_MS = 2000; // a bot's 吃/碰/杠 is held up facing the camera 
 // Center "show-off" pose (per claiming seat) where a bot's just-claimed 吃/碰/杠 — and
 // now also its discard — halts facing the camera before settling. Reused by both the
 // claim-meld lift (_meldsFlat) and the discard fly (_pool).
-const DEMO_POS = { 1: { x: 3.8, y: 2.6, z: 1.8 }, 2: { x: 0, y: 2.95, z: -2.2 }, 3: { x: -3.8, y: 2.6, z: 1.8 } };
+const DEMO_POS = { 0: { x: 0, y: 2.7, z: 1.2 }, 1: { x: 3.8, y: 2.6, z: 1.8 }, 2: { x: 0, y: 2.95, z: -2.2 }, 3: { x: -3.8, y: 2.6, z: 1.8 } };
 const DEMO_SCALE = 1.3;
 // Initial deal: one tile launches from the wall every DEAL_SERVE_MS, round-robin
 // from the dealer; each flies ~DEAL_LAND_MS (the loop's lerp) so several are in

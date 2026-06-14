@@ -5,10 +5,6 @@ import { tileFaceUrl } from './scene.js';
 
 export const $ = (id) => document.getElementById(id);
 
-// Portrait emoji per seat, matching each bot's TTS voiceline (see Sound.voiceProfiles):
-// 下家 a young lady, 对家 a young man, 上家 a mid-age man. Seat 0 (the human) has none.
-export const SEAT_PORTRAIT = ['', '👩', '🧑', '🧔'];
-
 // A DOM tile showing its real SVG face (混儿 header, result panel, 吃 buttons, …).
 // The 3D table is rendered by scene.js; these flat tiles are for the HTML overlays.
 export function faceTileEl(kind, { lg = false, wild = false } = {}) {

@@ -7,7 +7,7 @@ import { MahjongScene } from './scene.js';
 import { MahjongScene2D } from './scene2d.js';
 import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands, SEAT_PORTRAIT } from './ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands } from './ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -51,7 +51,7 @@ const CLAIM_SETTLE_MS = FAST ? 20 : 380;
 // turns the animation + lock off.
 const DISCARD_DEMO_MS = 1100; // 0.4s rise + ~0.7s halt at the center
 const DISCARD_SETTLE_MS = 360;
-let fastMode = localStorage.getItem('mahjong-fast') === '1';
+let fastMode = localStorage.getItem('mahjong-fast') !== '0'; // checked (on) by default
 
 let game = null;
 let scene = null;             // MahjongScene (3D table)
@@ -109,16 +109,7 @@ function renderHud() {
   $('round-info').innerHTML =
     `<b>${WIND[session.prevailingWind]}圈</b> · 第 ${session.hand} 局 · ` +
     `难度 <b>${LEVEL_NAMES[level]}</b>`;
-  const scoresEl = $('scores');
-  scoresEl.innerHTML = '';
-  for (let p = 0; p < 4; p++) {
-    const chip = document.createElement('div');
-    chip.className = 'score-chip' + (p === game.dealer ? ' dealer' : '');
-    const pts = game.scores[p];
-    chip.innerHTML = `<span class="nm">${SEAT_LABEL[p]}</span> ` +
-      `<span class="pt ${pts < 0 ? 'neg' : ''}">${pts >= 0 ? '+' : ''}${pts}</span>`;
-    scoresEl.appendChild(chip);
-  }
+  renderScores();
 
   // ---- the round's two 混儿 (e.g. 7万 + 8万), shown with their real faces ----
   const wc = $('wild-indicator');
@@ -128,6 +119,25 @@ function renderHud() {
 
   // ---- nameplates ----
   for (let p = 0; p < 4; p++) renderPlate(p);
+}
+
+// The top-right scoreboard: a cross mirroring the table (对家 top, 上家 left, 下家
+// right, 玩家 bottom). 庄 gets a 👑 prefix; score is green/red (no + on positives).
+const SCORE_GRID = { 0: [3, 2], 1: [2, 3], 2: [1, 2], 3: [2, 1] }; // seat → [gridRow, gridCol]
+function renderScores() {
+  const el = $('scores');
+  el.innerHTML = '';
+  for (let p = 0; p < 4; p++) {
+    const pts = game.scores[p];
+    const color = pts > 0 ? '#7ddf8a' : pts < 0 ? '#ef9a9a' : '#cfe7db';
+    const [row, col] = SCORE_GRID[p];
+    const cell = document.createElement('div');
+    cell.className = 'sb-seat' + (p === HUMAN ? ' me' : '');
+    cell.style.gridRow = row; cell.style.gridColumn = col;
+    cell.innerHTML = `<span class="sb-name">${p === game.dealer ? '👑' : ''}${SEAT_LABEL[p]}</span>` +
+      `<span class="sb-pt" style="color:${color}">${pts}</span>`;
+    el.appendChild(cell);
+  }
 }
 
 function render() {
@@ -198,7 +208,6 @@ function renderPlate(p) {
   const isDealer = p === game.dealer;
   seat.innerHTML =
     `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}${isDealer ? ' dealer' : ''}">` +
-    (SEAT_PORTRAIT[p] ? `<span class="portrait">${SEAT_PORTRAIT[p]}</span>` : '') +
     (isDealer ? '<span class="crown" title="庄家">👑</span>' : '') +
     `<span class="wind">${WIND[game.seatWind(p)]}</span>` +
     `<span>${SEAT_LABEL[p]}</span>` +
@@ -295,7 +304,7 @@ function tick() {
       const dt = chooseDiscard(game, p, level);
       game.discard(p, dt);
       sound.discard();
-      sound.say(tileName(dt), p); // speak the discarded tile in the bot's voice
+      if (!fastMode) sound.say(tileName(dt), p); // speak the discarded tile in the bot's voice (not in fast mode)
       if (scene && !FAST && !fastMode) { // fly the discard to the center halt, hold, then drop to pool
         animating = true;
         scene.beginDiscardDemo(p, game.discardLog.length - 1, DISCARD_DEMO_MS);
@@ -349,8 +358,15 @@ function discardSelected() {
   if (id == null || game.isWild(id)) return;
   game.discard(HUMAN, id);
   sound.discard();
-  sound.say(tileName(id), HUMAN); // speak the discarded tile in the player's voice
   selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
+  if (scene && !FAST && !fastMode) { // the player's discard flies + halts too, holding the tick before bots act
+    sound.say(tileName(id), HUMAN);
+    animating = true;
+    scene.beginDiscardDemo(HUMAN, game.discardLog.length - 1, DISCARD_DEMO_MS);
+    render();
+    schedule(() => { animating = false; tick(); }, DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
+    return;
+  }
   tick();
 }
 
@@ -751,6 +767,7 @@ function bindUI() {
   $('newgame-btn').addEventListener('click', () => { closeOverlays(); newGame(); });
   $('next-hand-btn').addEventListener('click', nextHand);
   $('back-hub-btn').addEventListener('click', returnHub);
+  $('menu-hub-btn').addEventListener('click', returnHub);
   fillRules();
 }
 

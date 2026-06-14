@@ -7,7 +7,7 @@ import { MahjongScene } from '../mahjong/scene.js';
 import { MahjongScene2D } from '../mahjong/scene2d.js';
 import { Sound } from '../mahjong/sound.js';
 import { buildOrder } from '../mahjong/handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands, SEAT_PORTRAIT } from '../mahjong/ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands } from '../mahjong/ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -47,7 +47,7 @@ let session = loadSession();
 let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
 let dealing = false;           // the initial-deal animation is running (input is held)
 let animating = false;         // a bot's discard fly is playing — tick + input are held
-let fastMode = localStorage.getItem(CFG.sessionKey + '-fast') === '1';
+let fastMode = localStorage.getItem(CFG.sessionKey + '-fast') !== '0'; // checked (on) by default
 let lockedTing = false, tingWaits = []; // once 听, the seat auto-plays (tsumogiri)
 let tingRevealIdx = -1;        // discardLog index of a 听 tsumogiri to reveal deck→center→pool
 let isPortrait = false;        // device held portrait → page force-rotated to landscape
@@ -76,16 +76,27 @@ function selectableHandIndices() { return renderedHand().map((_, i) => i); }
 function renderHud() {
   const minTxt = CFG.minFan > 0 ? `起和 ${CFG.minFan}番` : '无定番';
   $('round-info').innerHTML = `<b>${WIND[session.roundWind]}圈</b> · 第 ${session.hand} 局 · 难度 <b>${LEVEL_NAMES[level]}</b> · ${minTxt}`;
-  const scoresEl = $('scores'); scoresEl.innerHTML = '';
-  for (let p = 0; p < 4; p++) {
-    const chip = document.createElement('div');
-    chip.className = 'score-chip' + (p === game.dealer ? ' dealer' : '');
-    const pts = game.scores[p];
-    chip.innerHTML = `<span class="nm">${SEAT_LABEL[p]}</span> <span class="pt ${pts < 0 ? 'neg' : ''}">${pts >= 0 ? '+' : ''}${pts}</span>`;
-    scoresEl.appendChild(chip);
-  }
+  renderScores();
   $('wall-count').textContent = `余 ${game.wall.length} 张`;
   for (let p = 0; p < 4; p++) renderPlate(p);
+}
+
+// Top-right scoreboard: a cross mirroring the table (对家 top, 上家 left, 下家 right,
+// 玩家 bottom). 庄 gets 👑; score green/red, no + on positives.
+const SCORE_GRID = { 0: [3, 2], 1: [2, 3], 2: [1, 2], 3: [2, 1] };
+function renderScores() {
+  const el = $('scores'); el.innerHTML = '';
+  for (let p = 0; p < 4; p++) {
+    const pts = game.scores[p];
+    const color = pts > 0 ? '#7ddf8a' : pts < 0 ? '#ef9a9a' : '#cfe7db';
+    const [row, col] = SCORE_GRID[p];
+    const cell = document.createElement('div');
+    cell.className = 'sb-seat' + (p === HUMAN ? ' me' : '');
+    cell.style.gridRow = row; cell.style.gridColumn = col;
+    cell.innerHTML = `<span class="sb-name">${p === game.dealer ? '👑' : ''}${SEAT_LABEL[p]}</span>` +
+      `<span class="sb-pt" style="color:${color}">${pts}</span>`;
+    el.appendChild(cell);
+  }
 }
 
 function render() {
@@ -157,7 +168,6 @@ function renderPlate(p) {
   const listen = p === HUMAN && (lockedTing || game.tenpaiInfo(p).tenpai);
   seat.innerHTML =
     `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}">` +
-    (SEAT_PORTRAIT[p] ? `<span class="portrait">${SEAT_PORTRAIT[p]}</span>` : '') +
     `<span class="wind">${WIND[game.seatWind(p)]}</span><span>${SEAT_LABEL[p]}</span>` +
     (p === game.dealer ? '<span class="dealer-dot" title="庄"></span>' : '') +
     (listen ? '<span class="listen">听</span>' : '') +
@@ -271,7 +281,7 @@ function tick() {
   if (lockedTing && game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN
       && game.drawnTile != null && !game.selfDrawWin) {
     const dt = game.drawnTile;
-    game.discard(HUMAN, dt); sound.discard(); sound.say(tileName(dt), HUMAN);
+    game.discard(HUMAN, dt); sound.discard(); if (!fastMode) sound.say(tileName(dt), HUMAN);
     tingRevealIdx = game.discardLog.length - 1;
     render();
     tingRevealIdx = -1;
@@ -315,7 +325,7 @@ function tick() {
       const kong = chooseSelfKong(game, p, level);
       if (kong != null) { game.selfKong(p, kong); tick(); return; }
       const dt = chooseDiscard(game, p, level);
-      game.discard(p, dt); sound.discard(); sound.say(tileName(dt), p); // speak the tile in the bot's voice
+      game.discard(p, dt); sound.discard(); if (!fastMode) sound.say(tileName(dt), p); // speak the tile in the bot's voice (not in fast mode)
       if (scene && !FAST && !fastMode) { // fly the discard to the center halt, hold, then drop to pool
         animating = true;
         scene.beginDiscardDemo(p, game.discardLog.length - 1, DISCARD_DEMO_MS);
@@ -354,9 +364,20 @@ function discardSelected(declare) {
     waits = game.handWaits(rest, HUMAN);
     if (!waits.length) declare = false; // safety: not actually 听 → plain discard
   }
-  game.discard(HUMAN, id); sound.discard(); sound.say(tileName(id), HUMAN); // speak the tile in the player's voice
+  game.discard(HUMAN, id); sound.discard();
   selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
   if (declare) { lockedTing = true; tingWaits = waits; toast('听！自动出牌', true); sound.startMusic(); }
+  // the player's discard flies + halts too (holds the tick before bots act), unless 听
+  // (autopilot has its own reveal) or fast mode.
+  if (scene && !FAST && !fastMode && !declare) {
+    sound.say(tileName(id), HUMAN);
+    animating = true;
+    scene.beginDiscardDemo(HUMAN, game.discardLog.length - 1, DISCARD_DEMO_MS);
+    render();
+    schedule(() => { animating = false; tick(); }, DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
+    return;
+  }
+  if (!fastMode) sound.say(tileName(id), HUMAN);
   tick();
 }
 function doDeclareWin() { if (scene && scene.handDrawRevealing) return; if (game.declareWin()) tick(); }
@@ -595,6 +616,7 @@ function bindUI() {
   $('newgame-btn').addEventListener('click', () => { closeOverlays(); newGame(); });
   $('next-hand-btn').addEventListener('click', nextHand);
   $('back-hub-btn').addEventListener('click', returnHub);
+  $('menu-hub-btn').addEventListener('click', returnHub);
   fillRules();
 }
 

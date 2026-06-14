@@ -59,14 +59,14 @@ try {
   if (handsResolved === 0) throw new Error('no hand resolved within timeout');
 
   // After scores have accrued, the menu's 重开 must reset them to zero.
-  const before = await page.$$eval('#scores .pt', (els) => els.map((e) => e.textContent.trim()));
-  if (!before.some((s) => s !== '+0' && s !== '0')) throw new Error('expected non-zero scores before restart');
+  const before = await page.$$eval('#scores .sb-pt', (els) => els.map((e) => e.textContent.trim()));
+  if (!before.some((s) => s !== '0')) throw new Error('expected non-zero scores before restart');
   await page.click('#menu-btn');
   await page.waitForFunction(() => !document.getElementById('menu-overlay').classList.contains('hidden'));
   await page.click('#newgame-btn');
   await page.waitForFunction(() => (window.__mj && window.__mj.humanTurn()) || document.querySelector('#action-bar .act-btn'), { timeout: 8000 });
-  const after = await page.$$eval('#scores .pt', (els) => els.map((e) => e.textContent.trim()));
-  if (!after.every((s) => s === '+0')) throw new Error(`重开 did not reset scores: ${after.join(', ')}`);
+  const after = await page.$$eval('#scores .sb-pt', (els) => els.map((e) => e.textContent.trim()));
+  if (!after.every((s) => s === '0')) throw new Error(`重开 did not reset scores: ${after.join(', ')}`);
   console.log('restart reset scores:', before.join(','), '→', after.join(','));
 
   if (errors.length) throw new Error('runtime errors:\n  ' + errors.join('\n  '));

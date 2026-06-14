@@ -16,11 +16,13 @@ export class Sound {
     // 下家 a young lady (high pitch), 对家 a young man (mid), 上家 a mid-age man (low).
     // A matching named voice is used when the platform has more than one zh voice;
     // pitch/rate carry the differentiation otherwise. Indexed by seat 0..3.
+    // Pitches are pushed toward the 0..2 extremes so the three bots are clearly
+    // distinct even when the device has only one zh voice.
     this.voiceProfiles = [
-      { pitch: 1.0, rate: 1.0, gender: 'any' },     // 0 玩家
-      { pitch: 1.55, rate: 1.08, gender: 'female' }, // 1 下家 — young lady
-      { pitch: 1.02, rate: 1.0, gender: 'male' },     // 2 对家 — young man
-      { pitch: 0.7, rate: 0.92, gender: 'male' },     // 3 上家 — mid-age man
+      { pitch: 1.0, rate: 1.0, gender: 'any' },      // 0 玩家 — neutral
+      { pitch: 1.9, rate: 1.12, gender: 'female' },  // 1 下家 — young lady (very high, brisk)
+      { pitch: 1.25, rate: 1.0, gender: 'male' },    // 2 对家 — young man (clearly above neutral)
+      { pitch: 0.5, rate: 0.85, gender: 'male' },    // 3 上家 — mid-age man (deep, slow)
     ];
     this._zhVoices = [];
     const synth = window.speechSynthesis;
