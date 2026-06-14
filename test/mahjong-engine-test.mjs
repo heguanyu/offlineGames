@@ -126,27 +126,38 @@ r = analyzeWin(plain, [], { wilds: [27, 28], winningKind: S(5), tianOrDi: true, 
 eq(r.score, 28, '天和 = 28 (flat max)');
 ok(r.fans.includes('天和'), '天和 labelled');
 
-// A drawn 混儿 standing as the 5万 (4万/6万 natural) wins as plain 捉五 = 3 — a drawn
-// 混儿 is never 混吊.
+// A drawn 混儿 as the 5万 with 4万/6万 natural — NO standing 混儿 in the run — wins as
+// plain 捉五 = 3 (no 混吊 nor 双混吊: the only 混儿 is the drawn winning tile).
 const zw0 = [M(4), 27, M(6), P(1), P(2), P(3), 31, 31, 31, 32, 32, 32, S(9), S(9)];
 r = analyzeWin(zw0, [], { wilds: [27, 28], winningKind: 27 });
-ok(r && r.meta.zhuoWu && !r.meta.hunDiao && !r.meta.shuangHun, '捉五 only (drawn 混儿 as 5万 is not 混吊)');
-eq(r.score, 3, '捉五(3), no 混吊');
+ok(r && r.meta.zhuoWu && !r.meta.hunDiao && !r.meta.shuangHun, '捉五 only (drawn 混儿 as 5万, no standing 混儿)');
+eq(r.score, 3, '捉五(3), no 双混');
 
-// 捉五 won on a drawn 混儿 as the 5万 with the 4万 also a 混儿. Still plain 捉五 = 3: a
-// drawn 混儿 never adds 混吊, and the standing 混儿 here is closed by a drawn (not
-// natural) tile, so it doesn't count either.
+// 捉五 with the 4万 a STANDING 混儿 and the drawn 混儿 as the 5万 (6万 natural): only ONE
+// standing 混儿 sits in the run, and 双混吊 needs TWO, so the lone 混儿 earns no wait fan →
+// plain 捉五 = 3.
 const sszw = [M(6), 27, 28, P(1), P(2), P(3), 31, 31, 31, 32, 32, 32, S(9), S(9)];
 r = analyzeWin(sszw, [], { wilds: [27, 28], winningKind: 28 });
-ok(r && r.meta.zhuoWu && !r.meta.hunDiao && !r.meta.shuangHun, '捉五 only (drawn 混儿 5万, standing 混儿 not closed by a natural tile)');
-eq(r.score, 3, '捉五(3), no 混吊');
+ok(r && r.meta.zhuoWu && !r.meta.hunDiao && !r.meta.shuangHun, '捉五 only (one standing 混儿 in the run is not 双混)');
+eq(r.score, 3, '捉五(3), no 双混');
 
-// 捉五 won on a drawn 混儿 as the 5万 in an all-混儿 run (three 混儿 as 4-5-6万). Plain
-// 捉五 = 3.
+// 双混捉五: a drawn 混儿 as the 5万 closes an all-混儿 4-5-6万 run whose other two 混儿 are
+// STANDING — that two-混儿 meld is a genuine 双混吊 wait, completed by the drawn tile exactly
+// as a natural tile closing two standing 混儿 (cf. twoWildMeld above). 捉五(3) × 双混吊(2) = 6.
 const sszw2 = [27, 28, 27, P(1), P(2), P(3), 31, 31, 31, 32, 32, 32, S(9), S(9)];
 r = analyzeWin(sszw2, [], { wilds: [27, 28], winningKind: 28 });
-ok(r && r.meta.zhuoWu && !r.meta.hunDiao, '捉五 only (all-混儿 run, drawn 混儿 as 5万)');
-eq(r.score, 3, '捉五(3), no 混吊');
+ok(r && r.meta.zhuoWu && r.meta.shuangHun, '双混捉五 (all-混儿 4-5-6万: two standing 混儿 closed by the drawn 混儿 5万)');
+eq(r.score, 6, '捉五(3) × 双混吊(2) = 6');
+
+// Reported hand (was mis-scored as plain 捉五 = 3): a 北 kong + 2条 pung + 2万 将, holding
+// 5万, 6万 and FOUR 混儿. The best reading splits the man tiles into [混,5万,6万] (混 = 4万)
+// plus an all-混儿 4-5-6万 whose two STANDING 混儿 + the drawn 混儿 (the 5万) are the 双混吊
+// wait → 双混捉五 = 6, NOT plain 捉五.
+const reported = [M(5), M(6), M(2), M(2), S(2), S(2), S(2), P(1), P(1), P(2), P(2)];
+const reportedKong = [{ type: 'kong', kind: 30, tiles: [30, 30, 30, 30], concealed: true }];
+r = analyzeWin(reported, reportedKong, { wilds: [P(1), P(2)], winningKind: P(1) });
+ok(r && r.meta.zhuoWu && r.meta.shuangHun, '双混捉五 across a [混,5万,6万] + all-混儿 4-5-6万 split (reported hand)');
+eq(r.score, 6, '捉五(3) × 双混吊(2) = 6 (reported hand)');
 
 // 捉五 where the winning 混儿 must stand as the 5万 in a 4-5-6万 run while the natural
 // 5,6,7万 form a SECOND run: 混,4万,5万,6万,7万,123条,123筒,东东 + drawn 混. The solver

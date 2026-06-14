@@ -285,12 +285,15 @@ function scoreFromDecomp(decomp, ctx) {
     if (suitHasDragon(seqStartsBySuit, s)) { long = true; longSuit = s; if (s === wildSuit) benHunLong = true; }
   }
 
-  // 混吊 / 双混吊 (×2) — a held 混儿 (or two) that completes the hand no matter what tile
-  // arrives. It is credited only to STANDING (hand-row) 混儿: 混吊 = the 将 (pair) is the
-  // 单吊 wait carrying a 混儿; 双混吊 = a MELD carries two 混儿 and is closed by the winning
-  // tile. The winning group must be all-but-one 混儿 (jokers ≥ size−1): a pair (size 2)
-  // needs ≥1 标 → 混吊; a meld (size 3) needs ≥2 → 双混吊. A freshly-DRAWN 混儿 landing in
-  // a meld is never credited — it may still win as plain 捉五 / 龙.
+  // 混吊 / 双混吊 (×2) — STANDING (hand-row) 混儿 that complete the hand no matter what
+  // tile arrives: 混吊 = the 将 (pair) is the 单吊 wait carrying a 混儿; 双混吊 = a MELD
+  // carries two 混儿, closed by the winning tile. With a NATURAL winning tile the closed
+  // group is all-but-one 混儿 (jokers ≥ size−1): a pair (size 2) needs ≥1 → 混吊, a meld
+  // (size 3) needs ≥2 → 双混吊. When the winning tile is itself a 混儿 it fills one slot,
+  // so the STANDING 混儿 must make up the rest (jokers ≥ size): a 将 of two 混儿 → 混吊, an
+  // all-混儿 meld (two standing + the drawn) → 双混吊 (e.g. an all-混儿 4-5-6万 = 双混捉五).
+  // A lone 混儿 drawn into a meld with no standing-混儿 partner earns nothing — it may
+  // still win as plain 捉五 / 龙.
   let wildCompleted = false, shuangHun = false, hunDiao = false, winPair = false, winGroup = null;
   if (!winIsWild) {
     // Only groups that use the natural winning tile in a real slot count — a run
@@ -305,13 +308,20 @@ function scoreFromDecomp(decomp, ctx) {
     hunDiao = wildCompleted && winPair;   // 混吊 — the 将 carries the 混儿 wait
     shuangHun = wildCompleted && !winPair; // 双混吊 — a meld carries two 混儿
   } else {
-    // The winning tile is itself a 混儿. It is credited ONLY when it closes a 单吊将
-    // (将 single-wait): the 将 is a pair holding a STANDING 混儿 — the 混吊 wait — plus
-    // the drawn 混儿 (a pair of two 混儿) → still 混吊 (×2). A drawn 混儿 landing in a MELD
-    // (even an all-混儿 4-5-6万 run) is never credited per the drawn-混儿 rule, so such a
-    // meld is scored as its plain 捉五 / 龙 reading. Only the 将 single-wait earns the bonus.
-    winGroup = decomp.find((g) => g.type === 'pair' && g.jokers >= 2) || null;
-    wildCompleted = hunDiao = winPair = !!winGroup;
+    // The winning tile is itself a 混儿. It fills one slot of its group, so a STANDING-
+    // 混儿 wait needs jokers ≥ size (the drawn 混儿 + the standing ones fill the group):
+    //   • 混吊  — a 单吊将 (pair, size 2) of two 混儿: one STANDING 混儿 (the 混吊 wait)
+    //     paired by the drawn 混儿.
+    //   • 双混吊 — an all-混儿 MELD (size 3): two STANDING 混儿 (the 双混 wait) closed by
+    //     the drawn 混儿 as its 3rd tile (e.g. the 5万 of an all-混儿 4-5-6万 → 双混捉五).
+    // A meld with only ONE standing 混儿 (2 jokers + a natural) has no standing-混儿 wait,
+    // so it earns no fan and still scores plain 捉五 / 龙.
+    const cand = decomp.filter((g) => g.jokers >= groupSize(g));
+    winGroup = cand.find((g) => g.type !== 'pair') || cand[0] || null; // prefer 双混 on a tie
+    wildCompleted = !!winGroup;
+    winPair = !!(winGroup && winGroup.type === 'pair');
+    hunDiao = wildCompleted && winPair;   // 混吊 — the 将 carries the 混儿 wait
+    shuangHun = wildCompleted && !winPair; // 双混吊 — a meld carries two 混儿
   }
 
   // --- combine: additive base term (捉五 / 龙), then ×2 fans ---
