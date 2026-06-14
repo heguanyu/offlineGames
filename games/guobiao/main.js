@@ -302,29 +302,35 @@ function doClaimTake(opt) { if (isClaimPhase()) { game.claimTake(opt); tick(); }
 function doClaimPass() { if (isClaimPhase()) { game.claimPass(); tick(); } }
 
 // ---- result / new hand ----
-// 得分明细 for the result panel: every seat's net (本局得分), then the human's net vs
-// each opponent with the reason (自摸 / 点炮 / 底). Mirrors 天津's two-section layout.
+// 得分明细 for the result panel: every seat's net (本局得分) laid out as a 3×3 grid
+// mirroring the table (对家 top, 上家 left, 下家 right, 玩家 bottom), then the human's net vs
+// each opponent with the reason (自摸 / 点炮 / 底) as a subitem. Mirrors 天津's layout.
 function breakdownHtml(r) {
   const me = HUMAN;
   const col = (v) => (v > 0 ? '#7ddf8a' : v < 0 ? '#ef9a9a' : '#cfe7db');
   const sgn = (v) => (v > 0 ? '+' : '') + v;
-  const all = [0, 1, 2, 3].map((p) =>
-    `<span class="bd-all-seat">${SEAT_LABEL[p]} <b style="color:${col(r.payments[p])}">${sgn(r.payments[p])}</b></span>`
-  ).join('');
+  // overall — 3×3 grid placing each seat where it sits at the table
+  const GRID = { 0: [3, 2], 1: [2, 3], 2: [1, 2], 3: [2, 1] };
+  const all = [0, 1, 2, 3].map((p) => {
+    const [row, c] = GRID[p];
+    return `<span class="bd-all-seat${p === me ? ' me' : ''}" style="grid-row:${row};grid-column:${c}">` +
+      `${SEAT_LABEL[p]} <b style="color:${col(r.payments[p])}">${sgn(r.payments[p])}</b></span>`;
+  }).join('');
   const discarder = (r.byDiscard && game.lastDiscard) ? game.lastDiscard.player : -1;
-  const rows = [1, 2, 3].map((off) => {
+  const grps = [1, 2, 3].map((off) => {
     const q = (me + off) % 4;
     let net = 0, why = '—';
     if (r.winner === me) { net = -r.payments[q]; why = !r.byDiscard ? '自摸' : q === discarder ? '点炮' : '底'; }
     else if (q === r.winner) { net = r.payments[me]; why = !r.byDiscard ? '自摸' : discarder === me ? '点炮' : '底'; }
-    return `<div class="bd-row"><span class="bd-seat">${SEAT_LABEL[q]}</span>` +
-      `<span class="bd-net" style="color:${col(net)}">${sgn(net)}</span>` +
-      `<span class="bd-why">${why}</span></div>`;
+    const sub = `<div class="bd-sub"><span>${net ? why : '—'}</span>` +
+      `<span class="s-net" style="color:${col(net)}">${net ? sgn(net) : '—'}</span></div>`;
+    return `<div class="bd-grp"><div class="bd-row"><span class="bd-seat">${SEAT_LABEL[q]}</span>` +
+      `<span class="bd-net" style="color:${col(net)}">${sgn(net)}</span></div>${sub}</div>`;
   });
   const total = r.payments[me];
   return `<div class="bd-title">本局得分</div><div class="bd-all">${all}</div>` +
     `<div class="bd-title">玩家明细 · <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${col(total)}">${sgn(total)}</span></div>` +
-    rows.join('');
+    grps.join('');
 }
 
 function showResult() {

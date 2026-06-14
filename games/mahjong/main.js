@@ -380,40 +380,56 @@ function showResult() {
   ov.classList.remove('hidden');
 }
 
-// 得分明细 for the result panel. First the overall result — every seat's net for the
-// hand — then the human's own breakdown: net vs each opponent with the 胡/杠 reason and a
+// 得分明细 for the result panel. First the overall result — every seat's net laid out as
+// a 3×3 grid mirroring the table (对家 top, 上家 left, 下家 right, 玩家 bottom) — then the
+// human's own breakdown: net vs each opponent with 胡 / 明杠 / 暗杠 / 金杠 as subitems and a
 // 庄x2 tag where the flow is to/from the 庄家. Mirrors _settle + _settleKongs (庄家加倍).
 function breakdownHtml(r) {
   const me = HUMAN, dealer = game.dealer, dd = game.dealerDouble;
   const winner = r.type === 'win' ? r.winner : -1;
   const score = r.score || 0;
-  const K = r.kongPts ||
-    game.melds.map((ms) => ms.reduce((s, m) => s + (m.type === 'kong' ? (game.isWild(m.kind) ? 4 : m.concealed ? 2 : 1) : 0), 0));
   const col = (v) => (v > 0 ? '#7ddf8a' : v < 0 ? '#ef9a9a' : '#cfe7db');
   const sgn = (v) => (v > 0 ? '+' : '') + v;
-  // overall — every seat's net for the hand
-  const all = [0, 1, 2, 3].map((p) =>
-    `<span class="bd-all-seat">${p === dealer ? '👑' : ''}${SEAT_LABEL[p]} <b style="color:${col(r.payments[p])}">${sgn(r.payments[p])}</b></span>`
-  ).join('');
-  // your breakdown — net vs each opponent + the 胡/杠 reason
+  // per-seat kong points split by type (明杠 / 暗杠 / 金杠) from the just-finished melds
+  const kt = (p) => {
+    let open = 0, conc = 0, gold = 0;
+    for (const m of game.melds[p]) {
+      if (m.type !== 'kong') continue;
+      if (game.isWild(m.kind)) gold += 4; else if (m.concealed) conc += 2; else open += 1;
+    }
+    return { open, conc, gold };
+  };
+  const KT = [0, 1, 2, 3].map(kt);
+  // overall — 3×3 grid placing each seat where it sits at the table
+  const GRID = { 0: [3, 2], 1: [2, 3], 2: [1, 2], 3: [2, 1] };
+  const all = [0, 1, 2, 3].map((p) => {
+    const [row, c] = GRID[p];
+    return `<span class="bd-all-seat${p === me ? ' me' : ''}" style="grid-row:${row};grid-column:${c}">` +
+      `${p === dealer ? '👑' : ''}${SEAT_LABEL[p]} <b style="color:${col(r.payments[p])}">${sgn(r.payments[p])}</b></span>`;
+  }).join('');
+  // your breakdown — net vs each opponent, with the 胡/杠 reasons as subitems
   const dbl = (q) => (dd && (me === dealer || q === dealer)) ? 2 : 1;
   let total = 0;
-  const rows = [1, 2, 3].map((off) => {
-    const q = (me + off) % 4;
-    const hu = winner === me ? score * dbl(q) : winner === q ? -score * dbl(q) : 0;
-    const kong = (K[me] - K[q]) * dbl(q);
-    const net = hu + kong; total += net;
-    const why = [];
-    if (hu) why.push(`胡 ${sgn(hu)}`);
-    if (kong) why.push(`杠 ${sgn(kong)}`);
-    const tag = dbl(q) === 2 ? ' <span class="dbl">庄x2</span>' : '';
-    return `<div class="bd-row"><span class="bd-seat">${q === dealer ? '👑 ' : ''}${SEAT_LABEL[q]}</span>` +
-      `<span class="bd-net" style="color:${col(net)}">${sgn(net)}</span>` +
-      `<span class="bd-why">${why.join('　') || '—'}${tag}</span></div>`;
+  const grps = [1, 2, 3].map((off) => {
+    const q = (me + off) % 4, f = dbl(q);
+    const km = KT[me], kq = KT[q];
+    const subs = [];
+    const hu = winner === me ? score * f : winner === q ? -score * f : 0;
+    if (hu) subs.push(['胡', hu]);
+    const open = (km.open - kq.open) * f; if (open) subs.push(['明杠', open]);
+    const conc = (km.conc - kq.conc) * f; if (conc) subs.push(['暗杠', conc]);
+    const gold = (km.gold - kq.gold) * f; if (gold) subs.push(['金杠', gold]);
+    const net = subs.reduce((s, [, v]) => s + v, 0); total += net;
+    const tag = f === 2 ? ' <span class="dbl">庄x2</span>' : '';
+    const subHtml = (subs.length ? subs : [['—', 0]]).map(([w, v]) =>
+      `<div class="bd-sub"><span>${w}</span><span class="s-net" style="color:${col(v)}">${v ? sgn(v) : '—'}</span></div>`
+    ).join('');
+    return `<div class="bd-grp"><div class="bd-row"><span class="bd-seat">${q === dealer ? '👑 ' : ''}${SEAT_LABEL[q]}${tag}</span>` +
+      `<span class="bd-net" style="color:${col(net)}">${sgn(net)}</span></div>${subHtml}</div>`;
   });
   return `<div class="bd-title">本局得分</div><div class="bd-all">${all}</div>` +
     `<div class="bd-title">玩家明细 · <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${col(total)}">${sgn(total)}</span></div>` +
-    rows.join('');
+    grps.join('');
 }
 
 function nextHand() {
