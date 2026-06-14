@@ -19,6 +19,7 @@ const CLAIM_DEMO_MS = 2000; // a bot's 吃/碰/杠 is held up facing the camera 
 // claim-meld lift (_meldsFlat) and the discard fly (_pool).
 const DEMO_POS = { 0: { x: 0, y: 2.7, z: 1.2 }, 1: { x: 3.8, y: 2.6, z: 1.8 }, 2: { x: 0, y: 2.95, z: -2.2 }, 3: { x: -3.8, y: 2.6, z: 1.8 } };
 const DEMO_SCALE = 1.3;
+const DISCARD_DROP_MS = 180; // a discard's fall from the center halt into the pool
 // Initial deal: one tile launches from the wall every DEAL_SERVE_MS, round-robin
 // from the dealer; each flies ~DEAL_LAND_MS (the loop's lerp) so several are in
 // transit at once. The onLand callback fires DEAL_LAND_MS after a human tile is
@@ -258,6 +259,29 @@ export class MahjongScene {
     const felt = new THREE.Mesh(new THREE.BoxGeometry(FELT, 0.5, FELT),
       new THREE.MeshStandardMaterial({ map: this._feltTexture(), color: 0x178a63, roughness: 0.96 }));
     felt.position.y = -0.26; felt.receiveShadow = true; this.scene.add(felt);
+    this._turnRing();
+  }
+  // A single glowing quarter-ring laid on the felt's drawn circle, centered at the table
+  // origin. It rotates (in-plane) to face whichever seat's turn it is and pulses; hidden
+  // when no seat is active. See _setTurnRing (sets the target seat) + the render loop.
+  _turnRing() {
+    const R = 4.875;                                   // matches the felt-texture ring
+    const geo = new THREE.RingGeometry(R - 0.18, R + 0.18, 40, 1, -Math.PI / 4, Math.PI / 2); // quarter centered on +X
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.turnRing = new THREE.Mesh(geo, mat);
+    this.turnRing.rotation.set(-Math.PI / 2, 0, 0); // lie flat; rotation.z (3rd Euler) spins it in-plane
+    this.turnRing.position.y = 0.03;
+    this.turnRing.visible = false;
+    this.scene.add(this.turnRing);
+    // in-plane spin centering the quarter on each seat (+X 下家, -Z 对家, -X 上家, +Z 玩家)
+    this._turnSpin = { 0: -Math.PI / 2, 1: 0, 2: Math.PI / 2, 3: Math.PI };
+    this._turnRingActive = -1;
+  }
+  // Aim the ring at seat `p` (p < 0 → hide it, e.g. game over).
+  _setTurnRing(p) {
+    this._turnRingActive = p;
+    if (this.turnRing) this.turnRing.visible = p >= 0;
   }
   _feltTexture() {
     const c = document.createElement('canvas'); c.width = c.height = 256;
@@ -329,7 +353,7 @@ export class MahjongScene {
       // Bot-discard demo: fly from the seat up to the same center halt, hold, then
       // release to lerp down into the pool slot (rec.tp). Same rise/hold/release shape.
       if (spec.discard) {
-        rec.discardSeq = { t0: spec.discard.t0, ms: spec.discard.ms, demo: spec.discard.demo,
+        rec.discardSeq = { t0: spec.discard.t0, ms: spec.discard.ms, demo: spec.discard.demo, drop: DISCARD_DROP_MS,
           from: spec.from ? spec.from.clone() : new THREE.Vector3(spec.x, spec.y, spec.z),
           rx0: spec.rx, rz0: spec.rz || 0 };
       }
@@ -364,6 +388,7 @@ export class MahjongScene {
     if (this.deal) return; // the initial-deal animation owns the table until it hands off
     this.pickables = [];
     this.selKey = null;
+    this._setTurnRing(ui.reveal ? -1 : game.turn); // glow the current seat's quarter of the ring
     this.claimable = !!ui.claimable; // only enlarge the pending tile if YOU can claim
     const seen = new Set();
     const HUMAN = 0;
@@ -685,28 +710,6 @@ export class MahjongScene {
     return { x: (v.x * 0.5 + 0.5) * this.canvas.clientWidth, y: (-v.y * 0.5 + 0.5) * this.canvas.clientHeight };
   }
 
-  // Screen geometry (canvas-local CSS px) for the "where did this claimed tile
-  // come from" arrow: the discarder's seat anchor, the centred pending tile, and
-  // the tile's on-screen bounding box. null when no claim tile is showing. The
-  // tile faces the camera (tilted by faceCamRx about x), so its up vector is
-  // (0, cos, sin) and its width stays along world x.
-  claimArrowGeometry() {
-    const pc = this.pendingClaim;
-    if (!pc) return null;
-    const c = pc.pos, seat = this._seatCenter(pc.player);
-    const center = this.worldToScreen(c.x, c.y, c.z);
-    const from = this.worldToScreen(seat.x, seat.y, seat.z);
-    const hw = 0.5 * pc.scale * TW, hh = 0.5 * pc.scale * TH;
-    const uy = Math.cos(this.faceCamRx), uz = Math.sin(this.faceCamRx);
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
-      const s = this.worldToScreen(c.x + sx * hw, c.y + sy * hh * uy, c.z + sy * hh * uz);
-      minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x);
-      minY = Math.min(minY, s.y); maxY = Math.max(maxY, s.y);
-    }
-    return { from, center, player: pc.player, box: { minX, minY, maxX, maxY } };
-  }
-
   // The face-down deck wall: a 2-layer ring of backs around the pool that depletes
   // as the live wall is drawn down. Sets this.deckPos = the current draw point (in
   // front, where new draws fly from). Rendered before the hands so they read it.
@@ -891,24 +894,32 @@ export class MahjongScene {
     return true;
   }
 
-  // A bot's claimed meld (吃/碰/杠) OR its discard: rise from the seat to a
-  // camera-facing center pose, hold, then return false to release it to the normal
-  // lerp (which carries the meld into the flat row, or the discard down into the pool).
-  // `seq` = { t0, ms, demo:{x,y,z,s,rx}, from, rx0, rz0 }.
+  // A bot's claimed meld (吃/碰/杠) OR a discard: rise from the seat to a camera-facing
+  // center pose, hold, then either release to the normal lerp (claim → meld settles into
+  // the flat row) or, when `seq.drop` is set (discards), run an explicit DROP phase from
+  // the center pose down into the pool slot (rec.tp) over that fixed duration.
+  // `seq` = { t0, ms, demo:{x,y,z,s,rx}, from, rx0, rz0, drop? }.
   _animateDemoSeq(seq, rec, m) {
     const t = (performance.now() - seq.t0) / 1000;
     const RISE = 0.4, HOLD_END = (seq.ms ?? CLAIM_DEMO_MS) / 1000;
-    if (t >= HOLD_END) return false;
+    const DROP = seq.drop ? seq.drop / 1000 : 0;
+    if (t >= HOLD_END + DROP) return false;
     const dm = seq.demo;
     if (t < RISE) {
       let u = t / RISE; u = u * u * (3 - 2 * u); // smoothstep
       m.position.set(seq.from.x + (dm.x - seq.from.x) * u, seq.from.y + (dm.y - seq.from.y) * u, seq.from.z + (dm.z - seq.from.z) * u);
       m.scale.setScalar((rec.ts ?? 1) + (dm.s - (rec.ts ?? 1)) * u);
       m.rotation.set(seq.rx0 + (dm.rx - seq.rx0) * u, 0, seq.rz0 * (1 - u));
-    } else {
+    } else if (t < HOLD_END || DROP === 0) {
       m.position.set(dm.x, dm.y, dm.z);
       m.scale.setScalar(dm.s);
       m.rotation.set(dm.rx, 0, 0);
+    } else { // DROP: center pose → pool slot (fast, half the old settle)
+      let u = (t - HOLD_END) / DROP; u = u * u * (3 - 2 * u);
+      const ts = rec.ts ?? 1;
+      m.position.set(dm.x + (rec.tp.x - dm.x) * u, dm.y + (rec.tp.y - dm.y) * u, dm.z + (rec.tp.z - dm.z) * u);
+      m.scale.setScalar(dm.s + (ts - dm.s) * u);
+      m.rotation.set(dm.rx + (rec.trx - dm.rx) * u, 0, 0);
     }
     return true;
   }
@@ -938,6 +949,14 @@ export class MahjongScene {
         this.outline.quaternion.copy(selRec.mesh.quaternion);
         this.outline.scale.copy(selRec.mesh.scale);
         this.outlineHalo.material.opacity = 0.34 + 0.16 * Math.sin(performance.now() / 360); // gentle glow
+      }
+      // the turn-ring rotates (shortest path) to the active seat and pulses
+      if (this._turnRingActive >= 0 && this.turnRing) {
+        const target = this._turnSpin[this._turnRingActive];
+        let d = target - this.turnRing.rotation.z;
+        d = Math.atan2(Math.sin(d), Math.cos(d)); // shortest signed delta
+        this.turnRing.rotation.z += d * a;
+        this.turnRing.material.opacity = 0.55 + 0.35 * Math.sin(performance.now() / 320);
       }
       this.renderer.render(this.scene, this.camera);
       requestAnimationFrame(tick);

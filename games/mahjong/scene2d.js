@@ -85,19 +85,6 @@ export class MahjongScene2D {
     return { x: mr.width / 2, y };
   }
 
-  // Geometry for the "where did this tile come from" arrow, in table-local px:
-  // the discarder's seat anchor, the centred pending tile, and its bounding box.
-  claimArrowGeometry() {
-    if (!this.pending) return null;
-    const mr = this.mount.getBoundingClientRect();
-    const r = this.pending.el.getBoundingClientRect();
-    const local = (x, y) => ({ x: x - mr.left, y: y - mr.top });
-    const c = local(r.left + r.width / 2, r.top + r.height / 2);
-    const tl = local(r.left, r.top), br = local(r.right, r.bottom);
-    const from = this.oppAnchor[this.pending.player] || { x: c.x, y: 0 };
-    return { from, center: c, player: this.pending.player, box: { minX: tl.x, minY: tl.y, maxX: br.x, maxY: br.y } };
-  }
-
   pick(clientX, clientY) {
     for (const h of this.handRects) {
       const r = h.rect;
@@ -253,6 +240,21 @@ export class MahjongScene2D {
       this.oppAnchor[p] = { x: r.left + r.width / 2 - mr.left, y: r.top + r.height / 2 - mr.top };
     }
 
+    // ---- turn-ring: a glowing quarter-arc pointing at the active seat (mirrors the 3D
+    // felt ring). A conic-gradient ring masked to a thin band; the `from` angle aims the
+    // bright quarter at the seat (玩家 down / 下家 right / 对家 up / 上家 left). ----
+    if (!over) {
+      const ring = document.createElement('div');
+      ring.className = 'b2-ring';
+      const D = Math.min(mr.width, mr.height) * 0.66;
+      ring.style.width = ring.style.height = D + 'px';
+      ring.style.left = (mr.width / 2) + 'px';
+      ring.style.top = (mr.height * 0.42) + 'px';
+      const FROM = { 0: 135, 1: 45, 2: -45, 3: 225 };
+      ring.style.background = `conic-gradient(from ${FROM[game.turn] ?? 135}deg, #ffd23a 0deg 90deg, transparent 90deg 360deg)`;
+      b.insertBefore(ring, b.firstChild); // behind the tiles
+    }
+
     // ---- a bot's discard flying via the center halt: seat → center (hold) → pool ----
     if (demoIdx >= 0) this._flyDiscard(log[demoIdx], dd, pool);
 
@@ -282,10 +284,10 @@ export class MahjongScene2D {
       fly.style.transition = 'transform 0.4s ease-out';
       fly.style.transform = at(center, 1.5);
     });
-    setTimeout(() => {                    // phase 3: after the halt, drop into the pool
-      fly.style.transition = 'transform 0.32s ease-in';
+    setTimeout(() => {                    // phase 3: after the halt, drop into the pool (fast)
+      fly.style.transition = 'transform 0.16s ease-in';
       fly.style.transform = at(end, 0.55);
-    }, dd.ms); // halt ends at dd.ms (= 0.4s rise + ~0.7s hold); drop runs into the settle window
+    }, dd.ms); // halt ends at dd.ms (= 0.4s rise + ~0.5s hold); the quick drop runs into the settle window
   }
 
   _meld(m, isWild) {

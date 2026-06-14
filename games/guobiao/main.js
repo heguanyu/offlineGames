@@ -7,7 +7,7 @@ import { MahjongScene } from '../mahjong/scene.js';
 import { MahjongScene2D } from '../mahjong/scene2d.js';
 import { Sound } from '../mahjong/sound.js';
 import { buildOrder } from '../mahjong/handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands } from '../mahjong/ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands } from '../mahjong/ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -22,8 +22,8 @@ const CLAIM_DEMO_MS = FAST ? 60 : 2000;
 const CLAIM_SETTLE_MS = FAST ? 20 : 380;
 // A bot's discard flies from its hand to the center halt, holds ~1s, then drops into
 // the pool; the tick is locked for the duration. 快速模式 (fastMode) / ?fast=1 disables it.
-const DISCARD_DEMO_MS = 1100; // 0.4s rise + ~0.7s halt at the center
-const DISCARD_SETTLE_MS = 360;
+const DISCARD_DEMO_MS = 900;  // 0.4s rise + ~0.5s halt at the center
+const DISCARD_SETTLE_MS = 220; // covers the ~0.18s fall into the pool
 
 // Per-page config (set by each index.html before this module loads). The 无定番
 // variant uses minFan: 0 and its own storage key so the two games keep separate
@@ -146,7 +146,6 @@ function positionClaimUI() {
     hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
   }
-  showClaimArrow(animating ? null : scene); // points from the discarder to the centred pending tile
 }
 
 // The 听 waits disclaimer floats big, just above the (flat) hand row — anchored to
@@ -235,8 +234,6 @@ function renderActions() {
       center.appendChild(mkBtn('打出并听牌', () => discardSelected(true), false, 'riichi'));
     }
     // plain discard has no button — tap the selected tile / A / controller-A
-  } else if (game.phase !== PHASE.OVER) {
-    hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
   }
   if (focusIndex >= buttons.length) focusIndex = buttons.length - 1;
   buttons.forEach((b, i) => { if (i === focusIndex && isClaimPhase()) b.classList.add('focus'); bar.appendChild(b); });

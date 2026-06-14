@@ -7,7 +7,7 @@ import { MahjongScene } from './scene.js';
 import { MahjongScene2D } from './scene2d.js';
 import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands } from './ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands } from './ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -49,8 +49,8 @@ const CLAIM_SETTLE_MS = FAST ? 20 : 380;
 // A bot's discard flies from its hand to the center halt, holds ~1s, then drops into
 // the pool; the tick is locked for the whole duration. 快速模式 (fastMode) or ?fast=1
 // turns the animation + lock off.
-const DISCARD_DEMO_MS = 1100; // 0.4s rise + ~0.7s halt at the center
-const DISCARD_SETTLE_MS = 360;
+const DISCARD_DEMO_MS = 900;  // 0.4s rise + ~0.5s halt at the center
+const DISCARD_SETTLE_MS = 220; // covers the ~0.18s fall into the pool
 let fastMode = localStorage.getItem('mahjong-fast') !== '0'; // checked (on) by default
 
 let game = null;
@@ -199,7 +199,6 @@ function positionClaimUI() {
     hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
   }
-  showClaimArrow(animating ? null : scene); // points from the discarder to the centred pending tile
 }
 
 function renderPlate(p) {
@@ -207,8 +206,8 @@ function renderPlate(p) {
   const thinking = game.phase !== PHASE.OVER && game.turn === p && p !== HUMAN;
   const isDealer = p === game.dealer;
   seat.innerHTML =
+    (isDealer ? '<span class="crown" title="庄家">👑</span>' : '') + // above the nameplate
     `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}${isDealer ? ' dealer' : ''}">` +
-    (isDealer ? '<span class="crown" title="庄家">👑</span>' : '') +
     `<span class="wind">${WIND[game.seatWind(p)]}</span>` +
     `<span>${SEAT_LABEL[p]}</span>` +
     (thinking ? '<span class="think">思考中…</span>' : '') +
@@ -240,8 +239,6 @@ function renderActions() {
     for (const k of game.selfKongOptions(HUMAN)) {
       buttons.push(mkBtn(`${k.type === 'gold' ? '金杠' : '杠'} ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
     }
-  } else if (game.phase !== PHASE.OVER) {
-    hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
   }
 
   if (focusIndex >= buttons.length) focusIndex = buttons.length - 1;
