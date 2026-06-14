@@ -121,6 +121,8 @@
     let updating = false;   // a new version is installing → reload when it takes over
     let reloaded = false;   // guard so we reload at most once
 
+    const reloadOnce = () => { if (!reloaded) { reloaded = true; location.reload(); } };
+
     if (swSupported) {
       btn.hidden = false;
       // updateViaCache:'none' → reg.update() always re-fetches sw.js from the
@@ -132,7 +134,7 @@
       // When it takes control after a user-initiated update, reload to run the
       // fresh assets. (Gated on `updating` so the first visit's claim won't reload.)
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (updating && !reloaded) { reloaded = true; location.reload(); }
+        if (updating) reloadOnce();
         else showVersion(); // a worker took control without us reloading → refresh the tag
       });
     }
@@ -174,16 +176,29 @@
           setTimeout(updateNetStatus, 3000);
           return;
         }
-        updating = true; setBtn('updating');           // new version downloading
-        const onState = () => {
-          if (incoming.state === 'activated' && !reloaded) { reloaded = true; location.reload(); }
-          else if (incoming.state === 'redundant') { updating = false; busy = false; setBtn('error'); }
-        };
-        incoming.addEventListener('statechange', onState);
-        onState();                                     // in case it already advanced
+        trackUpdate(incoming);
       } catch {
         busy = false; setBtn('error');
       }
+    }
+
+    // Drive a freshly-found (or already-waiting) worker to activation, then reload.
+    // A worker stuck in the `installed` (waiting) state — e.g. one left behind by an
+    // older sw.js that didn't skipWaiting — is nudged via postMessage so it takes
+    // over; a watchdog clears the button if nothing happens, so it never hangs.
+    function trackUpdate(worker) {
+      updating = true; setBtn('updating');
+      const nudge = () => { if (worker.state === 'installed') worker.postMessage('skipWaiting'); };
+      const onState = () => {
+        if (worker.state === 'installed') nudge();         // waiting → ask it to take over
+        else if (worker.state === 'activated') reloadOnce(); // active → reload to fresh assets
+        else if (worker.state === 'redundant') { updating = false; busy = false; setBtn('error'); }
+      };
+      worker.addEventListener('statechange', onState);
+      onState();                                           // in case it already advanced
+      setTimeout(() => {                                   // watchdog: never stay stuck
+        if (updating && !reloaded) { updating = false; busy = false; updateNetStatus(); }
+      }, 15000);
     }
     btn.addEventListener('click', checkForUpdate);
 
