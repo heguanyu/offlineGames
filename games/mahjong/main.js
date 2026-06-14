@@ -313,32 +313,49 @@ function renderWinningHand(handEl, w, r) {
     if (g.kinds.length) { const k = g.kinds[0], nat = 2 - g.jokers; return [0, 1].map((i) => ({ kind: k, wild: i >= nat })); }
     return [{ kind: game.wilds[0], wild: true }, { kind: game.wilds[0], wild: true }];
   };
-  const addGroup = (tiles, extra, parent = handEl) => {
+  // Highlight the winning (drawn) tile: a 混 if it was wild, else the natural tile
+  // in the very group it completed (winGroupIdx, from the scored decomposition) so
+  // we glow the 6筒 in the 将 rather than an identical 6筒 elsewhere. 'called' groups
+  // never hold it; mark exactly one tile.
+  const winKind = r.winningTile;
+  const winIsWild = winKind != null && game.isWild(winKind);
+  const winGrp = (r.decomp && r.meta && r.meta.winGroupIdx >= 0) ? r.decomp[r.meta.winGroupIdx] : null;
+  let winMarked = false;
+  const addGroup = (tiles, extra, parent = handEl, srcGroup = null) => {
     const wrap = document.createElement('div');
     wrap.className = 'meld-group' + (extra || '');
     // wild slots show the original 混 face; natural slots show their own tile.
-    for (const t of tiles) wrap.appendChild(faceTileEl(t.wild ? wildFace() : t.kind, { lg: true, wild: t.wild }));
+    for (const t of tiles) {
+      const el = faceTileEl(t.wild ? wildFace() : t.kind, { lg: true, wild: t.wild });
+      if (!winMarked && winKind != null && srcGroup !== 'called') {
+        const hit = winIsWild
+          ? t.wild
+          : (!t.wild && t.kind === winKind && (winGrp ? srcGroup === winGrp : true));
+        if (hit) { el.classList.add('win-tile'); winMarked = true; }
+      }
+      wrap.appendChild(el);
+    }
     parent.appendChild(wrap);
   };
   if (!r.decomp) { // fallback: plain sorted hand
-    addGroup(game.hands[w].slice().sort((a, b) => a - b).map((id) => ({ kind: id, wild: game.isWild(id) })));
-    for (const m of game.melds[w]) addGroup(m.tiles.map((k) => ({ kind: k, wild: false })));
+    addGroup(game.hands[w].slice().sort((a, b) => a - b).map((id) => ({ kind: id, wild: game.isWild(id) })), '', handEl, 'hand');
+    for (const m of game.melds[w]) addGroup(m.tiles.map((k) => ({ kind: k, wild: false })), '', handEl, 'called');
     return;
   }
-  for (const m of game.melds[w]) addGroup(m.tiles.map((k) => ({ kind: k, wild: false })));
+  for (const m of game.melds[w]) addGroup(m.tiles.map((k) => ({ kind: k, wild: false })), '', handEl, 'called');
   // 龙 — its three same-suit chows share one row with no gap; every other meld/pair
   // is its own row (see #result-hand / .long-run).
   const longBase = (r.meta && r.meta.long) ? { m: 0, p: 9, s: 18 }[r.meta.longSuit] : null;
   const inLong = (g) => longBase != null && g.type === 'chow' && [longBase, longBase + 3, longBase + 6].includes(g.kinds[0]);
-  let pair = null, longRun = null;
+  let pair = null, pairG = null, longRun = null;
   for (const g of r.decomp) {
-    if (g.type === 'pair') { pair = pairTilesOf(g); continue; }
+    if (g.type === 'pair') { pair = pairTilesOf(g); pairG = g; continue; }
     if (inLong(g)) {
       if (!longRun) { longRun = document.createElement('div'); longRun.className = 'long-run'; handEl.appendChild(longRun); }
-      addGroup(meldTilesOf(g), '', longRun);
-    } else addGroup(meldTilesOf(g));
+      addGroup(meldTilesOf(g), '', longRun, g);
+    } else addGroup(meldTilesOf(g), '', handEl, g);
   }
-  if (pair) addGroup(pair, ' pair');
+  if (pair) addGroup(pair, ' pair', handEl, pairG);
 }
 
 function showResult() {
@@ -674,7 +691,8 @@ if (new URLSearchParams(location.search).get('fast')) {
           { type: 'chow', kinds: [12, 13, 14], jokers: 0, natural: S(12, 13, 14) },
           { type: 'pair', kinds: [26], jokers: 1, natural: S(26) },
         ],
-        payments: [16, -8, -4, -4], kong: [8, -4, -2, -2], kongPts: [2, 0, 0, 0],
+        meta: { su: false, hunDiao: true, shuangHun: false, winGroupIdx: 4 },
+        payments: [8, -4, -2, -2], kong: [0, 0, 0, 0], kongPts: [0, 0, 0, 0],
       };
       showResult();
     },

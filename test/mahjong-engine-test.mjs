@@ -90,6 +90,15 @@ ok(r && r.meta.shuangHun, '双混 credited when two standing 混儿 are closed b
 ok(!r.meta.su, '双混 hand is not 素');
 eq(r.score, 2, '双混儿 = 2');
 
+// 混吊, NOT 双混: 123m 456m 123p + {P5,P6,P6} + two off-suit wilds, drew P6. The
+// drawn 6筒 pairs ONE standing 混儿 (将), the other 混儿 fills a 5-6筒 run → 混吊.
+// It must NOT be mis-read as 双混 by parking the winning 6筒 on a JOKER slot inside a
+// 4-5-6筒 run (whose real 6 slot is a joker, with the two natural 6筒 left as the 将).
+const hunDiaoRun = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(5), P(6), P(6), 27, 28];
+r = analyzeWin(hunDiaoRun, [], { wilds: [27, 28], winningKind: P(6) });
+ok(r && r.meta.hunDiao && !r.meta.shuangHun, '混吊 (drawn 6筒 pairs a 混儿; other 混儿 in a 5-6筒 run) — not mis-credited 双混');
+eq(r.score, 2, '混吊(2) = 2');
+
 // 本混龙: full 1-9万 with two m-suit wilds (8万/9万) filling 8,9; pair 99p. The
 // wild suit equals 龙's suit, so 本混 doubles 龙 → 8 (the combination-table value;
 // the old engine wrongly added it as a flat +8).

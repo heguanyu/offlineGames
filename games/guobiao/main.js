@@ -354,9 +354,15 @@ function showResult() {
     }
     // Show the winning hand grouped by its pattern (each meld + the 将), so the
     // structure behind the 番种 is visible — not a flat row.
+    const winKind = r.winningTile;
+    let winMarked = false;
     const addGroup = (tiles, extra) => {
       const wrap = document.createElement('div'); wrap.className = 'meld-group' + (extra || '');
-      for (const t of tiles.slice().sort((a, b) => a - b)) wrap.appendChild(faceTileEl(t, { lg: true }));
+      for (const t of tiles.slice().sort((a, b) => a - b)) {
+        const el = faceTileEl(t, { lg: true });
+        if (!winMarked && winKind != null && t === winKind) { el.classList.add('win-tile'); winMarked = true; }
+        wrap.appendChild(el);
+      }
       handEl.appendChild(wrap);
     };
     if (r.melds) {

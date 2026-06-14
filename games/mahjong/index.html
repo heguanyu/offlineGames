@@ -167,6 +167,8 @@
   .long-run { display: flex; gap: 2px; }
   .meld-group { display: flex; gap: 2px; }
   .meld-group.pair { padding: 0 4px; }
+  /* the winning (drawn) tile glows gold within the laid-out hand */
+  .tile.face-tile.win-tile { box-shadow: 0 0 0 3px rgba(232,196,102,0.9), 0 0 18px 5px rgba(232,196,102,0.6); border-radius: 8px; }
   /* winning pattern (left) | separator | 得分明细 (right) */
   #result-cols { display: flex; align-items: stretch; justify-content: center; margin: 12px 0 4px; text-align: left; }
   #result-pattern { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; padding-right: 16px; }

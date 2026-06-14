@@ -290,10 +290,14 @@ function scoreFromDecomp(decomp, ctx) {
   // 将/meld together with the NATURAL winning tile: the winning group is all-but-one 混儿
   // (jokers ≥ size−1) → 1 standing 混儿 = 混吊, 2 = 双混. A freshly-DRAWN 混儿 is never 混吊;
   // it may still win as a plain 捉五 / 龙 (standing as the 5万 or a dragon tile), no bonus.
-  let wildCompleted = false, shuangHun = false, hunDiao = false, winPair = false;
+  let wildCompleted = false, shuangHun = false, hunDiao = false, winPair = false, winGroup = null;
   if (!winIsWild) {
-    const winByKind = decomp.filter((g) => g.kinds.includes(winningKind));
-    const winGroup = winByKind.find((g) => g.jokers >= groupSize(g) - 1) || winByKind[0] || null;
+    // Only groups that use the natural winning tile in a real slot count — a run
+    // whose winning-rank slot is filled by a JOKER (g.kinds lists the rank, but
+    // g.natural does NOT) is NOT completed by the drawn tile, so filtering on
+    // g.natural (not g.kinds) avoids mis-crediting 双混 to such a run.
+    const winByKind = decomp.filter((g) => g.natural.has(winningKind));
+    winGroup = winByKind.find((g) => g.jokers >= groupSize(g) - 1) || winByKind[0] || null;
     const j = winGroup ? winGroup.jokers : 0;
     wildCompleted = !su && !!winGroup && j >= groupSize(winGroup) - 1;
     shuangHun = wildCompleted && j >= 2;
@@ -316,7 +320,9 @@ function scoreFromDecomp(decomp, ctx) {
   }
   if (afterKong) { mult *= FAN.GANGKAI; fans.push('杠开'); }
 
-  return { score: base * mult, fans, meta: { su, hunDiao, shuangHun, zhuoWu, long, benHunLong, longSuit } };
+  return { score: base * mult, fans,
+    meta: { su, hunDiao, shuangHun, zhuoWu, long, benHunLong, longSuit,
+      winGroupIdx: winGroup ? decomp.indexOf(winGroup) : -1 } };
 }
 
 // Analyze a self-draw win. `concealedIds` includes the winning tile and any wild
