@@ -16,6 +16,49 @@ export function faceTileEl(kind, { lg = false, wild = false } = {}) {
   return el;
 }
 
+// Draw (or hide) a gold arrow from the discarder's seat to the centred pending
+// claim tile, so when you can 碰/吃/杠 it's obvious which player the tile came
+// from. Reads scene.claimArrowGeometry(); call it every render — it self-hides
+// when no claim tile is up. The SVG lives in #table (same box as the canvas, so
+// it inherits the force-landscape rotation and shares worldToScreen's px space).
+export function showClaimArrow(scene) {
+  const table = $('table');
+  if (!table) return;
+  let svg = $('claim-arrow');
+  if (!svg) {
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.id = 'claim-arrow';
+    table.appendChild(svg);
+  }
+  const g = scene && scene.claimArrowGeometry ? scene.claimArrowGeometry() : null;
+  if (!g) { svg.style.display = 'none'; return; }
+  const { from, center, box } = g;
+  // unit vector from the tile centre outward toward the discarder
+  let ox = from.x - center.x, oy = from.y - center.y;
+  const ol = Math.hypot(ox, oy) || 1; ox /= ol; oy /= ol;
+  // distance from centre to where that ray leaves the tile's box; tip sits a gap beyond it
+  let t = Infinity;
+  if (ox > 0) t = Math.min(t, (box.maxX - center.x) / ox); else if (ox < 0) t = Math.min(t, (box.minX - center.x) / ox);
+  if (oy > 0) t = Math.min(t, (box.maxY - center.y) / oy); else if (oy < 0) t = Math.min(t, (box.minY - center.y) / oy);
+  if (!isFinite(t)) { svg.style.display = 'none'; return; }
+  const GAP = 12;
+  const tip = { x: center.x + ox * (t + GAP), y: center.y + oy * (t + GAP) };
+  // arrow runs from the discarder (tail) to the tile boundary (wide head)
+  let dx = tip.x - from.x, dy = tip.y - from.y;
+  const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+  const HEAD = 34, HALFW = 18, SHAFT = 9;
+  const base = { x: tip.x - dx * HEAD, y: tip.y - dy * HEAD };
+  const px = -dy, py = dx; // perpendicular, for the wide head
+  const head = `${tip.x.toFixed(1)},${tip.y.toFixed(1)} ` +
+    `${(base.x + px * HALFW).toFixed(1)},${(base.y + py * HALFW).toFixed(1)} ` +
+    `${(base.x - px * HALFW).toFixed(1)},${(base.y - py * HALFW).toFixed(1)}`;
+  svg.innerHTML =
+    `<line x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${base.x.toFixed(1)}" y2="${base.y.toFixed(1)}" ` +
+    `stroke="#f0d275" stroke-width="${SHAFT}" stroke-linecap="round"/>` +
+    `<polygon points="${head}" fill="#f0d275"/>`;
+  svg.style.display = '';
+}
+
 // An action-bar button. `ghost` = secondary style; `extra` = an extra class name.
 export function mkBtn(label, fn, ghost, extra) {
   const b = document.createElement('button');

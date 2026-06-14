@@ -514,6 +514,28 @@ export class MahjongScene {
     return { x: (v.x * 0.5 + 0.5) * this.canvas.clientWidth, y: (-v.y * 0.5 + 0.5) * this.canvas.clientHeight };
   }
 
+  // Screen geometry (canvas-local CSS px) for the "where did this claimed tile
+  // come from" arrow: the discarder's seat anchor, the centred pending tile, and
+  // the tile's on-screen bounding box. null when no claim tile is showing. The
+  // tile faces the camera (tilted by faceCamRx about x), so its up vector is
+  // (0, cos, sin) and its width stays along world x.
+  claimArrowGeometry() {
+    const pc = this.pendingClaim;
+    if (!pc) return null;
+    const c = pc.pos, seat = this._seatCenter(pc.player);
+    const center = this.worldToScreen(c.x, c.y, c.z);
+    const from = this.worldToScreen(seat.x, seat.y, seat.z);
+    const hw = 0.5 * pc.scale * TW, hh = 0.5 * pc.scale * TH;
+    const uy = Math.cos(this.faceCamRx), uz = Math.sin(this.faceCamRx);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      const s = this.worldToScreen(c.x + sx * hw, c.y + sy * hh * uy, c.z + sy * hh * uz);
+      minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x);
+      minY = Math.min(minY, s.y); maxY = Math.max(maxY, s.y);
+    }
+    return { from, center, player: pc.player, box: { minX, minY, maxX, maxY } };
+  }
+
   // The face-down deck wall: a 2-layer ring of backs around the pool that depletes
   // as the live wall is drawn down. Sets this.deckPos = the current draw point (in
   // front, where new draws fly from). Rendered before the hands so they read it.
@@ -562,10 +584,14 @@ export class MahjongScene {
     const pendingIdx = this.claimable && log.length ? log.length - 1 : -1;
     if (pendingIdx >= 0) {
       const d = log[pendingIdx];
+      const pos = { x: 0, y: TH * 0.9, z: 2.6 }, scale = 1.5;
       this._place('pool' + pendingIdx, {
-        kind: d.kind, wild: game.isWild(d.kind), emissive: true, scale: 1.5, from: this._seatCenter(d.player),
-        x: 0, y: TH * 0.9, z: 2.6, rx: this.faceCamRx, ry: 0, rz: 0, // face squarely toward the camera
+        kind: d.kind, wild: game.isWild(d.kind), emissive: true, scale, from: this._seatCenter(d.player),
+        x: pos.x, y: pos.y, z: pos.z, rx: this.faceCamRx, ry: 0, rz: 0, // face squarely toward the camera
       }, seen);
+      this.pendingClaim = { player: d.player, pos, scale }; // for the "where from" arrow overlay
+    } else {
+      this.pendingClaim = null;
     }
     // Bucket the remaining discards by suit, then order each column by card id.
     const byType = [[], [], [], []];

@@ -41,6 +41,8 @@
   /* ---------- 3D table ---------- */
   #table { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
   #scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  /* "where did this claimed tile come from" arrow — overlays the canvas, ignores input */
+  #claim-arrow { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: visible; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7)); }
 
   /* ---------- flat HUD over the canvas ---------- */
   .hud { position: absolute; z-index: 3; display: flex; align-items: center; gap: 6px; }

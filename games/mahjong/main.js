@@ -6,7 +6,7 @@ import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from 
 import { MahjongScene } from './scene.js';
 import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape } from './ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow } from './ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -128,6 +128,7 @@ function positionClaimUI() {
     hud.classList.remove('claim');
     hud.style.left = hud.style.top = hud.style.bottom = hud.style.transform = '';
   }
+  showClaimArrow(scene); // points from the discarder to the centred pending tile
 }
 
 function renderPlate(p) {
