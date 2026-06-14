@@ -94,24 +94,24 @@
   .tile.honor.z-c { color: #c0392b; } .tile.honor.z-f { color: #15803d; } .tile.honor.z-b { color: #2563eb; } .tile.honor.wind { color: #2b3a4a; }
   .tile.wild { background: linear-gradient(165deg,#fff8e6,#f3dd98); }
   .tile.wild::after { content:'混'; position:absolute; top:-6px; right:-5px; width:15px; height:15px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#ffe08a,#d99e21); color:#4a3500; font-size:9px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,0.5); }
-  /* face-down tile (masks a 暗杠's middle pair) */
-  .tile.tile-back { background: repeating-linear-gradient(135deg,#176a4c,#176a4c 5px,#125a40 5px,#125a40 10px); }
-
-  /* result overlay: each seat's revealed hand on its border, behind the panel,
-     each its own frosted (extra-blurred) strip */
+  /* result overlay: each seat's revealed hand pinned just outside the panel's four
+     borders, each its own frosted (extra-blurred) strip with 碰/吃/明杠/暗杠 tags */
+  #result-overlay { overflow: hidden; }
+  #result-frame { position: relative; display: inline-flex; }
   #result-overlay .panel { position: relative; z-index: 1; }
-  #result-seats { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
-  .seat-hand { position: absolute; display: flex; align-items: center; gap: 8px;
-    padding: 7px 10px; border-radius: 12px;
-    background: rgba(4,18,12,0.42); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
-    box-shadow: 0 0 0 1px rgba(232,196,102,0.16), 0 8px 26px rgba(0,0,0,0.45); }
-  .seat-hand:empty { display: none; }
-  .seat-hand .meld-group { display: flex; gap: 2px; }
-  .seat-hand .tile { --tw: 20px; --th: 27px; }
-  .seat-hand.bottom { left: 50%; bottom: 10px; transform: translateX(-50%); }
-  .seat-hand.top    { left: 50%; top: 10px;    transform: translateX(-50%); }
-  .seat-hand.left   { left: 40px;  top: 50%; transform: translate(-50%,-50%) rotate(90deg); }
-  .seat-hand.right  { right: 40px; top: 50%; transform: translate(50%,-50%) rotate(-90deg); }
+  .seat-hand { position: absolute; z-index: 0; display: flex; align-items: flex-end; gap: 9px; pointer-events: none;
+    padding: 8px 11px; border-radius: 13px;
+    background: rgba(4,18,12,0.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 0 0 1px rgba(232,196,102,0.18), 0 8px 26px rgba(0,0,0,0.45); }
+  .seat-hand .meld-group { position: relative; display: flex; gap: 2px; }
+  .seat-hand .tile { --tw: 40px; --th: 54px; }
+  .seat-hand .meld-tag { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px;
+    font-size: 12px; font-weight: 800; letter-spacing: 1px; color: var(--gold); white-space: nowrap;
+    -webkit-text-stroke: 0.6px rgba(0,0,0,0.92); text-shadow: 0 1px 2px rgba(0,0,0,0.85); }
+  .seat-hand.bottom { top: 100%;    left: 50%; transform: translate(-50%, 12px); }
+  .seat-hand.top    { bottom: 100%; left: 50%; transform: translate(-50%, -12px); }
+  .seat-hand.left   { top: 50%; left: 0;  transform: translate(calc(-50% - 46px), -50%) rotate(90deg); }
+  .seat-hand.right  { top: 50%; right: 0; transform: translate(calc(50% + 46px), -50%) rotate(-90deg); }
 
   /* ---------- action HUD ---------- */
   #action-hud {
@@ -248,13 +248,7 @@
 
   <!-- result -->
   <div class="overlay hidden" id="result-overlay">
-    <!-- each seat's revealed final hand, pinned to its border (behind the panel) -->
-    <div id="result-seats" aria-hidden="true">
-      <div class="seat-hand bottom" id="seat-hand-0"></div>
-      <div class="seat-hand right"  id="seat-hand-1"></div>
-      <div class="seat-hand top"    id="seat-hand-2"></div>
-      <div class="seat-hand left"   id="seat-hand-3"></div>
-    </div>
+    <div id="result-frame">
     <div class="panel">
       <h2 id="result-title"></h2>
       <div id="result-fans"></div>
@@ -267,6 +261,12 @@
         <div id="result-payments" class="sub"></div>
       </div>
       <button class="big-btn" id="next-hand-btn">下一局</button>
+    </div>
+    <!-- each seat's revealed final hand, pinned to its panel border -->
+    <div class="seat-hand bottom" id="seat-hand-0" aria-hidden="true"></div>
+    <div class="seat-hand right"  id="seat-hand-1" aria-hidden="true"></div>
+    <div class="seat-hand top"    id="seat-hand-2" aria-hidden="true"></div>
+    <div class="seat-hand left"   id="seat-hand-3" aria-hidden="true"></div>
     </div>
   </div>
 
