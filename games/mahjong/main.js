@@ -534,7 +534,7 @@ function startHand() {
     $('action-bar').innerHTML = '';
     $('ting-center').innerHTML = '';
     $('hand-hint').textContent = '发牌中…';
-    scene.beginDeal(game, () => { dealing = false; tick(); });
+    scene.beginDeal(game, () => { dealing = false; tick(); }, () => sound.select());
   } else {
     tick();
   }

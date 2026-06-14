@@ -28,6 +28,7 @@ const CFG = window.MJ_CONFIG || { minFan: MIN_FAN, sessionKey: 'guobiao' };
 let game = null, scene = null, level = LEVELS.NORMAL;
 let session = loadSession();
 let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
+let dealing = false;           // the initial-deal animation is running (input is held)
 let lockedTing = false, tingWaits = []; // once 听, the seat auto-plays (tsumogiri)
 let tingRevealIdx = -1;        // discardLog index of a 听 tsumogiri to reveal deck→center→pool
 let isPortrait = false;        // device held portrait → page force-rotated to landscape
@@ -51,7 +52,9 @@ function renderedHand() { return buildOrder(game.hands[HUMAN], noWild); }
 function selectableHandIndices() { return renderedHand().map((_, i) => i); }
 
 // ---- rendering ----
-function render() {
+// The HTML HUD (header / scores / nameplates), split out so the deal animation
+// can show it without driving the 3D table.
+function renderHud() {
   const minTxt = CFG.minFan > 0 ? `起和 ${CFG.minFan}番` : '无定番';
   $('round-info').innerHTML = `<b>${WIND[session.roundWind]}圈</b> · 第 ${session.hand} 局 · 难度 <b>${LEVEL_NAMES[level]}</b> · ${minTxt}`;
   const scoresEl = $('scores'); scoresEl.innerHTML = '';
@@ -64,7 +67,10 @@ function render() {
   }
   $('wall-count').textContent = `余 ${game.wall.length} 张`;
   for (let p = 0; p < 4; p++) renderPlate(p);
+}
 
+function render() {
+  renderHud();
   const selectable = selectableHandIndices();
   if (selIndex >= selectable.length) selIndex = Math.max(0, selectable.length - 1);
   const myTurn = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
@@ -276,6 +282,7 @@ function schedule(fn, delay) { clearTimeout(pendingTimer); pendingTimer = setTim
 
 // ---- human actions ----
 function onPickTile(idx) {
+  if (dealing) return;
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing) return;
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const id = renderedHand()[idx];
@@ -408,12 +415,24 @@ function startHand() {
   game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan });
   lastLogLen = 0; selIndex = 0; focusIndex = 0; lockedTing = false; tingWaits = [];
   sound.stopMusic();
-  saveSession(); tick();
+  saveSession();
+  // Deal the hand with a serving flourish (tiles fly off the wall), then play.
+  // Under ?fast=1 (tests) skip straight to play so the timing stays tight.
+  if (scene && !FAST) {
+    dealing = true;
+    renderHud();
+    $('action-bar').innerHTML = '';
+    $('ting-center').innerHTML = '';
+    $('hand-hint').textContent = '发牌中…';
+    scene.beginDeal(game, () => { dealing = false; tick(); }, () => sound.select());
+  } else {
+    tick();
+  }
 }
 function newGame() { game = null; session = { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 }; startHand(); }
 
 $('scene').addEventListener('pointerdown', (e) => {
-  if (!scene || !gameStarted) return;
+  if (!scene || !gameStarted || dealing) return;
   sound.resume();
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   const idx = scene.pick(e.clientX, e.clientY);
@@ -422,7 +441,7 @@ $('scene').addEventListener('pointerdown', (e) => {
 // PC only: hovering a hand tile selects it (same as a click-to-select). Mouse-only
 // so touch is unaffected; respects the same turn/听/draw-settle guards.
 $('scene').addEventListener('pointermove', (e) => {
-  if (e.pointerType !== 'mouse' || !scene || !gameStarted) return;
+  if (e.pointerType !== 'mouse' || !scene || !gameStarted || dealing) return;
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing || scene.handDrawRevealing) return;
   const idx = scene.pick(e.clientX, e.clientY);
   if (idx == null) return;
@@ -445,6 +464,7 @@ function onAction(name) {
     else if (name === 'menu') nextHand();
     return;
   }
+  if (dealing) return; // tiles are still being served — hold gameplay input
   if (isClaimPhase()) {
     // 点炮 win: the 胡 floats centered (not in the bar), so confirm/win takes it and
     // cancel/pass declines — no bar navigation. (Pad has no 'win' key, so A=confirm.)
