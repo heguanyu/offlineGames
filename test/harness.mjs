@@ -23,9 +23,20 @@ export function startServer(port) {
   return new Promise((resolve) => server.listen(port, () => resolve(server)));
 }
 
-export function launchBrowser(extraArgs = []) {
-  return puppeteer.launch({
+export async function launchBrowser(extraArgs = []) {
+  const browser = await puppeteer.launch({
     executablePath: EDGE, headless: 'new',
-    args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader', '--enable-webgl', ...extraArgs],
+    // --mute-audio silences the browser's WebAudio output; the localStorage seed below
+    // also mutes the game's Sound class (incl. TTS voices) so test runs are SILENT.
+    args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader', '--enable-webgl', '--mute-audio', ...extraArgs],
   });
+  // Seed the mute preference before any page script runs, on every navigation, so the
+  // Sound constructor reads muted=1 (no SFX, no spoken voices) during tests.
+  const orig = browser.newPage.bind(browser);
+  browser.newPage = async () => {
+    const page = await orig();
+    try { await page.evaluateOnNewDocument(() => { try { localStorage.setItem('mahjong-muted', '1'); } catch {} }); } catch {}
+    return page;
+  };
+  return browser;
 }
