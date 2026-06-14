@@ -206,6 +206,114 @@
   #toast { position: fixed; left: 50%; top: 15%; transform: translateX(-50%) scale(0.9); background: rgba(0,0,0,0.8); color: #fff; padding: 11px 22px; border-radius: 14px; font-size: 1.15rem; font-weight: 800; z-index: 15; pointer-events: none; opacity: 0; transition: opacity 0.18s, transform 0.18s; text-align: center; }
   #toast.show { opacity: 1; transform: translateX(-50%) scale(1); }
   #toast.big { font-size: 1.8rem; color: var(--gold); text-shadow: 0 2px 12px rgba(232,196,102,0.6); }
+
+  /* ============ flat 2D (phone) layout ============ */
+  /* The WebGL table is replaced by a DOM board (scene2d.js). The header becomes a
+     vertical left rail (phones are wider than tall in landscape), and the canvas is
+     kept only as a transparent input overlay over the board. */
+  body.flat { flex-direction: row; }
+  body.flat header {
+    flex-direction: column; flex: 0 0 auto; width: 98px; height: 100%;
+    align-items: stretch; gap: 7px; flex-wrap: nowrap; overflow-y: auto;
+    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    box-shadow: 2px 0 8px rgba(0,0,0,0.4);
+  }
+  body.flat header a.back { font-size: 1.25rem; }
+  body.flat #round-info { font-size: 0.7rem; line-height: 1.35; }
+  body.flat #scores { flex-direction: column; gap: 4px; margin-left: 0; }
+  body.flat .score-chip { font-size: 0.64rem; text-align: center; }
+  body.flat #sound-btn { margin-top: auto; }
+  body.flat #wild-hud {
+    position: static; left: auto; top: auto; flex-direction: column; gap: 6px;
+    padding: 7px 6px; border-radius: 12px;
+  }
+  body.flat #wild-hud .lbl { writing-mode: horizontal-tb; letter-spacing: 0.04em; text-align: center; }
+  body.flat #wild-indicator { justify-content: center; }
+  body.flat #wild-indicator .tile { --tw: 30px; --th: 41px; }
+  body.flat #wild-hud #wall-count { text-align: center; }
+  /* hide the 3D-only floating nameplates — board2d draws compact ones itself */
+  body.flat .hud.plate-bottom, body.flat .hud.plate-top,
+  body.flat .hud.plate-left, body.flat .hud.plate-right { display: none; }
+  body.flat #scene { background: transparent; }
+  /* keep the bottom action bar (self-杠 / hint) clear of the hand row */
+  body.flat #action-hud { bottom: max(92px, calc(env(safe-area-inset-bottom) + 84px)); }
+  /* claim bar (碰/杠/吃/过): short buttons, wide spacing; the bar's bottom stays
+     pinned just above the hand via worldToScreen, so a shorter button only lowers
+     its top edge. */
+  body.flat #action-bar { gap: 45px; }
+  body.flat #action-hud.claim .act-btn:not(.chow-btn) {
+    height: 35px; min-height: 0; padding: 0 22px; font-size: 1.05rem; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; }
+
+  #board2d { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  #board2d .tile { box-shadow: inset 0 1px 1px rgba(255,255,255,0.8), 0 1px 0 #c3b99f, 0 2px 3px rgba(0,0,0,0.4); }
+  /* opponents: nameplate + back-count + melds */
+  .b2-opp { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .b2-opp-top   { top: 6px; left: 50%; transform: translateX(-50%); }
+  .b2-opp-left  { left: 6px; top: 44%; transform: translateY(-50%); align-items: flex-start; }
+  .b2-opp-right { right: 6px; top: 44%; transform: translateY(-50%); align-items: flex-end; }
+  .b2-plate { display: flex; align-items: center; gap: 5px; font-size: 0.72rem; color: #eaf6f0;
+    background: rgba(4,18,12,0.62); border: 1px solid #1c5a44; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+  .b2-plate.active { border-color: var(--gold); box-shadow: 0 0 10px rgba(232,196,102,0.5); }
+  .b2-plate.dealer { border-color: var(--gold); }
+  .b2-plate .wind { color: var(--gold); font-weight: 800; }
+  .b2-plate .crown { font-size: 0.95em; }
+  .b2-plate .think { color: var(--gold); font-size: 0.62rem; animation: blink 1s infinite; }
+  .b2-backs { display: flex; align-items: center; }
+  .b2-back { width: 14px; height: 19px; border-radius: 3px; background: linear-gradient(160deg,#1f7d5b,#125c42);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.25), 0 1px 2px rgba(0,0,0,0.4); }
+  .b2-back + .b2-back { margin-left: -8px; }
+  .b2-cnt { font-size: 0.64rem; color: #cfe7db; margin-left: 5px; }
+  .b2-melds { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; max-width: 210px; }
+  .b2-melds.demo { filter: drop-shadow(0 0 7px rgba(232,196,102,0.95)); }
+  .b2-meld { position: relative; display: flex; gap: 1px; }
+  .b2-meld .tile { --tw: 18px; --th: 24px; }
+  .b2-tag { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 1px;
+    font-size: 9px; font-weight: 800; color: var(--gold); white-space: nowrap; -webkit-text-stroke: 0.5px rgba(0,0,0,0.9); }
+  /* central discard pool: one wide block per suit, spread across the width;
+     within a suit, 5 tiles per row, piling bottom→top */
+  .b2-pool { position: absolute; left: 50%; top: 43%; transform: translate(-50%,-50%);
+    display: flex; gap: 12px; align-items: flex-end; justify-content: space-evenly; width: 84%; }
+  .b2-pool-type { display: flex; flex-direction: column; gap: 1px; }
+  .b2-pool-row { display: flex; gap: 1px; justify-content: center; }
+  .b2-pool .tile { --tw: 24px; --th: 32px; }
+  /* the claimable tile, pulled out big + glowing */
+  .b2-pending { position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%); }
+  .b2-pending .tile { --tw: 69px; --th: 93px;
+    box-shadow: 0 0 0 3px rgba(232,196,102,0.85), 0 0 22px 6px rgba(232,196,102,0.55); }
+  /* the human's exposed melds, above the hand on the right */
+  .b2-mymelds { position: absolute; right: 8px; bottom: 88px; display: flex; gap: 6px; }
+  .b2-mymelds .tile { --tw: 22px; --th: 30px; }
+  /* the human's hand row */
+  .b2-hand { position: absolute; left: 50%; bottom: max(6px, env(safe-area-inset-bottom));
+    transform: translateX(-50%); display: flex; gap: 3px; align-items: flex-end; }
+  .b2-htile { transition: transform 0.08s; }
+  .b2-htile.sel { transform: translateY(-13px);
+    box-shadow: 0 0 0 2px rgba(232,196,102,0.9), 0 0 14px 4px rgba(232,196,102,0.5); }
+
+  /* compact winning modal so it fits a phone without scrolling */
+  body.flat #result-frame { width: min(680px, 94vw); transform: none; }
+  body.flat #result-overlay .panel { max-width: none; }
+  body.flat .panel { padding: 12px 16px; max-height: 96vh; border-radius: 14px; }
+  body.flat .panel h2 { font-size: 1.08rem; }
+  body.flat #result-score { font-size: 1.4rem; }
+  body.flat #result-fans { gap: 4px; margin: 6px 0; }
+  body.flat .fan-chip { font-size: 0.66rem; padding: 3px 8px; }
+  body.flat #result-cols { margin: 6px 0 2px; }
+  body.flat #result-pattern { padding-right: 10px; }
+  body.flat #result-cols #result-payments { padding-left: 10px; }
+  body.flat #result-winning { margin: 6px 0 4px; padding: 7px; gap: 4px; }
+  body.flat #result-winning .cap { font-size: 0.7rem; }
+  body.flat #result-hand { gap: 4px 10px; margin: 5px 0; }
+  body.flat #result-hand .tile.lg, body.flat #result-winning .tile.lg { --tw: 21px; --th: 29px; }
+  body.flat .long-run { width: calc(21px * 5 + 4px); }
+  body.flat .corner-btn { top: 12px; font-size: 0.8rem; padding: 6px 11px; }
+  body.flat #result-payments .bd-all { font-size: 0.72rem; }
+  body.flat #result-payments .bd-row { font-size: 0.72rem; }
+  body.flat #result-payments .bd-sub { font-size: 0.66rem; }
+  body.flat .seat-hand { padding: 5px 7px; gap: 5px; }
+  body.flat .seat-hand .tile { --tw: 24px; --th: 33px; }
+  body.flat .seat-hand.top { transform: translate(-50%, -6px); }
 </style>
 </head>
 <body>

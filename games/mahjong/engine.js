@@ -228,8 +228,8 @@ export function isWinningHand(naturalIds, jokers, needMelds) {
 // additive fan is present the base is 1, so a fan-less win scores 1 — below 起和
 // (WIN_MIN), i.e. a 小和, which analyzeWin() rejects. Single source of truth.
 export const FAN = {
-  HUNDIAO: 2,    // 混吊 — one STANDING 混儿 forms the 将 with the natural winning tile (×2)
-  SHUANGHUN: 2,  // 双混(吊/儿) — two STANDING 混儿 form a meld with the natural winning tile (×2)
+  HUNDIAO: 2,    // 混吊 — the 将 (pair) is the 单吊 wait carrying a STANDING 混儿 (×2)
+  SHUANGHUN: 2,  // 双混吊 — a MELD carries two STANDING 混儿, closed by the winning tile (×2)
   SU: 2,         // 素 / 没混儿 — no wild in the hand at all (×2)
   ZHUOWU: 3,     // 捉五 — self-draw the 5万 into a 4-5-6万 run (+)
   LONG: 4,       // 龙 — full 1-9 run in one suit, as three chows (+)
@@ -285,24 +285,33 @@ function scoreFromDecomp(decomp, ctx) {
     if (suitHasDragon(seqStartsBySuit, s)) { long = true; longSuit = s; if (s === wildSuit) benHunLong = true; }
   }
 
-  // 混吊 / 双混 (×2) — the idea: a held 混儿 (or two) that completes the hand no matter
-  // what tile is drawn. So it is credited only to STANDING (hand-row) 混儿 that form the
-  // 将/meld together with the NATURAL winning tile: the winning group is all-but-one 混儿
-  // (jokers ≥ size−1) → 1 standing 混儿 = 混吊, 2 = 双混. A freshly-DRAWN 混儿 is never 混吊;
-  // it may still win as a plain 捉五 / 龙 (standing as the 5万 or a dragon tile), no bonus.
+  // 混吊 / 双混吊 (×2) — a held 混儿 (or two) that completes the hand no matter what tile
+  // arrives. It is credited only to STANDING (hand-row) 混儿: 混吊 = the 将 (pair) is the
+  // 单吊 wait carrying a 混儿; 双混吊 = a MELD carries two 混儿 and is closed by the winning
+  // tile. The winning group must be all-but-one 混儿 (jokers ≥ size−1): a pair (size 2)
+  // needs ≥1 标 → 混吊; a meld (size 3) needs ≥2 → 双混吊. A freshly-DRAWN 混儿 landing in
+  // a meld is never credited — it may still win as plain 捉五 / 龙.
   let wildCompleted = false, shuangHun = false, hunDiao = false, winPair = false, winGroup = null;
   if (!winIsWild) {
     // Only groups that use the natural winning tile in a real slot count — a run
     // whose winning-rank slot is filled by a JOKER (g.kinds lists the rank, but
     // g.natural does NOT) is NOT completed by the drawn tile, so filtering on
-    // g.natural (not g.kinds) avoids mis-crediting 双混 to such a run.
+    // g.natural (not g.kinds) avoids mis-crediting 双混吊 to such a run.
     const winByKind = decomp.filter((g) => g.natural.has(winningKind));
     winGroup = winByKind.find((g) => g.jokers >= groupSize(g) - 1) || winByKind[0] || null;
     const j = winGroup ? winGroup.jokers : 0;
     wildCompleted = !su && !!winGroup && j >= groupSize(winGroup) - 1;
-    shuangHun = wildCompleted && j >= 2;
-    hunDiao = wildCompleted && !shuangHun;
     winPair = !!(winGroup && winGroup.type === 'pair');
+    hunDiao = wildCompleted && winPair;   // 混吊 — the 将 carries the 混儿 wait
+    shuangHun = wildCompleted && !winPair; // 双混吊 — a meld carries two 混儿
+  } else {
+    // The winning tile is itself a 混儿. It is credited ONLY when it closes a 单吊将
+    // (将 single-wait): the 将 is a pair holding a STANDING 混儿 — the 混吊 wait — plus
+    // the drawn 混儿 (a pair of two 混儿) → still 混吊 (×2). A drawn 混儿 landing in a MELD
+    // (even an all-混儿 4-5-6万 run) is never credited per the drawn-混儿 rule, so such a
+    // meld is scored as its plain 捉五 / 龙 reading. Only the 将 single-wait earns the bonus.
+    winGroup = decomp.find((g) => g.type === 'pair' && g.jokers >= 2) || null;
+    wildCompleted = hunDiao = winPair = !!winGroup;
   }
 
   // --- combine: additive base term (捉五 / 龙), then ×2 fans ---
@@ -314,9 +323,9 @@ function scoreFromDecomp(decomp, ctx) {
   let mult = 1;
   if (benHunLong) mult *= FAN.BENHUN;            // 本混 doubles 龙 → 本混龙 = 8
   if (su) { mult *= FAN.SU; fans.push('素'); }
-  else if (wildCompleted) {                       // 混吊 / 双混吊 / 双混儿 — all ×2
+  else if (wildCompleted) {                       // 混吊 (将) / 双混吊 (a 2-混儿 meld) — both ×2
     mult *= FAN.HUNDIAO;
-    fans.push(shuangHun ? (winPair ? '双混吊' : '双混儿') : '混吊');
+    fans.push(winPair ? '混吊' : '双混吊');
   }
   if (afterKong) { mult *= FAN.GANGKAI; fans.push('杠开'); }
 

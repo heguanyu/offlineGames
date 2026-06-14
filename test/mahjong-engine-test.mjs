@@ -69,26 +69,30 @@ ok(r && r.meta.hunDiao, '混吊 detected');
 ok(!r.meta.su, '混吊 hand is not 素');
 eq(r.score, 2, '混吊(2) = 2');
 
-// A freshly-DRAWN 混儿 that can ONLY pair — the hand has no 4-5-6万 (捉五) and no 龙 for it
-// to serve — is not 混吊 and not a win: parked in the 将 it is a 小和. (With a 4-5-6万
-// present the 混 could instead stand as the 5万 → 捉五; see the 捉五 tests below.)
+// 混吊: four complete melds + a 单吊将 wait held open by ONE standing 混儿, completed by
+// drawing a second 混儿 → the 将 is now two 混儿. The standing 混儿 was a genuine 混吊 wait
+// (it wins on any tile), so this IS a legal win. 混吊 is the 将 fan (双混吊 is a 2-混儿
+// MELD, not this), so even a two-混儿 将 scores as 混吊 (×2) = 2.
 const drewWildPair = [M(1), M(2), M(3), M(7), M(8), M(9), P(1), P(2), P(3), P(7), P(8), P(9), 27, 28];
-ok(analyzeWin(drewWildPair, [], { wilds: [27, 28], winningKind: 28 }) === null,
-  'drawn 混儿 that can only pair (no 捉五/龙 available) → 小和');
+r = analyzeWin(drewWildPair, [], { wilds: [27, 28], winningKind: 28 });
+ok(r && r.meta.hunDiao && !r.meta.shuangHun, '混吊: 单吊将 wait completed by drawing a 混儿 (将 = two 混儿)');
+ok(r && r.fans.includes('混吊'), '混吊 labelled (not 双混吊 — that is for a 2-混儿 meld)');
+eq(r && r.score, 2, '混吊(×2) = 2');
 
 // A drawn 混儿 parking in a plain run (7-8-9s, not 捉五/龙) is likewise not 混吊 → 小和.
 const drewParks = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(9), P(9), S(7), S(8), 27];
 ok(analyzeWin(drewParks, [], { wilds: [27, 28], winningKind: 27 }) === null,
   'drawn 混儿 parked in a plain run (not 捉五/龙) is not 混吊 → 小和');
 
-// 双混 IS credited when a NATURAL tile closes a wait two standing 混儿 held open.
+// 双混吊 IS credited when a NATURAL tile closes a MELD two standing 混儿 held open.
 // 123m 456m 123p 99p + {27,28,9s}: the two hand-row wilds stand as 999s and the
-// drawn natural 9s closes the triplet → 双混(×2), score 2.
+// drawn natural 9s closes the triplet → 双混吊(×2), score 2.
 const twoWildMeld = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(9), P(9), 27, 28, S(9)];
 r = analyzeWin(twoWildMeld, [], { wilds: [27, 28], winningKind: S(9) });
-ok(r && r.meta.shuangHun, '双混 credited when two standing 混儿 are closed by a natural tile');
-ok(!r.meta.su, '双混 hand is not 素');
-eq(r.score, 2, '双混儿 = 2');
+ok(r && r.meta.shuangHun, '双混吊 credited when two standing 混儿 in a meld are closed by a natural tile');
+ok(!r.meta.su, '双混吊 hand is not 素');
+ok(r.fans.includes('双混吊'), '双混吊 labelled');
+eq(r.score, 2, '双混吊 = 2');
 
 // 混吊, NOT 双混: 123m 456m 123p + {P5,P6,P6} + two off-suit wilds, drew P6. The
 // drawn 6筒 pairs ONE standing 混儿 (将), the other 混儿 fills a 5-6筒 run → 混吊.

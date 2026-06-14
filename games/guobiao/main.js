@@ -4,6 +4,7 @@
 import { Game, PHASE, tileName, MIN_FAN } from './engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
 import { MahjongScene } from '../mahjong/scene.js';
+import { MahjongScene2D } from '../mahjong/scene2d.js';
 import { Sound } from '../mahjong/sound.js';
 import { buildOrder } from '../mahjong/handorder.js';
 import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands } from '../mahjong/ui-util.js';
@@ -24,6 +25,18 @@ const CLAIM_SETTLE_MS = FAST ? 20 : 380;
 // variant uses minFan: 0 and its own storage key so the two games keep separate
 // scores. Defaults to standard MCR.
 const CFG = window.MJ_CONFIG || { minFan: MIN_FAN, sessionKey: 'guobiao' };
+
+// Phones get the flat 2D (DOM) board instead of the WebGL table (see scene2d.js):
+// smaller screen, lower battery. Decide by screen real estate (short side in CSS px)
+// with the iPhone UA as a hint; `?flat=1` / `?d3=1` force a renderer for testing.
+const FLAT = (() => {
+  const q = new URLSearchParams(location.search);
+  if (q.get('flat')) return true;
+  if (q.get('d3')) return false;
+  return Math.min(screen.width, screen.height) < 600 || /iPhone|iPod/.test(navigator.userAgent);
+})();
+if (FLAT) document.body.classList.add('flat');
+const Renderer = FLAT ? MahjongScene2D : MahjongScene;
 
 let game = null, scene = null, level = LEVELS.NORMAL;
 let session = loadSession();
@@ -411,7 +424,7 @@ function nextHand() {
 }
 function startHand() {
   clearTimeout(pendingTimer);
-  if (!scene) { scene = new MahjongScene($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
+  if (!scene) { scene = new Renderer($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
   game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan });
   lastLogLen = 0; selIndex = 0; focusIndex = 0; lockedTing = false; tingWaits = [];
   sound.stopMusic();

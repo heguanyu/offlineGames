@@ -4,6 +4,7 @@
 import { Game, PHASE, tileName } from './engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
 import { MahjongScene } from './scene.js';
+import { MahjongScene2D } from './scene2d.js';
 import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
 import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands } from './ui-util.js';
@@ -20,6 +21,27 @@ const WIND = ['东', '南', '西', '北'];
 // automated e2e test.
 const FAST = !!new URLSearchParams(location.search).get('fast');
 const AI_DELAY = FAST ? 35 : 600;
+
+// Phones get a flat 2D (DOM) board instead of the WebGL table — smaller screen,
+// lower battery. The deciding signal is screen real estate (the short side in CSS
+// px: iPhones ≈320–440, iPads ≥744), with the iPhone UA as a confirming hint.
+// `?flat=1` / `?d3=1` force a renderer for testing on any device.
+const FLAT = (() => {
+  const q = new URLSearchParams(location.search);
+  if (q.get('flat')) return true;
+  if (q.get('d3')) return false;
+  const ua = navigator.userAgent;
+  const shortSide = Math.min(screen.width, screen.height);
+  return shortSide < 600 || /iPhone|iPod/.test(ua);
+})();
+if (FLAT) {
+  document.body.classList.add('flat');
+  // The 混儿 indicator floats over the 3D table; in the flat layout it belongs in
+  // the left rail. main.js fills it by id, so moving the element changes nothing else.
+  const wh = document.getElementById('wild-hud'), hdr = document.querySelector('header');
+  if (wh && hdr) hdr.appendChild(wh);
+}
+const Renderer = FLAT ? MahjongScene2D : MahjongScene;
 // A bot's 碰/杠 is shown lifted for CLAIM_DEMO_MS; the game logic is held until the
 // meld has settled (+ CLAIM_SETTLE_MS). Both collapse to ~0 under ?fast=1 for tests.
 const CLAIM_DEMO_MS = FAST ? 60 : 2000;
@@ -517,7 +539,7 @@ function nextHand() {
 
 function startHand() {
   clearTimeout(pendingTimer);
-  if (!scene) { scene = new MahjongScene($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
+  if (!scene) { scene = new Renderer($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
   game = new Game({
     dealer: session.dealer,
     prevailingWind: session.prevailingWind,
@@ -643,7 +665,7 @@ function fillRules() {
     发牌后翻一张指示牌，<b>该牌及其下一张</b>都是混儿，可代替任意牌组成胡牌。
     混儿<b>不能用于碰杠</b>，也<b>不能打出</b>。
     <h3>番种</h3>
-    提溜（底）<code>1</code>，混吊 / 双混吊 / 双混儿 <code>×2</code>，素（没混儿）<code>×2</code>，
+    提溜（底）<code>1</code>，混吊（将带混）/ 双混吊（一副带两混）<code>×2</code>，素（没混儿）<code>×2</code>，
     捉五（独胡五万，五万/四六万可为混儿）<code>+3</code>，龙（一色 1-9）<code>+4</code>，本混龙（龙与混同色）<code>×2 → 8</code>，
     杠开 <code>×2</code>，天和/地和 <code>= 28（封顶）</code>。
     <h3>算番</h3>

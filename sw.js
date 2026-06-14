@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.4.45';
+const CACHE = 'offline-games-0.4.46';
 
 const ASSETS = [
   './',
@@ -22,6 +22,7 @@ const ASSETS = [
   './games/mahjong/ai.js',
   './games/mahjong/main.js',
   './games/mahjong/scene.js',
+  './games/mahjong/scene2d.js',
   './games/mahjong/sound.js',
   './games/mahjong/handorder.js',
   './games/mahjong/ui-util.js',

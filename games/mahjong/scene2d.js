@@ -1,0 +1,259 @@
+// Flat 2D (DOM) table renderer for phones — a drop-in alternative to the 3D
+// MahjongScene (scene.js). It implements the exact same interface main.js drives
+// (sync / pick / worldToScreen / claimArrowGeometry / beginDeal / beginClaimDemo /
+// resize / setRotated, plus handDrawRevealing & onHandDrawSettled), so picking the
+// renderer is a one-line choice in main.js and 国标 can reuse it unchanged.
+//
+// Why DOM over a 2D <canvas>: a canvas needs a requestAnimationFrame loop redrawing
+// every frame (constant CPU/GPU wakeups even when idle) — the same battery profile
+// as WebGL, which is what we're avoiding on iPhone. The DOM board is rebuilt only
+// when sync() is called (i.e. on a real game event); a static board between turns
+// costs ~zero. No deck wall, no flight animations — just the live state.
+import { faceTileEl } from './ui-util.js';
+
+const WIND = ['东', '南', '西', '北'];
+const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
+const HUMAN = 0;
+
+function meldLabel(m, isWild) {
+  if (m.type === 'pung') return '碰';
+  if (m.type === 'chow') return '吃';
+  if (m.type === 'kong') return m.concealed ? (isWild(m.kind ?? m.tiles[0]) ? '金杠' : '暗杠') : '明杠';
+  return '';
+}
+
+export class MahjongScene2D {
+  constructor(canvas) {
+    this.canvas = canvas;            // kept as a transparent input overlay (main.js binds it)
+    this.mount = canvas.parentElement; // #table — the board lives here, under the canvas
+    this.rotated = false;
+    this.handDrawRevealing = false;  // no draw animation → input is never gated
+    this.onHandDrawSettled = null;
+
+    this.board = document.createElement('div');
+    this.board.id = 'board2d';
+    this.mount.insertBefore(this.board, this.canvas); // behind the (transparent) canvas
+
+    this.handRects = [];     // [{ pick, rect }] for pick()
+    this.oppAnchor = {};     // seat -> { x, y } table-local px, for the claim arrow
+    this.pending = null;     // { el } the big claimable tile, for worldToScreen/arrow
+    this.handEl = null;
+    this.claimDemo = null;   // { player, until } a bot's just-claimed meld, highlighted
+    this._last = null;       // last { game, ui } so resize() can re-render
+    this._lastDrawn = undefined;
+
+    new ResizeObserver(() => this.resize()).observe(this.mount);
+  }
+
+  setRotated(r) { this.rotated = !!r; }
+  resize() { if (this._last) this._render(this._last.game, this._last.ui); }
+
+  // ---- the interface main.js drives --------------------------------------
+  sync(game, ui) {
+    this._render(game, ui);
+    // No reveal animation: when a fresh tile is drawn, tell main.js it has "settled"
+    // so it auto-selects (selectDrawnTile). Fire once per distinct draw; drawnTile
+    // returns to null after each discard, so the next draw (even same kind) re-fires.
+    const d = ui.drawnTile ?? null;
+    if (d !== this._lastDrawn) {
+      this._lastDrawn = d;
+      if (d != null && ui.myTurn && this.onHandDrawSettled) {
+        const cb = this.onHandDrawSettled;
+        queueMicrotask(() => cb()); // avoid re-entrant render() within this sync()
+      }
+    }
+  }
+
+  // The initial deal is skipped (no animation): render the dealt board and let play
+  // begin on the next frame. onLand is the per-tile clack — we don't stagger, so it
+  // goes unused; done() resumes main.js's tick().
+  beginDeal(game, done) { this._render(game, { renderedHand: game.hands[HUMAN], myTurn: false }); requestAnimationFrame(() => done()); }
+
+  beginClaimDemo(player, ms = 2000) { this.claimDemo = { player, until: performance.now() + ms }; if (this._last) this._render(this._last.game, this._last.ui); }
+
+  // Anchor for the claim prompt (碰/杠/过): centred horizontally, just above the
+  // hand row. main.js calls this only as worldToScreen(0,0,5). Table-local px.
+  worldToScreen() {
+    const mr = this.mount.getBoundingClientRect();
+    let y = mr.height * 0.6;
+    if (this.handEl) y = this.handEl.getBoundingClientRect().top - mr.top - 8;
+    return { x: mr.width / 2, y };
+  }
+
+  // Geometry for the "where did this tile come from" arrow, in table-local px:
+  // the discarder's seat anchor, the centred pending tile, and its bounding box.
+  claimArrowGeometry() {
+    if (!this.pending) return null;
+    const mr = this.mount.getBoundingClientRect();
+    const r = this.pending.el.getBoundingClientRect();
+    const local = (x, y) => ({ x: x - mr.left, y: y - mr.top });
+    const c = local(r.left + r.width / 2, r.top + r.height / 2);
+    const tl = local(r.left, r.top), br = local(r.right, r.bottom);
+    const from = this.oppAnchor[this.pending.player] || { x: c.x, y: 0 };
+    return { from, center: c, player: this.pending.player, box: { minX: tl.x, minY: tl.y, maxX: br.x, maxY: br.y } };
+  }
+
+  pick(clientX, clientY) {
+    for (const h of this.handRects) {
+      const r = h.rect;
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) return h.pick;
+    }
+    return null;
+  }
+
+  // ---- rendering ----------------------------------------------------------
+  _render(game, ui) {
+    this._last = { game, ui };
+    const isWild = (id) => !!(game.isWild && game.isWild(id));
+    const b = this.board;
+    b.innerHTML = '';
+    this.handRects = [];
+    this.oppAnchor = {};
+    this.pending = null;
+    this.handEl = null;
+    const over = ui.reveal || (game.phase != null && game.result); // result overlay covers the board
+
+    // ---- opponents: compact nameplate + back-count + melds ----
+    const SIDE = { 1: 'right', 2: 'top', 3: 'left' }; // 下家 right, 对家 top, 上家 left
+    for (const p of [1, 2, 3]) {
+      const opp = document.createElement('div');
+      opp.className = 'b2-opp b2-opp-' + SIDE[p];
+      const active = game.turn === p && !over;
+      const dealer = p === game.dealer;
+      const plate = document.createElement('div');
+      plate.className = 'b2-plate' + (active ? ' active' : '') + (dealer ? ' dealer' : '');
+      plate.innerHTML = (dealer ? '<span class="crown">👑</span>' : '') +
+        `<span class="wind">${WIND[game.seatWind(p)]}</span><span>${SEAT_LABEL[p]}</span>` +
+        (active ? '<span class="think">思考中…</span>' : '');
+      opp.appendChild(plate);
+      // back-count: a small fan of tile-backs + ×N
+      const n = game.hands[p].length;
+      const backs = document.createElement('div');
+      backs.className = 'b2-backs';
+      backs.innerHTML = '<span class="b2-back"></span><span class="b2-back"></span><span class="b2-back"></span>' +
+        `<span class="b2-cnt">×${n}</span>`;
+      opp.appendChild(backs);
+      // exposed melds
+      const melds = game.melds[p] || [];
+      if (melds.length) {
+        const demo = this.claimDemo && this.claimDemo.player === p && performance.now() < this.claimDemo.until;
+        const mrow = document.createElement('div');
+        mrow.className = 'b2-melds' + (demo ? ' demo' : '');
+        for (const m of melds) mrow.appendChild(this._meld(m, isWild));
+        opp.appendChild(mrow);
+      }
+      b.appendChild(opp);
+    }
+
+    // ---- central discard pool: one wide block per suit, spread across the wide
+    // dimension. Within a suit, rank-sorted tiles fill POOL_COLS per row, left→right
+    // then bottom→top (oldest/lowest at the bottom, the block growing upward). ----
+    const log = game.discardLog || [];
+    const pendingIdx = ui.claimable && log.length ? log.length - 1 : -1;
+    const POOL_COLS = 5;
+    const pool = document.createElement('div');
+    pool.className = 'b2-pool';
+    const cols = [[], [], [], []]; // 万 筒 条 字
+    const colOf = (kind) => (kind < 9 ? 0 : kind < 18 ? 1 : kind < 27 ? 2 : 3);
+    log.forEach((d, i) => { if (i !== pendingIdx) cols[colOf(d.kind)].push(d); });
+    for (const list of cols) {
+      list.sort((a, b2) => a.kind - b2.kind);
+      const block = document.createElement('div');
+      block.className = 'b2-pool-type';
+      const rows = [];
+      for (let k = 0; k < list.length; k += POOL_COLS) rows.push(list.slice(k, k + POOL_COLS));
+      // bottom→top piling: render the last row first so the first row sits at the bottom
+      for (let ri = rows.length - 1; ri >= 0; ri--) {
+        const row = document.createElement('div');
+        row.className = 'b2-pool-row';
+        for (const d of rows[ri]) row.appendChild(faceTileEl(d.kind, { wild: isWild(d.kind) }));
+        block.appendChild(row);
+      }
+      pool.appendChild(block);
+    }
+    b.appendChild(pool);
+
+    // ---- the big claimable tile, front-centre, glowing ----
+    if (pendingIdx >= 0) {
+      const d = log[pendingIdx];
+      const wrap = document.createElement('div');
+      wrap.className = 'b2-pending';
+      const tile = faceTileEl(d.kind, { lg: true, wild: isWild(d.kind) });
+      wrap.appendChild(tile);
+      b.appendChild(wrap);
+      this.pending = { el: wrap, player: d.player };
+    }
+
+    // ---- the human's own melds (just above the hand) ----
+    const myMelds = game.melds[HUMAN] || [];
+    if (myMelds.length) {
+      const mrow = document.createElement('div');
+      mrow.className = 'b2-mymelds';
+      for (const m of myMelds) mrow.appendChild(this._meld(m, isWild));
+      b.appendChild(mrow);
+    }
+
+    // ---- the human's hand (bottom) ----
+    const hand = ui.renderedHand || game.hands[HUMAN] || [];
+    const handEl = document.createElement('div');
+    handEl.className = 'b2-hand';
+    // Tile size is keyed to a FIXED reference count (a full hand for the current meld
+    // count: 14 - 3·melds) so it doesn't shrink/grow as the hand cycles 13↔14 tiles —
+    // the row keeps a steady size. Set inline per tile so it beats the base .tile rule.
+    const DRAW_GAP = 8; // flanks the freshly-drawn tile so it reads as just-drawn
+    const refCount = Math.max(hand.length, 14 - 3 * myMelds.length);
+    const avail = this.mount.clientWidth - 16;
+    const tw = Math.max(24, Math.min(52, Math.floor((avail - 2 * DRAW_GAP) / refCount) - 4));
+    const th = Math.round(tw * 1.35);
+    // renderedHand already sorts the drawn tile into place; flank that slot with a gap.
+    const drawnIdx = ui.drawnTile != null ? hand.lastIndexOf(ui.drawnTile) : -1;
+    hand.forEach((id, i) => {
+      const wild = isWild(id);
+      const t = faceTileEl(id, { wild });
+      t.classList.add('b2-htile');
+      t.style.setProperty('--tw', tw + 'px');
+      t.style.setProperty('--th', th + 'px');
+      if (i === drawnIdx) { t.style.marginLeft = DRAW_GAP + 'px'; t.style.marginRight = DRAW_GAP + 'px'; }
+      t.dataset.pick = i;
+      if (ui.myTurn && i === ui.selRendered) t.classList.add('sel');
+      handEl.appendChild(t);
+    });
+    b.appendChild(handEl);
+    this.handEl = handEl;
+
+    // Anchor the pool's bottom edge above the hand row (it grows upward): a 20px gap
+    // plus another 10% of the board height, so it sits clear of the hand.
+    const pr = this.mount.getBoundingClientRect();
+    const handTopLocal = handEl.getBoundingClientRect().top - pr.top;
+    pool.style.top = 'auto';
+    pool.style.transform = 'translateX(-50%)';
+    pool.style.bottom = (pr.height - handTopLocal + 20 + pr.height * 0.1) + 'px';
+
+    // Record hand-tile hit rects for pick() (client coords; getBoundingClientRect
+    // already accounts for the force-landscape body rotation).
+    for (const t of handEl.children) {
+      this.handRects.push({ pick: +t.dataset.pick, rect: t.getBoundingClientRect() });
+    }
+
+    // Opponent anchors for the claim arrow (table-local centres).
+    const mr = this.mount.getBoundingClientRect();
+    for (const opp of b.querySelectorAll('.b2-opp')) {
+      const r = opp.getBoundingClientRect();
+      const cls = opp.className;
+      const p = cls.includes('b2-opp-right') ? 1 : cls.includes('b2-opp-top') ? 2 : 3;
+      this.oppAnchor[p] = { x: r.left + r.width / 2 - mr.left, y: r.top + r.height / 2 - mr.top };
+    }
+
+    b.classList.toggle('over', !!over);
+  }
+
+  _meld(m, isWild) {
+    const g = document.createElement('div');
+    g.className = 'b2-meld';
+    const tag = document.createElement('span');
+    tag.className = 'b2-tag'; tag.textContent = meldLabel(m, isWild);
+    g.appendChild(tag);
+    for (const id of m.tiles) g.appendChild(faceTileEl(id, { wild: isWild(id) }));
+    return g;
+  }
+}
