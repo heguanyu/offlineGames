@@ -97,8 +97,9 @@
   /* result overlay: each seat's revealed hand pinned just outside the panel's four
      borders, each its own frosted (extra-blurred) strip with 碰/吃/明杠/暗杠 tags */
   #result-overlay { overflow: hidden; }
-  #result-frame { position: relative; display: inline-flex; }
-  #result-overlay .panel { position: relative; z-index: 1; }
+  /* wide panel, raised so it clears the player's hand row on the table below */
+  #result-overlay .panel { position: relative; z-index: 1; max-width: none; }
+  #result-frame { position: relative; width: min(900px, 86vw); transform: translateY(-4vh); }
   .seat-hand { position: absolute; z-index: 0; display: flex; align-items: flex-end; gap: 9px; pointer-events: none;
     padding: 8px 11px; border-radius: 13px;
     background: rgba(4,18,12,0.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
@@ -110,8 +111,11 @@
     -webkit-text-stroke: 0.6px rgba(0,0,0,0.92); text-shadow: 0 1px 2px rgba(0,0,0,0.85); }
   .seat-hand.bottom { top: 100%;    left: 50%; transform: translate(-50%, 12px); }
   .seat-hand.top    { bottom: 100%; left: 50%; transform: translate(-50%, -12px); }
-  .seat-hand.left   { top: 50%; left: 0;  transform: translate(calc(-50% - 46px), -50%) rotate(90deg); }
-  .seat-hand.right  { top: 50%; right: 0; transform: translate(calc(50% + 46px), -50%) rotate(-90deg); }
+  /* result button row: 下一局 (default focus) + 返回 (to the hub) */
+  .result-btns { display: flex; gap: 12px; margin-top: 10px; }
+  .result-btns .big-btn { margin-top: 0; flex: 1; }
+  .panel .big-btn.ghost-btn { color: #eaf6f0; background: linear-gradient(#1b5e45,#134836); box-shadow: 0 4px 0 #0c3526; }
+  .panel .big-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
 
   /* ---------- action HUD ---------- */
   #action-hud {
@@ -183,8 +187,11 @@
   #result-winning.show { display: flex; }
   #result-winning .cap { font-size: 0.82rem; color: var(--gold); font-weight: 800; letter-spacing: 2px; }
   #result-winning .tile { transform: scale(1.18); box-shadow: 0 0 0 3px rgba(232,196,102,0.85), 0 0 26px 7px rgba(232,196,102,0.6); border-radius: 9px; }
-  #result-hand { display: flex; flex-direction: column; gap: 9px; justify-content: center; align-items: center; margin: 12px 0; }
-  .long-run { display: flex; gap: 2px; }
+  /* winning pattern: 2 melds per row, the 将 spanning the bottom */
+  #result-hand { display: grid; grid-template-columns: auto auto; gap: 7px 16px; justify-content: center; align-items: center; margin: 10px 0; }
+  #result-hand .meld-group.pair { grid-column: 1 / -1; justify-self: center; }
+  /* 龙: one continuous 1-9 run wrapped tight as 5+4 over two rows */
+  .long-run { grid-column: 1 / -1; justify-self: center; display: flex; flex-wrap: wrap; gap: 1px; width: calc(30px * 5 + 4px); }
   .meld-group { display: flex; gap: 2px; }
   .meld-group.pair { padding: 0 4px; }
   /* the winning (drawn) tile glows gold within the laid-out hand */
@@ -260,13 +267,14 @@
         </div>
         <div id="result-payments" class="sub"></div>
       </div>
-      <button class="big-btn" id="next-hand-btn">下一局</button>
+      <div class="result-btns">
+        <button class="big-btn" id="next-hand-btn">下一局</button>
+        <button class="big-btn ghost-btn" id="back-hub-btn">返回</button>
+      </div>
     </div>
-    <!-- each seat's revealed final hand, pinned to its panel border -->
+    <!-- 玩家 (bottom) + 对家 (top) revealed hands, pinned to the panel border -->
     <div class="seat-hand bottom" id="seat-hand-0" aria-hidden="true"></div>
-    <div class="seat-hand right"  id="seat-hand-1" aria-hidden="true"></div>
     <div class="seat-hand top"    id="seat-hand-2" aria-hidden="true"></div>
-    <div class="seat-hand left"   id="seat-hand-3" aria-hidden="true"></div>
     </div>
   </div>
 

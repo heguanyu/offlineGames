@@ -344,17 +344,27 @@ function renderWinningHand(handEl, w, r) {
     return;
   }
   for (const m of game.melds[w]) addGroup(m.tiles.map((k) => ({ kind: k, wild: false })), '', handEl, 'called');
-  // 龙 — its three same-suit chows share one row with no gap; every other meld/pair
-  // is its own row (see #result-hand / .long-run).
+  // 龙 — the three same-suit chows render as ONE continuous 1-9 run of flat tiles
+  // (not per-chow groups) so CSS can wrap it tight as 5+4 over two rows. Every other
+  // meld is its own grid cell (2 per row); the 将 spans the bottom.
   const longBase = (r.meta && r.meta.long) ? { m: 0, p: 9, s: 18 }[r.meta.longSuit] : null;
   const inLong = (g) => longBase != null && g.type === 'chow' && [longBase, longBase + 3, longBase + 6].includes(g.kinds[0]);
-  let pair = null, pairG = null, longRun = null;
+  let pair = null, pairG = null, longTiles = null;
   for (const g of r.decomp) {
     if (g.type === 'pair') { pair = pairTilesOf(g); pairG = g; continue; }
-    if (inLong(g)) {
-      if (!longRun) { longRun = document.createElement('div'); longRun.className = 'long-run'; handEl.appendChild(longRun); }
-      addGroup(meldTilesOf(g), '', longRun, g);
-    } else addGroup(meldTilesOf(g), '', handEl, g);
+    if (inLong(g)) { (longTiles ||= []).push(...meldTilesOf(g).map((t) => ({ ...t, g }))); }
+    else addGroup(meldTilesOf(g), '', handEl, g);
+  }
+  if (longTiles) {
+    longTiles.sort((a, b) => a.kind - b.kind);
+    const lr = document.createElement('div'); lr.className = 'long-run'; handEl.appendChild(lr);
+    for (const t of longTiles) {
+      const el = faceTileEl(t.wild ? wildFace() : t.kind, { lg: true, wild: t.wild });
+      if (!winMarked && winKind != null && (winIsWild ? t.wild : (!t.wild && t.kind === winKind && (winGrp ? t.g === winGrp : true)))) {
+        el.classList.add('win-tile'); winMarked = true;
+      }
+      lr.appendChild(el);
+    }
   }
   if (pair) addGroup(pair, ' pair', handEl, pairG);
 }
@@ -397,6 +407,7 @@ function showResult() {
   renderSeatHands(game, (id) => game.isWild(id)); // reveal every seat's hand on its border
   saveSession();
   ov.classList.remove('hidden');
+  resultFocus = 0; focusResultBtn(); // 下一局 focused by default
 }
 
 // 得分明细 for the result panel. First the overall result — every seat's net laid out as
@@ -517,7 +528,10 @@ function onAction(name) {
     return;
   }
   if (!$('result-overlay').classList.contains('hidden')) {
-    if (name === 'confirm' || name === 'menu') nextHand();
+    if (name === 'left') { resultFocus = 0; focusResultBtn(); }
+    else if (name === 'right') { resultFocus = 1; focusResultBtn(); }
+    else if (name === 'confirm') (resultFocus === 0 ? nextHand() : returnHub());
+    else if (name === 'menu') nextHand();
     return;
   }
 
@@ -619,7 +633,19 @@ function bindUI() {
   $('resume-btn').addEventListener('click', closeOverlays);
   $('newgame-btn').addEventListener('click', () => { closeOverlays(); newGame(); });
   $('next-hand-btn').addEventListener('click', nextHand);
+  $('back-hub-btn').addEventListener('click', returnHub);
   fillRules();
+}
+
+// Leave the game for the main hub (../../ from games/<mode>/).
+function returnHub() { location.href = '../../'; }
+
+// Keyboard/gamepad focus between the result panel's two buttons (下一局 / 返回).
+let resultFocus = 0;
+function focusResultBtn() {
+  const btns = [$('next-hand-btn'), $('back-hub-btn')];
+  btns.forEach((b, i) => b && b.classList.toggle('focus', i === resultFocus));
+  btns[resultFocus] && btns[resultFocus].focus();
 }
 
 bindUI();

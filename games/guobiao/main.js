@@ -372,13 +372,14 @@ function showResult() {
     } else { // 七对 / 十三幺 — no meld structure; show the sorted hand (+ the 点炮 tile)
       const hand = game.hands[w].slice();
       if (r.byDiscard && r.winningTile != null) hand.push(r.winningTile);
-      addGroup(hand);
+      addGroup(hand, ' span');
     }
     payEl.innerHTML = breakdownHtml(r);
   }
   renderSeatHands(game); // reveal every seat's hand on its border
   sound.stopMusic(); // 听 (if any) is over
   saveSession(); ov.classList.remove('hidden');
+  resultFocus = 0; focusResultBtn(); // 下一局 focused by default
 }
 function nextHand() {
   $('result-overlay').classList.add('hidden');
@@ -424,7 +425,13 @@ function onAction(name) {
     if (name === 'cancel' || name === 'menu') closeOverlays();
     return;
   }
-  if (!$('result-overlay').classList.contains('hidden')) { if (name === 'confirm' || name === 'menu') nextHand(); return; }
+  if (!$('result-overlay').classList.contains('hidden')) {
+    if (name === 'left') { resultFocus = 0; focusResultBtn(); }
+    else if (name === 'right') { resultFocus = 1; focusResultBtn(); }
+    else if (name === 'confirm') (resultFocus === 0 ? nextHand() : returnHub());
+    else if (name === 'menu') nextHand();
+    return;
+  }
   if (isClaimPhase()) {
     // 点炮 win: the 胡 floats centered (not in the bar), so confirm/win takes it and
     // cancel/pass declines — no bar navigation. (Pad has no 'win' key, so A=confirm.)
@@ -498,7 +505,19 @@ function bindUI() {
   $('resume-btn').addEventListener('click', closeOverlays);
   $('newgame-btn').addEventListener('click', () => { closeOverlays(); newGame(); });
   $('next-hand-btn').addEventListener('click', nextHand);
+  $('back-hub-btn').addEventListener('click', returnHub);
   fillRules();
+}
+
+// Leave the game for the main hub (../../ from games/<mode>/).
+function returnHub() { location.href = '../../'; }
+
+// Keyboard/gamepad focus between the result panel's two buttons (下一局 / 返回).
+let resultFocus = 0;
+function focusResultBtn() {
+  const btns = [$('next-hand-btn'), $('back-hub-btn')];
+  btns.forEach((b, i) => b && b.classList.toggle('focus', i === resultFocus));
+  btns[resultFocus] && btns[resultFocus].focus();
 }
 bindUI();
 
