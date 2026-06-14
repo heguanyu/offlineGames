@@ -9,7 +9,7 @@
 // as WebGL, which is what we're avoiding on iPhone. The DOM board is rebuilt only
 // when sync() is called (i.e. on a real game event); a static board between turns
 // costs ~zero. No deck wall, no flight animations — just the live state.
-import { faceTileEl } from './ui-util.js';
+import { faceTileEl, seatBadgeHtml } from './ui-util.js';
 
 const WIND = ['东', '南', '西', '北'];
 const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
@@ -114,7 +114,7 @@ export class MahjongScene2D {
       const dealer = p === game.dealer;
       const plate = document.createElement('div');
       plate.className = 'b2-plate' + (active ? ' active' : '') + (dealer ? ' dealer' : '');
-      plate.innerHTML = (dealer ? '<span class="crown">👑</span>' : '') +
+      plate.innerHTML = seatBadgeHtml(game, p) +
         `<span class="wind">${WIND[game.seatWind(p)]}</span><span>${SEAT_LABEL[p]}</span>` +
         (active ? '<span class="think">思考中…</span>' : '');
       opp.appendChild(plate);

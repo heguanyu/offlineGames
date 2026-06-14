@@ -173,6 +173,19 @@ body.flat .long-run { width: calc(21px * 5 + 4px); }
     </div>
   </div>
 
+  <!-- 拉庄 (blind double-down, shown before the deal) -->
+  <div class="overlay hidden" id="lazhuang-overlay">
+    <div class="panel">
+      <h2>⚔️ 拉庄</h2>
+      <p id="lazhuang-text" class="sub"></p>
+      <p class="sub" style="font-size:0.78rem;opacity:0.85;">拉庄后，你与庄家之间的全部得分（底分 + 杠分）翻倍。牌未发，盲选。</p>
+      <div class="lz-btns">
+        <button class="big-btn" id="lazhuang-yes">⚔️ 拉庄</button>
+        <button class="big-btn hub" id="lazhuang-no">不拉</button>
+      </div>
+    </div>
+  </div>
+
   <!-- menu -->
   <div class="overlay hidden" id="menu-overlay">
     <div class="panel">

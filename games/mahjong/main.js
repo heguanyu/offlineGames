@@ -7,7 +7,7 @@ import { MahjongScene } from './scene.js';
 import { MahjongScene2D } from './scene2d.js';
 import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands } from './ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands, seatBadgeHtml } from './ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -143,7 +143,7 @@ function renderScores() {
     const cell = document.createElement('div');
     cell.className = 'sb-seat' + (p === HUMAN ? ' me' : '');
     cell.style.gridRow = row; cell.style.gridColumn = col;
-    cell.innerHTML = `<span class="sb-name">${p === game.dealer ? '👑' : ''}${SEAT_LABEL[p]}</span>` +
+    cell.innerHTML = `<span class="sb-name">${p === game.dealer ? '👑' : ''}${game.isLaZhuang(p) ? '⚔️' : ''}${SEAT_LABEL[p]}</span>` +
       `<span class="sb-pt" style="color:${color}">${pts}</span>`;
     el.appendChild(cell);
   }
@@ -215,7 +215,7 @@ function renderPlate(p) {
   const thinking = game.phase !== PHASE.OVER && game.turn === p && p !== HUMAN;
   const isDealer = p === game.dealer;
   seat.innerHTML =
-    (isDealer ? '<span class="crown" title="庄家">👑</span>' : '') + // above the nameplate
+    seatBadgeHtml(game, p) + // 👑 (庄) / ⚔️ (拉庄), above the nameplate
     `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}${isDealer ? ' dealer' : ''}">` +
     `<span class="wind">${WIND[game.seatWind(p)]}</span>` +
     `<span>${SEAT_LABEL[p]}</span>` +
@@ -536,10 +536,11 @@ function showResult() {
 
 // 得分明细 for the result panel. First the overall result — every seat's net laid out as
 // a 3×3 grid mirroring the table (对家 top, 上家 left, 下家 right, 玩家 bottom) — then the
-// human's own breakdown: net vs each opponent with 胡 / 明杠 / 暗杠 / 金杠 as subitems and a
-// 庄x2 tag where the flow is to/from the 庄家. Mirrors _settle + _settleKongs (庄家加倍).
+// human's own breakdown: net vs each opponent with 胡 / 明杠 / 暗杠 / 金杠 as subitems and
+// 庄x2 / 拉庄x2 tags where they apply. The multipliers come from game.settlementFactors,
+// the same source _settle + _settleKongs use, so the panel can never drift from the math.
 function breakdownHtml(r) {
-  const me = HUMAN, dealer = game.dealer, dd = game.dealerDouble;
+  const me = HUMAN, dealer = game.dealer;
   const winner = r.type === 'win' ? r.winner : -1;
   const score = r.score || 0;
   const col = (v) => (v > 0 ? '#7ddf8a' : v < 0 ? '#ef9a9a' : '#cfe7db');
@@ -562,10 +563,10 @@ function breakdownHtml(r) {
       `${p === dealer ? '👑' : ''}${SEAT_LABEL[p]} <b style="color:${col(r.payments[p])}">${sgn(r.payments[p])}</b></span>`;
   }).join('');
   // your breakdown — net vs each opponent, with the 胡/杠 reasons as subitems
-  const dbl = (q) => (dd && (me === dealer || q === dealer)) ? 2 : 1;
   let total = 0;
   const grps = [1, 2, 3].map((off) => {
-    const q = (me + off) % 4, f = dbl(q);
+    const q = (me + off) % 4, factors = game.settlementFactors(me, q);
+    const f = factors.reduce((m, x) => m * x.factor, 1);
     const km = KT[me], kq = KT[q];
     const subs = [];
     const hu = winner === me ? score * f : winner === q ? -score * f : 0;
@@ -574,7 +575,7 @@ function breakdownHtml(r) {
     const conc = (km.conc - kq.conc) * f; if (conc) subs.push(['暗杠', conc]);
     const gold = (km.gold - kq.gold) * f; if (gold) subs.push(['金杠', gold]);
     const net = subs.reduce((s, [, v]) => s + v, 0); total += net;
-    const tag = f === 2 ? ' <span class="dbl">庄x2</span>' : '';
+    const tag = factors.map((x) => ` <span class="dbl">${x.label}x${x.factor}</span>`).join('');
     const subHtml = (subs.length ? subs : [['—', 0]]).map(([w, v]) =>
       `<div class="bd-sub"><span>${w}</span><span class="s-net" style="color:${col(v)}">${v ? sgn(v) : '—'}</span></div>`
     ).join('');
@@ -610,10 +611,18 @@ function nextHand() {
 function startHand() {
   clearTimeout(pendingTimer);
   if (!scene) { scene = new Renderer($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
+  // 拉庄 is a BLIND double-down decided before any tile is dealt: resolve who challenges
+  // the 庄, then build + deal the hand with that set baked in.
+  askLaZhuang(session.dealer, beginHand);
+}
+
+// Build the Game (which deals) with the resolved 拉庄 challengers, then run the deal + play.
+function beginHand(laZhuang) {
   game = new Game({
     dealer: session.dealer,
     prevailingWind: session.prevailingWind,
     scores: session.scores,
+    laZhuang,
   });
   lastLogLen = 0;
   selIndex = 0; focusIndex = 0; drawnWildSelected = false;
@@ -630,6 +639,49 @@ function startHand() {
   } else {
     tick();
   }
+}
+
+// ---------------------------------------------------------------------------
+// 拉庄 (blind double-down) — decide which non-庄 seats challenge the 庄 this hand.
+// Decoupled from settlement (engine owns the math) and from the nameplates (the badge
+// is shared via seatBadgeHtml): bots route through shouldBotLaZhuang, so giving them a
+// real decision later is a one-function change.
+// ---------------------------------------------------------------------------
+let lzCallback = null, lzFocus = 1; // panel: 0 = 拉庄, 1 = 不拉 (default, no accidental double)
+let lzTestChoice = false;           // FAST/e2e override for the human's answer (no panel in tests)
+
+// Whether bot `seat` 拉庄s against `dealer`. AI hook — bots never 拉庄 yet, but the
+// decision flows through here so the future logic lands in one spot.
+function shouldBotLaZhuang(seat, dealer) { return false; }
+
+// Resolve the 拉庄 set for the hand, then call done(challengers:[seats]). Bots decide
+// synchronously; the human is asked via the panel (skipped when they're the 庄, or in
+// FAST tests where lzTestChoice stands in for the click).
+function askLaZhuang(dealer, done) {
+  const challengers = [];
+  for (let p = 0; p < 4; p++) if (p !== dealer && p !== HUMAN && shouldBotLaZhuang(p, dealer)) challengers.push(p);
+  const finish = (humanYes) => { if (humanYes) challengers.push(HUMAN); done(challengers.sort((a, b) => a - b)); };
+  if (dealer === HUMAN) { finish(false); return; }     // the 庄 can't 拉庄 itself
+  if (FAST) { finish(lzTestChoice); return; }           // tests skip the blocking panel
+  showLaZhuangPanel(dealer, finish);
+}
+
+function showLaZhuangPanel(dealer, cb) {
+  lzCallback = cb; lzFocus = 1;
+  $('lazhuang-text').textContent = `本局${SEAT_LABEL[dealer]}坐庄，是否拉庄？`;
+  $('lazhuang-overlay').classList.remove('hidden');
+  focusLzBtn();
+}
+function focusLzBtn() {
+  const btns = [$('lazhuang-yes'), $('lazhuang-no')];
+  btns.forEach((b, i) => b && b.classList.toggle('focus', i === lzFocus));
+  btns[lzFocus] && btns[lzFocus].focus();
+}
+function resolveLz(yes) {
+  if (!lzCallback) return;
+  const cb = lzCallback; lzCallback = null;
+  $('lazhuang-overlay').classList.add('hidden');
+  cb(yes);
 }
 
 // Touch / mouse on the 3D table → raycast → select the picked hand tile.
@@ -727,6 +779,12 @@ function onAction(name) {
     if (name === 'cancel' || name === 'menu') closeOverlays();
     return;
   }
+  if (!$('lazhuang-overlay').classList.contains('hidden')) {
+    if (name === 'left' || name === 'right') { lzFocus ^= 1; focusLzBtn(); }
+    else if (name === 'confirm') resolveLz(lzFocus === 0);
+    else if (name === 'cancel') resolveLz(false); // 不拉
+    return;
+  }
   if (!$('rounds-overlay').classList.contains('hidden')) {
     if (name === 'cancel' || name === 'menu' || name === 'confirm') $('rounds-overlay').classList.add('hidden');
     return;
@@ -808,6 +866,8 @@ function fillRules() {
     <b>起和 2 番</b>，不足 2 番为小和、不能胡。庄家加倍。
     <h3>杠分</h3>
     明杠 <code>+1</code>，暗杠 <code>+2</code>，金杠（暗杠四张混儿）<code>+4</code>。每家杠分由其它三家补，局末单独结算；涉及<b>庄家</b>的杠分<b>加倍</b>（庄x2）。
+    <h3>拉庄</h3>
+    发牌前，非庄家可<b>拉庄</b>：你与<b>庄家</b>之间的全部得分（底分 + 杠分）再<b>翻倍</b>（拉庄x2，与庄x2叠加）。盲选，牌未发，搏一把。
     <h3>操作</h3>
     自摸成胡时出现 <b>胡</b> 按钮（含番种与得分），点它才和牌，也可继续打牌；快捷键 <b>H</b>。
     点牌选中、再点该牌或按 <b>A</b> 出牌；左右/摇杆移动光标。
@@ -852,6 +912,8 @@ function bindUI() {
   $('back-hub-btn').addEventListener('click', returnHub);
   $('rounds-btn').addEventListener('click', openRounds);
   $('rounds-close').addEventListener('click', () => $('rounds-overlay').classList.add('hidden'));
+  $('lazhuang-yes').addEventListener('click', () => { sound.resume(); resolveLz(true); });
+  $('lazhuang-no').addEventListener('click', () => { sound.resume(); resolveLz(false); });
   $('final-reset-btn').addEventListener('click', () => { $('final-overlay').classList.add('hidden'); newGame(); });
   $('final-hub-btn').addEventListener('click', returnHub);
   $('menu-hub-btn').addEventListener('click', returnHub);
@@ -878,6 +940,7 @@ if (new URLSearchParams(location.search).get('fast')) {
     // emulate a real user: a drawn 混儿 can't be discarded, so fall back to a non-wild tile
     discard: () => { drawnWildSelected = false; discardSelected(); },
     scene: () => scene,
+    game: () => game,
     // visual check: melds for every seat + a full pool + a pending claim
     debugMelds: () => {
       const w = game.wilds[0];
@@ -956,6 +1019,33 @@ if (new URLSearchParams(location.search).get('fast')) {
       ];
       game.scores = session.rounds[3].scores.slice();
       showFinalBoard();
+    },
+    // e2e: deal a real hand with the human 拉庄 vs 庄 = 下家(1) (exercises askLaZhuang).
+    dealLz: () => { lzTestChoice = true; session.dealer = 1; startHand(); },
+    // e2e/visual: the 拉庄 confirmation panel (records the click on window.__lz).
+    debugLzPanel: () => showLaZhuangPanel(1, (yes) => { window.__lz = yes; }),
+    // visual/e2e: a 拉庄 win — human (0) 拉庄 vs 庄 = 下家(1); the 下家 row carries 庄x2 +
+    // 拉庄x2 (12 = 2×4) and the human's plate/scoreboard show ⚔️.
+    debugLzWin: () => {
+      game.wilds = [0, 1]; game.wildSet = new Set([0, 1]);
+      game.laZhuang = [HUMAN]; game.dealer = 1;
+      game.hands[HUMAN] = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 26, 0];
+      game.melds[HUMAN] = [];
+      game.phase = PHASE.OVER;
+      const S = (...a) => new Set(a);
+      game.result = {
+        type: 'win', winner: HUMAN, score: 2, fans: ['混吊'], winningTile: 26,
+        decomp: [
+          { type: 'chow', kinds: [3, 4, 5], jokers: 0, natural: S(3, 4, 5) },
+          { type: 'chow', kinds: [6, 7, 8], jokers: 0, natural: S(6, 7, 8) },
+          { type: 'chow', kinds: [9, 10, 11], jokers: 0, natural: S(9, 10, 11) },
+          { type: 'chow', kinds: [12, 13, 14], jokers: 0, natural: S(12, 13, 14) },
+          { type: 'pair', kinds: [26], jokers: 1, natural: S(26) },
+        ],
+        meta: { su: false, hunDiao: true, shuangHun: false, winGroupIdx: 4 },
+        payments: [12, -8, -2, -2], kong: [0, 0, 0, 0], kongPts: [0, 0, 0, 0],
+      };
+      showResult();
     },
   };
 }

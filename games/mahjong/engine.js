@@ -387,13 +387,16 @@ export const PHASE = {
 };
 
 export class Game {
-  // opts: { rng, dealer (0..3), prevailingWind (0..3), seatWinds:[4] }
+  // opts: { rng, dealer (0..3), prevailingWind (0..3), scores:[4], laZhuang:[seats] }
   constructor(opts = {}) {
     this.rng = opts.rng || Math.random;
     this.dealer = opts.dealer ?? 0;
     this.prevailingWind = opts.prevailingWind ?? 0;
     this.scores = opts.scores ? opts.scores.slice() : [0, 0, 0, 0];
     this.dealerDouble = opts.dealerDouble ?? true; // 庄家加倍
+    // 拉庄 (blind double-down): the non-庄 seats that chose to double their stakes with
+    // the 庄 this hand. Decided before the deal; affects only settlement, never the play.
+    this.laZhuang = opts.laZhuang ? opts.laZhuang.slice() : [];
     this.log = [];
     this._deal(opts);
   }
@@ -601,14 +604,31 @@ export class Game {
     this._emit(`${this.seatName(player)} 自摸 ${result.fans.join('+')} (${result.score})`);
   }
 
-  // Self-draw: every other player pays the winner. The dealer pays/collects
-  // double when dealerDouble is on (classic 庄家加倍).
+  isLaZhuang(player) { return this.laZhuang.includes(player); }
+
+  // The stacking doublings on the settlement flow between seats a and b, each as
+  // { label, factor }. 庄家加倍 doubles any flow to/from the 庄; 拉庄 doubles the flow
+  // between a challenger and the 庄. This is the single source of truth for every
+  // pairwise multiplier — _settle (胡分), _settleKongs (杠分) and the result breakdown
+  // all read it, so a new doubling rule only needs to be added here.
+  settlementFactors(a, b) {
+    const out = [];
+    const D = this.dealer;
+    const involvesDealer = a === D || b === D;
+    if (this.dealerDouble && involvesDealer) out.push({ label: '庄', factor: 2 });
+    if (involvesDealer && this.isLaZhuang(a === D ? b : a)) out.push({ label: '拉庄', factor: 2 });
+    return out;
+  }
+  // Combined multiplier on the a↔b flow = product of its settlementFactors.
+  pairMultiplier(a, b) { return this.settlementFactors(a, b).reduce((m, f) => m * f.factor, 1); }
+
+  // Self-draw: every other player pays the winner, scaled by the pair multiplier
+  // (庄家加倍 and/or 拉庄 between that payer and the winner).
   _settle(winner, score) {
     const pay = new Array(4).fill(0);
     for (let p = 0; p < 4; p++) {
       if (p === winner) continue;
-      const dbl = this.dealerDouble && (winner === this.dealer || p === this.dealer);
-      const amt = score * (dbl ? 2 : 1);
+      const amt = score * this.pairMultiplier(winner, p);
       pay[p] = -amt;
       pay[winner] += amt;
     }
@@ -617,8 +637,8 @@ export class Game {
   }
 
   // 杠分 — every kong scores 明杠 1 / 暗杠 2 / 金杠 4. Each player's kong points are
-  // paid by the other three (incl. the winner), settled pairwise at hand end.
-  // 庄家加倍: any kong payment to or from the dealer is doubled, mirroring the 胡分
+  // paid by the other three (incl. the winner), settled pairwise at hand end. The
+  // pairwise flow is scaled by pairMultiplier (庄家加倍 and/or 拉庄), mirroring the 胡分
   // rule. Adds the net into `pay` (and this.scores) and returns the per-seat net.
   _kongPoints(m) {
     if (m.type !== 'kong') return 0;
@@ -630,10 +650,7 @@ export class Game {
     const net = [0, 0, 0, 0];
     for (let p = 0; p < 4; p++) {
       for (let q = p + 1; q < 4; q++) {
-        // q pays p for p's kong points and vice-versa; double the pairwise flow
-        // when the dealer is one of the pair (庄家加倍).
-        const dbl = this.dealerDouble && (p === this.dealer || q === this.dealer) ? 2 : 1;
-        const flow = (K[p] - K[q]) * dbl; // net points to p from q
+        const flow = (K[p] - K[q]) * this.pairMultiplier(p, q); // net points to p from q
         net[p] += flow; net[q] -= flow;
       }
     }

@@ -78,6 +78,7 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 
 /* The 庄家 crown, lifted out of the nameplate to sit above it. */
 .hud .crown { font-size: 3rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55)); }
+.hud .lazhuang { font-size: 2.1rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55)); }
 
 .nameplate {
   display: flex; align-items: center; gap: 8px; font-size: 1.6rem; color: #eaf6f0;
@@ -232,6 +233,12 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
    which would turn purple once visited) */
 .panel .big-btn.danger { background: linear-gradient(#a83232, #7e2020); color: #ffecec; box-shadow: 0 4px 0 #561414; margin-top: 26px; }
 .panel .big-btn.hub { background: linear-gradient(#1b5e45, #134836); color: #eaf6f0; box-shadow: 0 4px 0 #0c3526; margin-top: 18px; }
+.panel .big-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
+
+/* 拉庄 panel: the two choices side by side */
+.lz-btns { display: flex; gap: 12px; margin-top: 14px; }
+.lz-btns .big-btn { flex: 1; margin-top: 0; }
+.lz-btns .big-btn.hub { margin-top: 0; }
 
 #result-fans { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 12px 0; }
 
@@ -390,6 +397,7 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
 .b2-plate .wind { color: var(--gold); font-weight: 800; }
 
 .b2-plate .crown { font-size: 0.95em; }
+.b2-plate .lazhuang { font-size: 0.95em; }
 
 .b2-plate .think { color: var(--gold); font-size: 0.62rem; animation: blink 1s infinite; }
 

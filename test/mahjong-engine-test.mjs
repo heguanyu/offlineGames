@@ -215,6 +215,36 @@ console.log('kong points:');
   ok(kg.selfKongOptions(kg.dealer).some((o) => o.type === 'gold' && o.kind === 31), '金杠 offered for four 混儿');
 }
 
+// --- 拉庄 (blind double-down: a challenger doubles their flow with the 庄) ----------
+console.log('拉庄:');
+{
+  // dealer = seat 1; seat 0 (human) 拉庄. pairMultiplier stacks 庄(2) × 拉庄(2) = 4.
+  const g = new Game({ rng: () => 0.5, indicator: 31, dealer: 1, laZhuang: [0] });
+  g.scores = [0, 0, 0, 0];
+  eq(g.pairMultiplier(0, 1), 4, '拉庄: challenger↔庄 = 庄2 × 拉庄2 = 4');
+  eq(g.pairMultiplier(0, 2), 1, '拉庄: challenger↔闲 unaffected = 1');
+  eq(g.pairMultiplier(1, 2), 2, '拉庄: 庄↔non-challenger = 庄2 only');
+  eq(g.settlementFactors(0, 1).map((x) => x.label).join('+'), '庄+拉庄', '拉庄: factors labelled 庄 + 拉庄');
+  // 胡分: challenger self-draws score 3 → 庄 pays 3×4 = 12; the two 闲 pay 3 (×1) each.
+  const pay = g._settle(0, 3);
+  eq(pay.join(','), '18,-12,-3,-3', '拉庄 胡分: 庄 pays the challenger 4× (12), 闲 pay 1× (3)');
+  eq(pay.reduce((a, b) => a + b, 0), 0, '拉庄 胡分 is zero-sum');
+  // 杠分: challenger holds an 暗杠 (2) → 庄 pays 2×4 = 8; the two 闲 pay 2 (×1) each.
+  const g2 = new Game({ rng: () => 0.5, indicator: 31, dealer: 1, laZhuang: [0] });
+  g2.scores = [0, 0, 0, 0];
+  g2.melds = [[{ type: 'kong', kind: 0, concealed: true }], [], [], []];
+  eq(g2._settleKongs([0, 0, 0, 0]).join(','), '12,-8,-2,-2', '拉庄 杠分: 庄 pays the challenger 暗杠 4× (8), 闲 pay 1× (2)');
+  // a third party winning: 拉庄 leaves the 胡分 untouched (challenger & 庄 don't exchange).
+  const g3 = new Game({ rng: () => 0.5, indicator: 31, dealer: 1, laZhuang: [0] });
+  g3.scores = [0, 0, 0, 0];
+  eq(g3._settle(2, 3).join(','), '-3,-6,12,-3', '拉庄: a 闲 win is unaffected (only 庄 pays 庄2)');
+  // no 拉庄 → the 庄家加倍 baseline is unchanged.
+  const g4 = new Game({ rng: () => 0.5, indicator: 31, dealer: 1 });
+  g4.scores = [0, 0, 0, 0];
+  eq(g4.pairMultiplier(0, 1), 2, 'no 拉庄: challenger↔庄 = 庄2 only');
+  eq(g4._settle(0, 3).join(','), '12,-6,-3,-3', 'no 拉庄: 庄 pays 2× (6) baseline');
+}
+
 // --- full game state machine: random self-play terminates, scores zero-sum ----
 console.log('state machine:');
 function autoplay(seed) {

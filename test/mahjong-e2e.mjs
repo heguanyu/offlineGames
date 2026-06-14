@@ -98,6 +98,29 @@ try {
   if (!reset.every((s) => s === '0')) throw new Error(`再来一锅 did not reset scores: ${reset.join(', ')}`);
   console.log('final board (human 🥇) + 再来一锅 reset OK:', final.congrats);
 
+  // 拉庄: the blind double-down panel, the ⚔️ badge, and the doubled 庄 row in the modal.
+  await page.evaluate(() => window.__mj.debugLzPanel());
+  await page.waitForFunction(() => !document.getElementById('lazhuang-overlay').classList.contains('hidden'), { timeout: 4000 });
+  const lzText = await page.$eval('#lazhuang-text', (e) => e.textContent);
+  if (!lzText.includes('坐庄') || !lzText.includes('拉庄')) throw new Error(`拉庄 panel text wrong: ${lzText}`);
+  await page.click('#lazhuang-yes');
+  await page.waitForFunction(() => document.getElementById('lazhuang-overlay').classList.contains('hidden'));
+  if (await page.evaluate(() => window.__lz) !== true) throw new Error('拉庄 panel did not capture the 拉庄 choice');
+
+  // a real 拉庄 hand (human challenges 庄 = 下家): the engine marks it and the badge shows.
+  await page.evaluate(() => window.__mj.dealLz());
+  await page.waitForFunction(() => document.querySelector('#plate-0 .lazhuang') &&
+    document.getElementById('scores').textContent.includes('⚔️'), { timeout: 8000 });
+  const lzSet = await page.evaluate(() => window.__mj.game().laZhuang.join(','));
+  if (lzSet !== '0') throw new Error(`拉庄 set should be [0], got [${lzSet}]`);
+
+  // the win breakdown marks both 庄x2 and 拉庄x2 on the 庄 row.
+  await page.evaluate(() => window.__mj.debugLzWin());
+  await page.waitForFunction(() => !document.getElementById('result-overlay').classList.contains('hidden'));
+  const pay = await page.$eval('#result-payments', (e) => e.textContent);
+  if (!pay.includes('庄x2') || !pay.includes('拉庄x2')) throw new Error(`breakdown missing 庄x2/拉庄x2 tags: ${pay}`);
+  console.log('拉庄: panel + ⚔️ badge + 庄x2·拉庄x2 breakdown OK');
+
   if (errors.length) throw new Error('runtime errors:\n  ' + errors.join('\n  '));
 
   console.log(`resolved ${handsResolved} hand(s), no runtime errors`);

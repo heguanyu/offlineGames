@@ -16,6 +16,17 @@ export function faceTileEl(kind, { lg = false, wild = false } = {}) {
   return el;
 }
 
+// Status badges for a seat's nameplate: 👑 for the 庄, ⚔️ for a 拉庄 challenger. Shared
+// by the 3D HTML plates (main.js renderPlate) and the flat 2D board (scene2d) so the two
+// renderers stay in sync; CSS sizes .crown / .lazhuang per context. Decoupled from any
+// particular seat (works for the human or a bot once bots can 拉庄).
+export function seatBadgeHtml(game, p) {
+  let html = '';
+  if (p === game.dealer) html += '<span class="crown" title="庄家">👑</span>';
+  if (game.isLaZhuang && game.isLaZhuang(p)) html += '<span class="lazhuang" title="拉庄">⚔️</span>';
+  return html;
+}
+
 
 // Text label for a meld group: 碰 / 吃 / 明杠 / 暗杠 / 金杠 (金杠 = a concealed kong
 // of 混儿 in 天津). Open vs concealed kongs are otherwise identical four-of-a-kind,
