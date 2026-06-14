@@ -6,6 +6,19 @@ export class Sound {
   constructor() {
     this.ctx = null;
     this.muted = localStorage.getItem('mahjong-muted') === '1';
+    // Short spoken calls (碰/吃/杠), played via <audio> alongside the WebAudio SFX.
+    this._voices = {};
+    for (const k of ['pung', 'chow', 'kong']) {
+      try { const a = new Audio(new URL(`./sounds/${k}.wav`, import.meta.url).href); a.preload = 'auto'; this._voices[k] = a; } catch {}
+    }
+  }
+
+  // Play a spoken call clip (碰/吃/杠). Best-effort: silent if muted or unavailable.
+  voice(name) {
+    if (this.muted) return;
+    const a = this._voices[name];
+    if (!a) return;
+    try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch {}
   }
 
   // Lazily create / resume the context — must be kicked off from a user gesture

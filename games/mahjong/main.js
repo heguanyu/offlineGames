@@ -193,8 +193,8 @@ function flushLogToasts() {
     const line = game.log[i];
     if (/自摸/.test(line)) { toast(line, true); (game.result && game.result.winner === HUMAN ? sound.win() : sound.lose()); }
     else if (/荒牌/.test(line)) { toast(line, true); sound.drawGame(); }
-    else if (/杠/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.kong(); }
-    else if (/碰/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.pung(); }
+    else if (/杠/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.kong(); sound.voice('kong'); }
+    else if (/碰/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.pung(); sound.voice('pung'); }
   }
   lastLogLen = game.log.length;
 }
@@ -211,7 +211,8 @@ function tick() {
     schedule(() => {
       const c = game.claim;
       const dec = chooseClaim(game, c.player, c, level);
-      if (dec) game.claimDiscard(dec); else game.passClaim();
+      if (dec) { game.claimDiscard(dec); if (scene) scene.beginClaimDemo(c.player); } // show the bot's 碰/杠 off
+      else game.passClaim();
       tick();
     }, AI_DELAY);
     return;

@@ -13,6 +13,7 @@ const TW = 1.0, TH = 1.35, TD = 0.62; // tile width / height / depth
 const FELT = 16;
 const GAP = 1.06;
 const DRAW_MARGIN = 0.4;  // half-gap flanking the freshly-drawn tile on each side
+const CLAIM_DEMO_MS = 2000; // a bot's 吃/碰/杠 is held up facing the camera this long
 // Seats sit on a ring; the player's row is pushed forward (toward the camera)
 // and each row's half-length is capped so neighbouring rows never collide at
 // the corners. Rows longer than their cap shrink uniformly to fit.
@@ -188,6 +189,7 @@ export class MahjongScene {
     if (!designs.size) preloadDesigns();
 
     this.tiles = new Map();   // key -> { mesh, tp:Vector3, trx, try_, ts }
+    this.claimDemo = null;    // { player, t0 } — a bot's just-claimed meld being shown off
     this.pickables = [];
     this.scene.add(this.tilesGroup = new THREE.Group());
 
@@ -303,6 +305,12 @@ export class MahjongScene {
         rec.drawSeq = { t0: performance.now(), deck: spec.from.clone() };
         if (spec.gate) { rec.gate = true; this.handDrawRevealing = true; }
       }
+      // 吃/碰/杠 demo: fly up from the seat, hold facing the camera, then settle flat.
+      if (spec.claim) {
+        rec.claimSeq = { t0: spec.claim.t0, demo: spec.claim.demo,
+          from: spec.from ? spec.from.clone() : new THREE.Vector3(spec.x, spec.y, spec.z),
+          rx0: spec.rx, rz0: spec.rz || 0 };
+      }
     } else if (rec.faceKey !== faceKey) {
       rec.mesh.material = this._mats(spec.kind, spec.wild, spec.emissive);
       rec.faceKey = faceKey;
@@ -400,6 +408,11 @@ export class MahjongScene {
     return new THREE.Vector3(-R_OPP, TH / 2, 0);
   }
 
+  // Mark a bot's just-claimed meld so the next render lifts it up facing the camera
+  // for CLAIM_DEMO_MS before it settles into the flat meld row. Call right after the
+  // claim is applied (before the sync that first renders the new meld).
+  beginClaimDemo(player) { this.claimDemo = { player, t0: performance.now() }; }
+
   _meldsFlat(game, seen) {
     // Each seat's exposed melds, laid flat and face-up in a row BESIDE that
     // seat's tiles (parallel to their wall, pulled in toward the center so the
@@ -421,6 +434,15 @@ export class MahjongScene {
     const MS = 0.72, step = 0.95 * MS, meldGap = 0.5 * MS;
     const RIM_Y = (TD / 2) * MS - 0.1;   // rest on the rim (slightly below the felt)
     const kongSeen = new Set();
+    // 吃/碰/杠 demo pose: the just-claimed meld lifts to a camera-facing row above
+    // the claiming seat for CLAIM_DEMO_MS, then settles into the flat row.
+    const demoActive = this.claimDemo && (performance.now() - this.claimDemo.t0 < CLAIM_DEMO_MS);
+    const DEMO_SCALE = 1.3, DEMO_STEP = TW * DEMO_SCALE * 1.05;
+    const DEMO = {
+      1: { cx: 3.8, cy: 2.6, cz: 1.8 },   // 下家 (right)
+      2: { cx: 0,   cy: 2.95, cz: -2.2 }, // 对家 (top)
+      3: { cx: -3.8, cy: 2.6, cz: 1.8 },  // 上家 (left)
+    };
     for (let p = 0; p < 4; p++) {
       const melds = game.melds[p];
       if (!melds.length) continue;
@@ -434,14 +456,25 @@ export class MahjongScene {
       const pos = []; let cur = 0;
       tiles.forEach((t, i) => { cur += (i === 0 ? 0 : step) + (t.first && i ? meldGap : 0); pos.push(cur); });
       const span = cur;
+      const lastMi = ranges.length - 1;
+      const demoOn = demoActive && this.claimDemo.player === p;
+      const meldOf = []; // flat tile index → which meld it belongs to + its position in it
+      ranges.forEach((r) => { const n = r.end - r.start + 1; for (let j = 0; j < n; j++) meldOf[r.start + j] = { mi: r.mi, j, n }; });
       tiles.forEach((t, i) => {
         const off = pos[i] - span / 2;
+        const mo = meldOf[i];
+        let claim = null;
+        if (demoOn && mo.mi === lastMi) {
+          const dc = DEMO[p] || DEMO[2];
+          claim = { t0: this.claimDemo.t0, demo: { x: dc.cx + (mo.j - (mo.n - 1) / 2) * DEMO_STEP, y: dc.cy, z: dc.cz, s: DEMO_SCALE, rx: this.faceCamRx } };
+        }
         this._place(`m${p}_${i}`, {
           kind: t.kind, scale: MS, from: this._seatCenter(p),
           x: c.cx + c.dx * off, y: RIM_Y, z: c.cz + c.dz * off, rx: -Math.PI / 2, ry: 0, rz: c.spin,
+          claim,
         }, seen);
       });
-      for (const r of ranges) if (r.m.type === 'kong') this._kongBound(game, c, r, pos, span, MS, RIM_Y, kongSeen, p);
+      for (const r of ranges) if (r.m.type === 'kong' && !(demoOn && r.mi === lastMi)) this._kongBound(game, c, r, pos, span, MS, RIM_Y, kongSeen, p);
     }
     for (const [key, kb] of this.kongBounds) {
       if (!kongSeen.has(key)) { this.scene.remove(kb.box, kb.label); this.kongBounds.delete(key); }
@@ -679,6 +712,26 @@ export class MahjongScene {
     return true;
   }
 
+  // A bot's claimed meld (吃/碰/杠): rise from the seat to a camera-facing row, hold,
+  // then release to normal lerp (which carries it down into the flat meld row).
+  _animateClaim(rec, m) {
+    const d = rec.claimSeq, t = (performance.now() - d.t0) / 1000;
+    const RISE = 0.4, HOLD_END = CLAIM_DEMO_MS / 1000;
+    if (t >= HOLD_END) { delete rec.claimSeq; return false; }
+    const dm = d.demo;
+    if (t < RISE) {
+      let u = t / RISE; u = u * u * (3 - 2 * u); // smoothstep
+      m.position.set(d.from.x + (dm.x - d.from.x) * u, d.from.y + (dm.y - d.from.y) * u, d.from.z + (dm.z - d.from.z) * u);
+      m.scale.setScalar((rec.ts ?? 1) + (dm.s - (rec.ts ?? 1)) * u);
+      m.rotation.set(d.rx0 + (dm.rx - d.rx0) * u, 0, d.rz0 * (1 - u));
+    } else {
+      m.position.set(dm.x, dm.y, dm.z);
+      m.scale.setScalar(dm.s);
+      m.rotation.set(dm.rx, 0, 0);
+    }
+    return true;
+  }
+
   _loop() {
     const tick = () => {
       const dt = Math.min(this.clock.getDelta(), 0.05);
@@ -687,6 +740,7 @@ export class MahjongScene {
         const m = rec.mesh;
         const ts = rec.ts ?? 1;
         if (rec.drawSeq && this._animateDraw(rec, m)) continue; // reveal in progress
+        if (rec.claimSeq && this._animateClaim(rec, m)) continue; // 吃/碰/杠 demo in progress
         m.scale.setScalar(m.scale.x + (ts - m.scale.x) * a); // grow in + match target scale
         m.position.lerp(rec.tp, a);
         m.rotation.x += (rec.trx - m.rotation.x) * a;
