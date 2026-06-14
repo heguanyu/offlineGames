@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hans">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Offline Games</title>
+<title>离线游戏</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-180.png">
 <link rel="icon" href="./icons/icon-180.png">
@@ -16,7 +16,7 @@
     height: 100%;
     background: #1a1a2e;
     color: #eaeaea;
-    font-family: -apple-system, "Segoe UI", sans-serif;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
     -webkit-user-select: none;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
@@ -38,6 +38,12 @@
   }
   #update-btn:active:not(:disabled) { background: #0f3460; }
   #update-btn:disabled { color: #5a5a78; border-color: #232f52; cursor: default; }
+  /* language picker, pinned top-right */
+  #lang-picker {
+    position: fixed; top: max(12px, env(safe-area-inset-top)); right: 14px; z-index: 10;
+    font: inherit; font-size: 0.85rem; color: #eaeaea; background: #16213e;
+    border: 1px solid #2c3a63; border-radius: 8px; padding: 5px 9px; cursor: pointer;
+  }
   .cat-section { width: 100%; max-width: 820px; margin-bottom: 30px; }
   .cat-title {
     font-size: 1.05rem; color: #b9b9d6; font-weight: 600; letter-spacing: 0.04em;
@@ -58,60 +64,93 @@
     text-decoration: none;
     color: #eaeaea;
     font-size: 1rem;
+    text-align: center;
   }
   .card:active { background: #0f3460; }
   .card .emoji { font-size: 2.4rem; margin-bottom: 10px; }
 </style>
 </head>
 <body>
-  <h1>Offline Games</h1>
-  <p id="meta"><span id="app-version"></span><span id="net-status"></span><button id="update-btn" type="button" hidden>Check for updates</button></p>
+  <select id="lang-picker" aria-label="Language">
+    <option value="zh">中文</option>
+    <option value="en">English</option>
+  </select>
+  <h1 data-i18n="title">离线游戏</h1>
+  <p id="meta"><span id="app-version"></span><span id="net-status"></span><button id="update-btn" type="button" hidden></button></p>
   <section class="cat-section">
-    <h2 class="cat-title">🕹️ Emulator Games</h2>
+    <h2 class="cat-title" data-i18n="cat-emulator">🕹️ 模拟器游戏</h2>
     <nav>
       <a class="card" href="./games/gba/?core=mgba">
         <span class="emoji">👾</span>
-        GBA · mGBA
+        <span data-i18n="card-gba-mgba">GBA · mGBA</span>
       </a>
       <a class="card" href="./games/gba/?core=vbam">
         <span class="emoji">👾</span>
-        GBA · VBA-M
+        <span data-i18n="card-gba-vbam">GBA · VBA-M</span>
       </a>
       <a class="card" href="./games/nds/">
         <span class="emoji">🎴</span>
-        Nintendo DS
+        <span data-i18n="card-nds">任天堂 DS</span>
       </a>
     </nav>
   </section>
 
   <section class="cat-section">
-    <h2 class="cat-title">🀄 麻将 Mahjong</h2>
+    <h2 class="cat-title" data-i18n="cat-mahjong">🀄 麻将</h2>
     <nav>
       <a class="card" href="./games/mahjong/">
         <span class="emoji">🀄</span>
-        天津麻将
+        <span data-i18n="card-tianjin">天津麻将</span>
       </a>
       <a class="card" href="./games/guobiao/">
         <span class="emoji">🀅</span>
-        国标麻将
+        <span data-i18n="card-guobiao">国标麻将</span>
       </a>
       <a class="card" href="./games/guobiao-free/">
         <span class="emoji">🀆</span>
-        国标（无定番）
+        <span data-i18n="card-guobiao-free">国标（无定番）</span>
       </a>
     </nav>
   </section>
 
   <section class="cat-section">
-    <h2 class="cat-title">🛠️ Tools</h2>
+    <h2 class="cat-title" data-i18n="cat-tools">🛠️ 工具</h2>
     <nav>
       <a class="card" href="./games/pad-test/">
         <span class="emoji">🎮</span>
-        Controller Test
+        <span data-i18n="card-pad">手柄测试</span>
       </a>
     </nav>
   </section>
   <script>
+    // ---- internationalization (hub only) — default Chinese, choice persisted ----
+    const I18N = {
+      zh: {
+        title: '离线游戏',
+        'cat-emulator': '🕹️ 模拟器游戏', 'cat-mahjong': '🀄 麻将', 'cat-tools': '🛠️ 工具',
+        'card-gba-mgba': 'GBA · mGBA', 'card-gba-vbam': 'GBA · VBA-M', 'card-nds': '任天堂 DS',
+        'card-tianjin': '天津麻将', 'card-guobiao': '国标麻将', 'card-guobiao-free': '国标（无定番）',
+        'card-pad': '手柄测试',
+        online: '在线', offline: '离线 · 使用缓存运行',
+        btn_idle: '检查更新', btn_checking: '检查中…', btn_updating: '更新中…',
+        btn_current: '✓ 已是最新', btn_error: '⚠ 重试',
+      },
+      en: {
+        title: 'Offline Games',
+        'cat-emulator': '🕹️ Emulator Games', 'cat-mahjong': '🀄 Mahjong', 'cat-tools': '🛠️ Tools',
+        'card-gba-mgba': 'GBA · mGBA', 'card-gba-vbam': 'GBA · VBA-M', 'card-nds': 'Nintendo DS',
+        'card-tianjin': 'Tianjin Mahjong', 'card-guobiao': 'Guobiao (MCR)', 'card-guobiao-free': 'Guobiao (no minimum)',
+        'card-pad': 'Controller Test',
+        online: 'online', offline: 'offline — running from cache',
+        btn_idle: 'Check for updates', btn_checking: 'Checking…', btn_updating: 'Updating…',
+        btn_current: '✓ Up to date', btn_error: '⚠ Retry',
+      },
+    };
+    let lang = (() => { try { return localStorage.getItem('hub-lang'); } catch { return null; } })();
+    if (!I18N[lang]) lang = 'zh';
+    const t = (k) => I18N[lang][k];
+
+    const picker = document.getElementById('lang-picker');
     const statusEl = document.getElementById('net-status');
     const btn = document.getElementById('update-btn');
     const swSupported = 'serviceWorker' in navigator;
@@ -120,6 +159,7 @@
     let busy = false;       // a check is currently running
     let updating = false;   // a new version is installing → reload when it takes over
     let reloaded = false;   // guard so we reload at most once
+    let btnState = 'idle';  // current update-button phase, so a language switch can re-label it
 
     const reloadOnce = () => { if (!reloaded) { reloaded = true; location.reload(); } };
 
@@ -139,29 +179,46 @@
       });
     }
 
-    // Button label/enabled state for each phase.
+    // Update-button phase → [i18n key, disabled]. Text is resolved through the dict
+    // so it re-localizes when the language changes.
     const BTN = {
-      idle:     ['Check for updates', false],
-      offline:  ['Check for updates', true],
-      checking: ['Checking…',         true],
-      updating: ['Updating…',         true],
-      current:  ['✓ Up to date',      true],
-      error:    ['⚠ Retry',           false],
+      idle:     ['btn_idle',     false],
+      offline:  ['btn_idle',     true],
+      checking: ['btn_checking', true],
+      updating: ['btn_updating', true],
+      current:  ['btn_current',  true],
+      error:    ['btn_error',    false],
     };
     function setBtn(state) {
-      const [text, disabled] = BTN[state] || BTN.idle;
-      btn.textContent = text;
+      btnState = state;
+      const [key, disabled] = BTN[state] || BTN.idle;
+      btn.textContent = t(key);
       btn.disabled = disabled;
     }
 
     function updateNetStatus() {
       const online = navigator.onLine;
-      statusEl.textContent = online ? 'online' : 'offline — running from cache';
+      statusEl.textContent = online ? t('online') : t('offline');
       statusEl.classList.toggle('offline', !online);
       if (swSupported && !busy && !updating) setBtn(online ? 'idle' : 'offline');
     }
     addEventListener('online', updateNetStatus);
     addEventListener('offline', updateNetStatus);
+
+    // Apply a language to all [data-i18n] nodes + the dynamic status/button, persist it.
+    function applyLang(l) {
+      lang = I18N[l] ? l : 'zh';
+      document.documentElement.lang = lang === 'zh' ? 'zh-Hans' : 'en';
+      document.title = t('title');
+      for (const el of document.querySelectorAll('[data-i18n]')) {
+        const v = t(el.dataset.i18n); if (v != null) el.textContent = v;
+      }
+      picker.value = lang;
+      setBtn(btnState);                                              // re-label without changing phase
+      statusEl.textContent = navigator.onLine ? t('online') : t('offline');
+      try { localStorage.setItem('hub-lang', lang); } catch {}
+    }
+    picker.addEventListener('change', () => applyLang(picker.value));
 
     async function checkForUpdate() {
       if (busy || updating || !navigator.onLine) return;
@@ -202,6 +259,7 @@
     }
     btn.addEventListener('click', checkForUpdate);
 
+    applyLang(lang);     // default Chinese (or the persisted choice)
     updateNetStatus();
 
     // Show the running version. Ask the active worker for its cache name (which carries
