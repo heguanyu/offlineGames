@@ -7,13 +7,18 @@
 // tile toward its target transform. That gives smooth selection lifts, hand
 // reflow when a tile leaves, and discards dropping into the pool — for free.
 import * as THREE from './lib/three.module.min.js';
-import { suitOf, rankOf } from './engine.js';
+import { suitOf, rankOf, shuffle } from './engine.js';
 
 const TW = 1.0, TH = 1.35, TD = 0.62; // tile width / height / depth
 const FELT = 16;
 const GAP = 1.06;
 const DRAW_MARGIN = 0.4;  // half-gap flanking the freshly-drawn tile on each side
 const CLAIM_DEMO_MS = 2000; // a bot's 吃/碰/杠 is held up facing the camera this long
+// Initial deal: one tile launches from the wall every DEAL_SERVE_MS, round-robin
+// from the dealer; each flies ~0.25s (the loop's lerp) so a few are in transit at
+// once. DEAL_SETTLE_MS lets the final tile land before play begins.
+const DEAL_SERVE_MS = 100;
+const DEAL_SETTLE_MS = 300;
 // Seats sit on a ring; the player's row is pushed forward (toward the camera)
 // and each row's half-length is capped so neighbouring rows never collide at
 // the corners. Rows longer than their cap shrink uniformly to fit.
@@ -190,6 +195,7 @@ export class MahjongScene {
 
     this.tiles = new Map();   // key -> { mesh, tp:Vector3, trx, try_, ts }
     this.claimDemo = null;    // { player, t0 } — a bot's just-claimed meld being shown off
+    this.deal = null;         // initial-deal animation state (see beginDeal)
     this.pickables = [];
     this.scene.add(this.tilesGroup = new THREE.Group());
 
@@ -321,7 +327,25 @@ export class MahjongScene {
     else delete rec.mesh.userData.pick;
   }
 
+  // Layout config for the human's hand row (also reused by the deal animation).
+  // refSpan keeps the tile size fixed for a full 14-tile hand (13 gaps + the drawn
+  // tile's two half-gaps) so tiles never resize as the count changes.
+  _handRowCfg(flat) {
+    return { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: flat ? -Math.PI / 2 : -0.34, ry: 0,
+      pull: -0.35, flat, refSpan: 13 * GAP + 2 * DRAW_MARGIN };
+  }
+  // Layout config for the three opponents' back rows (also reused by the deal).
+  _oppRowCfgs() {
+    const oppRef = 13 * GAP;
+    return {
+      1: { cx: R_OPP, cz: 0, dx: 0, dz: 1, rx: 0, ry: -Math.PI / 2, pull: 0, refSpan: oppRef },
+      2: { cx: 0, cz: -R_OPP, dx: 1, dz: 0, rx: 0, ry: Math.PI, pull: 0, refSpan: oppRef },
+      3: { cx: -R_OPP, cz: 0, dx: 0, dz: 1, rx: 0, ry: Math.PI / 2, pull: 0, refSpan: oppRef },
+    };
+  }
+
   sync(game, ui) {
+    if (this.deal) return; // the initial-deal animation owns the table until it hands off
     this.pickables = [];
     this.selKey = null;
     this.claimable = !!ui.claimable; // only enlarge the pending tile if YOU can claim
@@ -358,16 +382,11 @@ export class MahjongScene {
     // 听牌 (lockedTing) and game-over reveal both lay the hand flat on the table,
     // the same rotation as 碰/杠 melds (faces up).
     const flat = !!ui.tingFlat || !!ui.reveal;
-    this._placeRow(handItems, { cx: 0, cz: R_HAND, dx: 1, dz: 0, rx: flat ? -Math.PI / 2 : -0.34, ry: 0, pull: -0.35, flat, refSpan: 13 * GAP + 2 * DRAW_MARGIN }, HAND_HALF, seen);
+    this._placeRow(handItems, this._handRowCfg(flat), HAND_HALF, seen);
 
     // Opponents: walls of backs. refSpan = a full 14-tile hand so the back row is
     // a fixed size, not rescaling each time a bot draws/discards (13 ↔ 14 tiles).
-    const oppRef = 13 * GAP;
-    const oppCfg = {
-      1: { cx: R_OPP, cz: 0, dx: 0, dz: 1, rx: 0, ry: -Math.PI / 2, pull: 0, refSpan: oppRef },
-      2: { cx: 0, cz: -R_OPP, dx: 1, dz: 0, rx: 0, ry: Math.PI, pull: 0, refSpan: oppRef },
-      3: { cx: -R_OPP, cz: 0, dx: 0, dz: 1, rx: 0, ry: Math.PI / 2, pull: 0, refSpan: oppRef },
-    };
+    const oppCfg = this._oppRowCfgs();
     for (const p of [1, 2, 3]) {
       const c = oppCfg[p];
       if (ui.reveal) {
@@ -397,6 +416,99 @@ export class MahjongScene {
     for (const [k, rec] of this.tiles) {
       if (!seen.has(k)) { this.tilesGroup.remove(rec.mesh); this.tiles.delete(k); }
     }
+  }
+
+  // ---- initial deal animation ----------------------------------------------
+  // Replay the deal as a flourish: tiles fly one at a time from the wall to each
+  // seat, round-robin from the dealer (one per DEAL_SERVE_MS). The human's tiles
+  // slot into their sorted hand position — others slide aside to admit each new
+  // one. Opponents get face-down backs. The engine has already dealt the final
+  // hands; this is purely cosmetic, then hands the meshes off to sync() unchanged.
+  // `done` fires once every tile has landed. Skipped under ?fast=1 (see main.js).
+  beginDeal(game, done) {
+    const HUMAN = 0;
+    // The 13 tiles each seat is dealt. The dealer's 14th (drawn) tile is excluded
+    // here — sync()'s normal draw reveal handles it right after the deal.
+    const humanFull = game.hands[HUMAN].slice();
+    if (game.dealer === HUMAN && game.drawnTile != null) {
+      const i = humanFull.indexOf(game.drawnTile);
+      if (i >= 0) humanFull.splice(i, 1);
+    }
+    // Serve the human's tiles out of sorted order so each visibly inserts into its
+    // slot. Layout is always buildOrder, so the final row matches sync()'s exactly.
+    this.deal = {
+      game, done, t0: performance.now(), dealer: game.dealer,
+      order: shuffle(humanFull, Math.random), // tiles in serve order
+      humanTiles: [], humanIdx: 0,            // { k, kind, from } served so far
+      oppOrigins: { 1: [], 2: [], 3: [] },    // each back's wall lift-off point
+      servedCount: [0, 0, 0, 0], served: 0, total: 52, // 13 × 4 seats
+    };
+    this._dealFrame(); // initial frame: full wall, empty hands; clears the old hand
+  }
+
+  // The human's served tiles in canonical (buildOrder) order: wilds left, rest
+  // ascending. `k` (serve index) breaks ties so a tile keeps its identity/mesh.
+  _dealHandOrder() {
+    const g = this.deal.game;
+    return this.deal.humanTiles.slice().sort((a, b) => {
+      const aw = g.isWild(a.kind), bw = g.isWild(b.kind);
+      if (aw !== bw) return aw ? -1 : 1;
+      return a.kind - b.kind || a.k - b.k;
+    });
+  }
+
+  // Advance the deal by however many tiles are due by now, then re-lay the table.
+  _dealTick() {
+    const d = this.deal, elapsed = performance.now() - d.t0;
+    const want = Math.min(d.total, Math.floor(elapsed / DEAL_SERVE_MS));
+    if (want > d.served) {
+      while (d.served < want) {
+        const s = d.served;
+        const p = (d.dealer + (s % 4)) % 4; // round-robin from the dealer
+        const from = this._dealOrigin(s);   // lift this tile off the wall
+        d.servedCount[p]++;
+        if (p === 0) d.humanTiles.push({ k: d.humanIdx, kind: d.order[d.humanIdx++], from });
+        else d.oppOrigins[p].push(from);
+        d.served++;
+      }
+      this._dealFrame();
+    }
+    if (d.served >= d.total && elapsed >= d.total * DEAL_SERVE_MS + DEAL_SETTLE_MS) this._finishDeal();
+  }
+
+  _dealFrame() {
+    const d = this.deal, game = d.game;
+    const seen = new Set();
+    // The wall starts full and depletes as tiles are served (game.wall is already
+    // drawn down to its post-deal size, so add back the tiles still to be served).
+    this._wall(game, seen, game.wall.length + (d.total - d.served));
+    // human hand: served tiles flying off the wall into their sorted slots
+    const items = this._dealHandOrder().map((t) =>
+      ({ key: 'dh' + t.k, kind: t.kind, wild: game.isWild(t.kind), from: t.from }));
+    this._placeRow(items, this._handRowCfg(false), HAND_HALF, seen);
+    // opponents: face-down backs, each lifting off the wall too
+    const oppCfg = this._oppRowCfgs();
+    for (const p of [1, 2, 3]) {
+      const backs = [];
+      for (let i = 0; i < d.servedCount[p]; i++) backs.push({ key: `o${p}_${i}`, kind: null, from: d.oppOrigins[p][i] });
+      this._placeRow(backs, oppCfg[p], OPP_HALF, seen);
+    }
+    for (const [k, rec] of this.tiles) {
+      if (!seen.has(k)) { this.tilesGroup.remove(rec.mesh); this.tiles.delete(k); }
+    }
+  }
+
+  // Hand the deal meshes to sync(): re-key the human's tiles (dhK) to the
+  // positional h0..hN sync() expects, in buildOrder, so it reuses them with no pop.
+  _finishDeal() {
+    const d = this.deal;
+    const order = this._dealHandOrder(); // while this.deal is still set
+    this.deal = null;                    // let sync() take over
+    order.forEach((t, idx) => {
+      const rec = this.tiles.get('dh' + t.k);
+      if (rec) { this.tiles.delete('dh' + t.k); this.tiles.set('h' + idx, rec); }
+    });
+    if (d.done) d.done();
   }
 
   // Approx world position of a seat's hand/wall — where discards and claimed
@@ -572,28 +684,44 @@ export class MahjongScene {
   // The face-down deck wall: a 2-layer ring of backs around the pool that depletes
   // as the live wall is drawn down. Sets this.deckPos = the current draw point (in
   // front, where new draws fly from). Rendered before the hands so they read it.
-  _wall(game, seen) {
+  // Geometry of the two side walls (left + right). The front (player) side AND the
+  // top (对家) side are kept clear — the top so 对家's called melds show there in the
+  // camera's view (see _meldsFlat). Slot 0 is front-left; the live draw end is the
+  // last slot (front-right). Shared by _wall and the deal's draw-point walk.
+  _wallSlotGeometry() {
     const WW = 0.54, h = R_WALL;
     const perSide = Math.max(2, Math.floor((2 * h) / WW));
     const cell = (2 * h) / perSide;
     const at = (i) => -h + (i + 0.5) * cell;          // centre of slot i along a side
-    // The deck is just two side walls (left + right). The front (player) side AND the
-    // top (对家) side are kept clear — the top so 对家's called melds show there in the
-    // camera's view (see _meldsFlat). Slot 0 is front-left; the live draw end is the
-    // last slot (front-right).
     const slots = [];
     for (let i = 0; i < perSide; i++) slots.push({ x: -h, z: -at(i), spin: Math.PI / 2 });  // left: front → back
     for (let i = 0; i < perSide; i++) slots.push({ x: h, z: at(i), spin: Math.PI / 2 });     // right: back → front
-    const nStacks = Math.min(slots.length, Math.ceil(game.wall.length / 2));
     const yBot = (TD / 2) * WW - 0.05, yTop = yBot + TD * WW;
+    return { slots, WW, yBot, yTop };
+  }
+
+  _wall(game, seen, wallCount = game.wall.length) {
+    const { slots, WW, yBot, yTop } = this._wallSlotGeometry();
+    const nStacks = Math.min(slots.length, Math.ceil(wallCount / 2));
     for (let s = 0; s < nStacks; s++) {
       const c = slots[s];
       this._place('wb' + s, { kind: null, scale: WW, x: c.x, y: yBot, z: c.z, rx: -Math.PI / 2, ry: 0, rz: c.spin }, seen);
-      if (game.wall.length - s * 2 >= 2) // odd remainder → last stack has no top tile
+      if (wallCount - s * 2 >= 2) // odd remainder → last stack has no top tile
         this._place('wt' + s, { kind: null, scale: WW, x: c.x, y: yTop, z: c.z, rx: -Math.PI / 2, ry: 0, rz: c.spin }, seen);
     }
     const live = slots[Math.max(0, nStacks - 1)];
     this.deckPos = new THREE.Vector3(live.x, yTop + 0.25, live.z);
+  }
+
+  // Where the s-th dealt tile lifts off the wall: the draw point recedes from the
+  // front-right (live) end, two tiles per stack (top then bottom), so successive
+  // tiles peel off along the wall — the same way a hand is dealt off a real wall.
+  _dealOrigin(s) {
+    const { slots, yTop, yBot } = this._wallSlotGeometry();
+    const idx = Math.max(0, slots.length - 1 - Math.floor(s / 2));
+    const c = slots[idx];
+    const y = ((s % 2) === 0 ? yTop : yBot) + 0.2; // lift slightly above the stack
+    return new THREE.Vector3(c.x, y, c.z);
   }
 
   _pool(game, seen, revealIdx = -1) {
@@ -736,6 +864,7 @@ export class MahjongScene {
     const tick = () => {
       const dt = Math.min(this.clock.getDelta(), 0.05);
       const a = 1 - Math.exp(-13 * dt);
+      if (this.deal) this._dealTick(); // advance the initial-deal flourish
       for (const rec of this.tiles.values()) {
         const m = rec.mesh;
         const ts = rec.ts ?? 1;

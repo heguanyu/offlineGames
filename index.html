@@ -38,6 +38,41 @@
   }
   #update-btn:active:not(:disabled) { background: #0f3460; }
   #update-btn:disabled { color: #5a5a78; border-color: #232f52; cursor: default; }
+  /* "Add to Home Screen" helper (iOS/iPadOS Safari has no install API → we guide instead) */
+  #install-btn {
+    font: inherit; font-size: 0.78rem; line-height: 1;
+    color: #9fb4ff; background: none; border: 1px solid #2c3a63;
+    border-radius: 999px; padding: 3px 11px; margin-left: 10px;
+    cursor: pointer; -webkit-tap-highlight-color: transparent; vertical-align: middle;
+  }
+  #install-btn:active { background: #0f3460; }
+  #install-overlay {
+    position: fixed; inset: 0; z-index: 20; padding: 24px;
+    background: rgba(10, 10, 20, 0.72);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #install-overlay[hidden] { display: none; }
+  .install-card {
+    background: #16213e; border: 1px solid #2c3a63; border-radius: 16px;
+    max-width: 380px; width: 100%; padding: 24px 22px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  }
+  .install-card h3 { font-size: 1.15rem; margin-bottom: 18px; text-align: center; }
+  .install-steps { list-style: none; display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+  .install-steps li { display: flex; align-items: center; gap: 11px; font-size: 0.95rem; line-height: 1.35; }
+  .install-steps .num {
+    flex: none; width: 26px; height: 26px; border-radius: 50%;
+    background: #0f3460; color: #9fb4ff; font-size: 0.85rem; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .share-ico { flex: none; width: 18px; height: 23px; }
+  #install-note { font-size: 0.82rem; color: #e9c46a; margin: -4px 0 16px; text-align: center; }
+  #install-close {
+    display: block; width: 100%; font: inherit; font-size: 0.95rem;
+    color: #eaeaea; background: #0f3460; border: none; border-radius: 10px;
+    padding: 11px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  #install-close:active { background: #14438a; }
   /* language picker, pinned top-right */
   #lang-picker {
     position: fixed; top: max(12px, env(safe-area-inset-top)); right: 14px; z-index: 10;
@@ -76,7 +111,20 @@
     <option value="en">English</option>
   </select>
   <h1 data-i18n="title">离线游戏</h1>
-  <p id="meta"><span id="app-version"></span><span id="net-status"></span><button id="update-btn" type="button" hidden></button></p>
+  <p id="meta"><span id="app-version"></span><span id="net-status"></span><button id="update-btn" type="button" hidden></button><button id="install-btn" type="button" data-i18n="install_btn" hidden></button></p>
+
+  <div id="install-overlay" hidden>
+    <div class="install-card" role="dialog" aria-modal="true" aria-labelledby="install-title">
+      <h3 id="install-title" data-i18n="install_title">添加到 iPad 主屏幕</h3>
+      <ol class="install-steps">
+        <li><span class="num">1</span><span data-i18n="install_s1">点按 Safari 的「分享」按钮</span><svg class="share-ico" viewBox="0 0 50 50" fill="none" stroke="#9fb4ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M25 4 V31 M16 13 L25 4 L34 13"/><path d="M14 21 H10 a4 4 0 0 0 -4 4 V42 a4 4 0 0 0 4 4 H40 a4 4 0 0 0 4 -4 V25 a4 4 0 0 0 -4 -4 H36"/></svg></li>
+        <li><span class="num">2</span><span data-i18n="install_s2">选择「添加到主屏幕」</span></li>
+        <li><span class="num">3</span><span data-i18n="install_s3">点按右上角「添加」</span></li>
+      </ol>
+      <p id="install-note" data-i18n="install_note" hidden>请先用 Safari 浏览器打开本页面</p>
+      <button id="install-close" type="button" data-i18n="install_close">知道了</button>
+    </div>
+  </div>
   <section class="cat-section">
     <h2 class="cat-title" data-i18n="cat-emulator">🕹️ 模拟器游戏</h2>
     <nav>
@@ -134,6 +182,13 @@
         online: '在线', offline: '离线 · 使用缓存运行',
         btn_idle: '检查更新', btn_checking: '检查中…', btn_updating: '更新中…',
         btn_current: '✓ 已是最新', btn_error: '⚠ 重试',
+        install_btn: '📲 添加到主屏幕',
+        install_title: '添加到 iPad 主屏幕',
+        install_s1: '点按 Safari 的「分享」按钮',
+        install_s2: '在菜单中选择「添加到主屏幕」',
+        install_s3: '点按右上角「添加」即可',
+        install_note: '请先用 Safari 浏览器打开本页面',
+        install_close: '知道了',
       },
       en: {
         title: 'Offline Games',
@@ -144,6 +199,13 @@
         online: 'online', offline: 'offline — running from cache',
         btn_idle: 'Check for updates', btn_checking: 'Checking…', btn_updating: 'Updating…',
         btn_current: '✓ Up to date', btn_error: '⚠ Retry',
+        install_btn: '📲 Add to Home Screen',
+        install_title: 'Add to your Home Screen',
+        install_s1: 'Tap Safari’s Share button',
+        install_s2: 'Choose “Add to Home Screen”',
+        install_s3: 'Tap “Add” in the top corner',
+        install_note: 'Please open this page in Safari first',
+        install_close: 'Got it',
       },
     };
     let lang = (() => { try { return localStorage.getItem('hub-lang'); } catch { return null; } })();
@@ -281,6 +343,34 @@
       }
     }
     showVersion();
+
+    // ---- "Add to Home Screen" helper ----
+    // iOS/iPadOS Safari exposes no install API (no beforeinstallprompt / prompt()),
+    // so a true one-click install is impossible — the user must use Share → Add to
+    // Home Screen. We surface a button that explains that one-time gesture, but only
+    // where it applies: iOS Safari, not already installed.
+    (function () {
+      const ua = navigator.userAgent;
+      const installed = navigator.standalone === true ||
+        (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+      // iPadOS 13+ masquerades as "MacIntel"; the touch-point count reveals a real iPad.
+      const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (!isIOS || installed) return;            // nothing to do elsewhere / once pinned
+
+      const iBtn = document.getElementById('install-btn');
+      const overlay = document.getElementById('install-overlay');
+      // Add-to-Home-Screen lives only in Safari proper — absent in Chrome/Firefox iOS
+      // and in-app webviews. If we're in one of those, the overlay says to open Safari.
+      const notSafari = /CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line\//i.test(ua);
+      document.getElementById('install-note').hidden = !notSafari;
+
+      iBtn.hidden = false;
+      const close = () => { overlay.hidden = true; };
+      iBtn.addEventListener('click', () => { overlay.hidden = false; });
+      document.getElementById('install-close').addEventListener('click', close);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    })();
   </script>
 </body>
 </html>

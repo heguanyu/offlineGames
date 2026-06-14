@@ -34,6 +34,7 @@ let drawnWildSelected = false; // a freshly-drawn 混儿 is the lifted tile (can
 let focusIndex = 0;           // cursor into action-bar buttons (claims)
 let pendingTimer = null;
 let lastLogLen = 0;
+let dealing = false;          // the initial-deal animation is running (input is held)
 let isPortrait = false;        // device held portrait → page force-rotated to landscape
 
 // Always render landscape; when the scene exists, keep it in sync with the rotation.
@@ -72,7 +73,9 @@ function selectableHandIndices() {
 const isWildFn = (id) => game.isWild(id);
 function renderedHand() { return buildOrder(game.hands[HUMAN], isWildFn); }
 
-function render() {
+// The HTML HUD around the canvas (header / scores / 混儿 / nameplates). Split out
+// so the deal animation can show it without touching the 3D table.
+function renderHud() {
   // ---- header ----
   $('round-info').innerHTML =
     `<b>${WIND[session.prevailingWind]}圈</b> · 第 ${session.hand} 局 · ` +
@@ -96,6 +99,10 @@ function render() {
 
   // ---- nameplates ----
   for (let p = 0; p < 4; p++) renderPlate(p);
+}
+
+function render() {
+  renderHud();
 
   // ---- 3D table ----
   const selectable = selectableHandIndices();
@@ -261,6 +268,7 @@ function ensureSelection() {
 // Tapping a tile only SELECTS it (lifts + highlights); discarding is a separate
 // confirm (打出 button / A / Enter). Tapping the already-selected tile confirms.
 function onPickTile(renderedIdx) {
+  if (dealing) return;
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const id = renderedHand()[renderedIdx];
@@ -518,12 +526,23 @@ function startHand() {
   lastLogLen = 0;
   selIndex = 0; focusIndex = 0; drawnWildSelected = false;
   saveSession();
-  tick();
+  // Deal the hand with a serving flourish (tiles fly from the wall), then play.
+  // Under ?fast=1 (tests) skip straight to play so the timing stays tight.
+  if (scene && !FAST) {
+    dealing = true;
+    renderHud();
+    $('action-bar').innerHTML = '';
+    $('ting-center').innerHTML = '';
+    $('hand-hint').textContent = '发牌中…';
+    scene.beginDeal(game, () => { dealing = false; tick(); });
+  } else {
+    tick();
+  }
 }
 
 // Touch / mouse on the 3D table → raycast → select the picked hand tile.
 $('scene').addEventListener('pointerdown', (e) => {
-  if (!scene || !gameStarted) return;
+  if (!scene || !gameStarted || dealing) return;
   sound.resume(); // touch is a user gesture — unlock audio
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   const idx = scene.pick(e.clientX, e.clientY);
@@ -532,7 +551,7 @@ $('scene').addEventListener('pointerdown', (e) => {
 // PC only: hovering a hand tile selects it (same as a click-to-select). Mouse-only
 // so touch is unaffected; 混儿 aren't selectable so hovering them is ignored.
 $('scene').addEventListener('pointermove', (e) => {
-  if (e.pointerType !== 'mouse' || !scene || !gameStarted) return;
+  if (e.pointerType !== 'mouse' || !scene || !gameStarted || dealing) return;
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || scene.handDrawRevealing) return;
   const idx = scene.pick(e.clientX, e.clientY);
   if (idx == null) return;
@@ -567,6 +586,8 @@ function onAction(name) {
     else if (name === 'menu') nextHand();
     return;
   }
+
+  if (dealing) return; // tiles are still being served — hold gameplay input
 
   if (isClaimPhase()) {
     const btns = [...$('action-bar').children];
