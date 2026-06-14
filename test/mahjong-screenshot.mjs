@@ -31,12 +31,12 @@ try {
       if (find('碰')) { find('碰').click(); return 'claim'; }
       if (find('杠')) { find('杠').click(); return 'claim'; }
       if (find('过')) { find('过').click(); return 'pass'; }
-      if (find('打出')) return 'human';
+      if (window.__mj && window.__mj.humanTurn()) return 'human';
       return 'wait';
     });
     if (st === 'human') {
       if (i > 9) { atHuman = true; break; }      // enough discards on the table — stop here
-      await page.evaluate(() => [...document.querySelectorAll('#action-bar .act-btn')].find((x) => x.textContent.includes('打出'))?.click());
+      await page.evaluate(() => window.__mj.discard());
     }
     await new Promise((r) => setTimeout(r, 150));
   }

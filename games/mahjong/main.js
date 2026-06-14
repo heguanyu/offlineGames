@@ -13,7 +13,7 @@ const toast = makeToast();
 
 const HUMAN = 0;
 // Relative seat names from the human's perspective (play order 0→1→2→3).
-const SEAT_LABEL = ['你', '下家', '对家', '上家'];
+const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
 const WIND = ['东', '南', '西', '北'];
 
 // Pace between AI moves so the human can follow; `?fast=1` speeds it up for the
@@ -167,7 +167,6 @@ function renderActions() {
     for (const k of game.selfKongOptions(HUMAN)) {
       buttons.push(mkBtn(`${k.type === 'gold' ? '金杠' : '杠'} ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
     }
-    buttons.push(mkBtn('打出', () => discardSelected()));
   } else if (game.phase !== PHASE.OVER) {
     hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
   }
@@ -314,12 +313,12 @@ function renderWinningHand(handEl, w, r) {
     if (g.kinds.length) { const k = g.kinds[0], nat = 2 - g.jokers; return [0, 1].map((i) => ({ kind: k, wild: i >= nat })); }
     return [{ kind: game.wilds[0], wild: true }, { kind: game.wilds[0], wild: true }];
   };
-  const addGroup = (tiles, extra) => {
+  const addGroup = (tiles, extra, parent = handEl) => {
     const wrap = document.createElement('div');
     wrap.className = 'meld-group' + (extra || '');
     // wild slots show the original 混 face; natural slots show their own tile.
     for (const t of tiles) wrap.appendChild(faceTileEl(t.wild ? wildFace() : t.kind, { lg: true, wild: t.wild }));
-    handEl.appendChild(wrap);
+    parent.appendChild(wrap);
   };
   if (!r.decomp) { // fallback: plain sorted hand
     addGroup(game.hands[w].slice().sort((a, b) => a - b).map((id) => ({ kind: id, wild: game.isWild(id) })));
@@ -327,8 +326,18 @@ function renderWinningHand(handEl, w, r) {
     return;
   }
   for (const m of game.melds[w]) addGroup(m.tiles.map((k) => ({ kind: k, wild: false })));
-  let pair = null;
-  for (const g of r.decomp) { if (g.type === 'pair') pair = pairTilesOf(g); else addGroup(meldTilesOf(g)); }
+  // 龙 — its three same-suit chows share one row with no gap; every other meld/pair
+  // is its own row (see #result-hand / .long-run).
+  const longBase = (r.meta && r.meta.long) ? { m: 0, p: 9, s: 18 }[r.meta.longSuit] : null;
+  const inLong = (g) => longBase != null && g.type === 'chow' && [longBase, longBase + 3, longBase + 6].includes(g.kinds[0]);
+  let pair = null, longRun = null;
+  for (const g of r.decomp) {
+    if (g.type === 'pair') { pair = pairTilesOf(g); continue; }
+    if (inLong(g)) {
+      if (!longRun) { longRun = document.createElement('div'); longRun.className = 'long-run'; handEl.appendChild(longRun); }
+      addGroup(meldTilesOf(g), '', longRun);
+    } else addGroup(meldTilesOf(g));
+  }
   if (pair) addGroup(pair, ' pair');
 }
 
@@ -403,7 +412,7 @@ function breakdownHtml(r) {
       `<span class="bd-why">${why.join('　') || '—'}${tag}</span></div>`;
   });
   return `<div class="bd-title">本局得分</div><div class="bd-all">${all}</div>` +
-    `<div class="bd-title">你的明细 · <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${col(total)}">${sgn(total)}</span></div>` +
+    `<div class="bd-title">玩家明细 · <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${col(total)}">${sgn(total)}</span></div>` +
     rows.join('');
 }
 
@@ -541,7 +550,7 @@ function fillRules() {
     明杠 <code>+1</code>，暗杠 <code>+2</code>，金杠（暗杠四张混儿）<code>+4</code>。每家杠分由其它三家补，局末单独结算；涉及<b>庄家</b>的杠分<b>加倍</b>（庄x2）。
     <h3>操作</h3>
     自摸成胡时出现 <b>胡</b> 按钮（含番种与得分），点它才和牌，也可继续打牌；快捷键 <b>H</b>。
-    点牌选中、再点或按「打出」/<b>A</b> 出牌；左右/摇杆移动光标。
+    点牌选中、再点该牌或按 <b>A</b> 出牌；左右/摇杆移动光标。
     可碰/杠时：<b>X</b>=碰，<b>Y</b>=杠，<b>B</b>=过。<b>Menu</b> 打开菜单。`;
 }
 
@@ -584,12 +593,19 @@ bindUI();
 if (new URLSearchParams(location.search).get('fast')) {
   window.__mj = {
     humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,
+    discard: () => discardSelected(),
     scene: () => scene,
     // visual check: melds for every seat + a full pool + a pending claim
     debugMelds: () => {
-      for (let p = 0; p < 4; p++) game.melds[p] = [
+      const w = game.wilds[0];
+      game.melds[HUMAN] = [
+        { type: 'kong', kind: 0, tiles: [0, 0, 0, 0] },                  // 明杠
+        { type: 'kong', kind: 9, tiles: [9, 9, 9, 9], concealed: true }, // 暗杠
+        { type: 'kong', kind: w, tiles: [w, w, w, w], concealed: true }, // 金杠
+      ];
+      for (let p = 1; p < 4; p++) game.melds[p] = [
         { type: 'pung', kind: p * 4, tiles: [p * 4, p * 4, p * 4] },
-        { type: 'kong', kind: 9 + p * 3, tiles: [9 + p * 3, 9 + p * 3, 9 + p * 3, 9 + p * 3] },
+        { type: 'kong', kind: 9 + p * 3, tiles: [9 + p * 3, 9 + p * 3, 9 + p * 3, 9 + p * 3], concealed: p === 2 },
       ];
       game.discardLog = [];
       for (let i = 0; i < 40; i++) game.discardLog.push({ player: i % 4, kind: (i * 7) % 34 });

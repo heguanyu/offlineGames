@@ -71,6 +71,16 @@ function makeGlowTexture() {
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
+// A small canvas-textured label (明杠 / 暗杠 / 金杠) for a kong boundary's corner.
+function makeKongLabel(text, color) {
+  const c = document.createElement('canvas'); c.width = 192; c.height = 96;
+  const x = c.getContext('2d');
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '800 60px -apple-system,"PingFang SC",sans-serif';
+  x.lineWidth = 9; x.strokeStyle = 'rgba(0,0,0,0.7)'; x.strokeText(text, 96, 52);
+  x.fillStyle = color; x.fillText(text, 96, 52);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
 function drawTextFallback(x, kind, W, H) {
   x.textAlign = 'center'; x.textBaseline = 'middle';
   if (kind < 27) {
@@ -195,6 +205,9 @@ export class MahjongScene {
     this.outline.visible = false;
     this.scene.add(this.outline);
     this.selKey = null;
+
+    this.kongBoxGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+    this.kongBounds = new Map(); // `${seat}_${meldIdx}` -> { box, label } for 杠 groups
 
     this.raycaster = new THREE.Raycaster();
     this.clock = new THREE.Clock();
@@ -407,12 +420,17 @@ export class MahjongScene {
     };
     const MS = 0.72, step = 0.95 * MS, meldGap = 0.5 * MS;
     const RIM_Y = (TD / 2) * MS - 0.1;   // rest on the rim (slightly below the felt)
+    const kongSeen = new Set();
     for (let p = 0; p < 4; p++) {
       const melds = game.melds[p];
       if (!melds.length) continue;
       const c = cfg[p];
-      const tiles = [];
-      melds.forEach((m) => (m.tiles || []).forEach((k, j) => tiles.push({ kind: k, first: j === 0 })));
+      const tiles = [], ranges = [];
+      melds.forEach((m, mi) => {
+        const start = tiles.length;
+        (m.tiles || []).forEach((k, j) => tiles.push({ kind: k, first: j === 0 }));
+        ranges.push({ m, mi, start, end: tiles.length - 1 });
+      });
       const pos = []; let cur = 0;
       tiles.forEach((t, i) => { cur += (i === 0 ? 0 : step) + (t.first && i ? meldGap : 0); pos.push(cur); });
       const span = cur;
@@ -423,7 +441,40 @@ export class MahjongScene {
           x: c.cx + c.dx * off, y: RIM_Y, z: c.cz + c.dz * off, rx: -Math.PI / 2, ry: 0, rz: c.spin,
         }, seen);
       });
+      for (const r of ranges) if (r.m.type === 'kong') this._kongBound(game, c, r, pos, span, MS, RIM_Y, kongSeen, p);
     }
+    for (const [key, kb] of this.kongBounds) {
+      if (!kongSeen.has(key)) { this.scene.remove(kb.box, kb.label); this.kongBounds.delete(key); }
+    }
+  }
+
+  // A coloured wireframe box + corner label (明杠 white / 暗杠 dark blue / 金杠 gold)
+  // enclosing a 杠's four flat tiles. The row runs along the seat's c.dx / c.dz axis, so
+  // the box is axis-aligned — no rotation needed.
+  _kongBound(game, c, r, pos, span, MS, RIM_Y, kongSeen, p) {
+    const key = `${p}_${r.mi}`;
+    kongSeen.add(key);
+    const o0 = pos[r.start] - span / 2, o1 = pos[r.end] - span / 2;
+    const centerOff = (o0 + o1) / 2;
+    const rowLen = (o1 - o0) + TW * MS + 0.1;
+    const perp = TH * MS + 0.07, up = TD * MS + 0.07;
+    const cx = c.cx + c.dx * centerOff, cz = c.cz + c.dz * centerOff;
+    let kb = this.kongBounds.get(key);
+    if (!kb) {
+      const gold = game.isWild(r.m.kind), concealed = !!r.m.concealed;
+      const kind = gold ? '金杠' : concealed ? '暗杠' : '明杠';
+      const col = gold ? 0xffce4d : concealed ? 0x3a59c0 : 0xffffff;
+      const txt = gold ? '#ffe08a' : concealed ? '#bccbff' : '#ffffff';
+      const box = new THREE.LineSegments(this.kongBoxGeo, new THREE.LineBasicMaterial({ color: col }));
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeKongLabel(kind, txt), transparent: true }));
+      label.scale.set(0.6, 0.3, 1);
+      this.scene.add(box, label);
+      kb = { box, label };
+      this.kongBounds.set(key, kb);
+    }
+    kb.box.position.set(cx, RIM_Y, cz);
+    kb.box.scale.set(c.dx ? rowLen : perp, up, c.dz ? rowLen : perp);
+    kb.label.position.set(cx - c.dx * rowLen / 2, RIM_Y + up / 2 + 0.22, cz - c.dz * rowLen / 2);
   }
 
   // Lay items in a line along cfg's edge, centered, scaled uniformly so the row

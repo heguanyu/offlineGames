@@ -21,7 +21,8 @@ try {
   // Start a hand on Normal difficulty; the 3D table + action bar should appear.
   await page.waitForSelector('#start-btn');
   await page.click('#start-btn');
-  await page.waitForFunction(() => document.querySelector('#action-bar .act-btn') ||
+  await page.waitForFunction(() => (window.__mj && window.__mj.humanTurn()) ||
+    document.querySelector('#action-bar .act-btn') ||
     !document.getElementById('result-overlay').classList.contains('hidden'), { timeout: 8000 });
   console.log('hand started, 3D scene + action bar live');
 
@@ -38,9 +39,7 @@ try {
       if (hu) { hu.click(); return { phase: 'win' }; }   // take a self-draw win
       const pass = btn('过');
       if (pass) { pass.click(); return { phase: 'claim' }; }
-      const discard = [...document.querySelectorAll('#action-bar .act-btn')]
-        .find((b) => b.textContent.includes('打出'));
-      if (discard) { discard.click(); return { phase: 'discard' }; }
+      if (window.__mj && window.__mj.humanTurn()) { window.__mj.discard(); return { phase: 'discard' }; }
       return { phase: 'wait' };
     });
     if (state.phase === 'result') {
@@ -48,8 +47,11 @@ try {
       const title = await page.$eval('#result-title', (e) => e.textContent);
       console.log('hand resolved:', title);
       if (handsResolved === 1) await page.screenshot({ path: path.join(root, 'test', 'mahjong-shot.png') });
-      await page.click('#next-hand-btn');
-      await page.waitForFunction(() => document.querySelector('#action-bar .act-btn'), { timeout: 8000 });
+      await page.click('#next-hand-btn'); // closes the result overlay (and starts the next hand)
+      if (handsResolved < 2) {
+        await page.waitForFunction(() => (window.__mj && window.__mj.humanTurn()) || document.querySelector('#action-bar .act-btn') ||
+          !document.getElementById('result-overlay').classList.contains('hidden'), { timeout: 8000 });
+      }
     }
     await new Promise((r) => setTimeout(r, 60));
   }
@@ -62,7 +64,7 @@ try {
   await page.click('#menu-btn');
   await page.waitForFunction(() => !document.getElementById('menu-overlay').classList.contains('hidden'));
   await page.click('#newgame-btn');
-  await page.waitForFunction(() => document.querySelector('#action-bar .act-btn'), { timeout: 8000 });
+  await page.waitForFunction(() => (window.__mj && window.__mj.humanTurn()) || document.querySelector('#action-bar .act-btn'), { timeout: 8000 });
   const after = await page.$$eval('#scores .pt', (els) => els.map((e) => e.textContent.trim()));
   if (!after.every((s) => s === '+0')) throw new Error(`重开 did not reset scores: ${after.join(', ')}`);
   console.log('restart reset scores:', before.join(','), '→', after.join(','));

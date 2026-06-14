@@ -44,7 +44,7 @@
 
   /* ---------- flat HUD over the canvas ---------- */
   .hud { position: absolute; z-index: 3; display: flex; align-items: center; gap: 6px; }
-  .plate-bottom { bottom: 8px; left: 14px; }
+  .plate-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }
   .plate-top    { top: 102px; left: 50%; transform: translateX(-50%); }
   .plate-left   { left: 8px; top: 42%; transform: translateY(-50%); }
   .plate-right  { right: 8px; top: 42%; transform: translateY(-50%); }
@@ -62,7 +62,7 @@
 
   /* the round's two 混儿 — a big panel floating at the top-middle of the table */
   #wild-hud {
-    position: absolute; z-index: 4; left: 50%; top: 8px; transform: translateX(-50%);
+    position: absolute; z-index: 4; left: 8px; top: 8px;
     display: flex; align-items: center; gap: 10px;
     background: rgba(6,26,18,0.74); border: 1px solid var(--gold); border-radius: 16px;
     padding: 8px 16px; backdrop-filter: blur(3px);
@@ -95,7 +95,7 @@
 
   /* ---------- action HUD ---------- */
   #action-hud {
-    position: absolute; z-index: 4; left: 50%; bottom: max(10px, env(safe-area-inset-bottom));
+    position: absolute; z-index: 4; left: 50%; bottom: max(56px, calc(env(safe-area-inset-bottom) + 48px));
     transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 7px; width: max-content; max-width: 96%;
   }
   #action-bar { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
@@ -130,7 +130,7 @@
   /* ---------- overlays ---------- */
   .overlay { position: fixed; inset: 0; z-index: 20; background: rgba(3,16,11,0.84); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
   .overlay.hidden { display: none; }
-  .panel { background: linear-gradient(#114030, #0c3122); border: 1px solid #2c8160; border-radius: 18px; padding: 24px; max-width: 480px; width: 100%; text-align: center; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
+  .panel { background: linear-gradient(#114030, #0c3122); border: 1px solid #2c8160; border-radius: 18px; padding: 24px; max-width: 624px; width: 100%; text-align: center; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
   .panel h2 { color: var(--gold); margin-bottom: 6px; font-size: 1.5rem; }
   .panel p.sub { color: #b6d8ca; font-size: 0.88rem; margin-bottom: 16px; }
   .level-row { display: flex; gap: 10px; justify-content: center; margin: 14px 0; flex-wrap: wrap; }
@@ -160,9 +160,14 @@
   #result-winning.show { display: flex; }
   #result-winning .cap { font-size: 0.82rem; color: var(--gold); font-weight: 800; letter-spacing: 2px; }
   #result-winning .tile { transform: scale(1.18); box-shadow: 0 0 0 3px rgba(232,196,102,0.85), 0 0 26px 7px rgba(232,196,102,0.6); border-radius: 9px; }
-  #result-hand { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; margin: 14px 0; }
+  #result-hand { display: flex; flex-direction: column; gap: 9px; justify-content: center; align-items: center; margin: 12px 0; }
+  .long-run { display: flex; gap: 2px; }
   .meld-group { display: flex; gap: 2px; }
   .meld-group.pair { padding: 0 4px; }
+  /* winning pattern (left) | separator | 得分明细 (right) */
+  #result-cols { display: flex; align-items: stretch; justify-content: center; margin: 12px 0 4px; text-align: left; }
+  #result-pattern { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; padding-right: 16px; }
+  #result-cols #result-payments { flex: 1 1 0; min-width: 0; padding-left: 16px; border-left: 1px solid rgba(232,196,102,0.32); display: block; margin: 0; }
   .rules-text { text-align: left; font-size: 0.85rem; line-height: 1.65; color: #d7efe5; }
   .rules-text h3 { color: var(--gold); margin: 12px 0 4px; font-size: 0.98rem; }
   .rules-text code { background: #08271c; padding: 1px 5px; border-radius: 4px; color: var(--gold); }
@@ -222,9 +227,13 @@
       <h2 id="result-title"></h2>
       <div id="result-fans"></div>
       <div id="result-score"></div>
-      <div id="result-winning"></div>
-      <div id="result-hand"></div>
-      <div id="result-payments" class="sub"></div>
+      <div id="result-cols">
+        <div id="result-pattern">
+          <div id="result-winning"></div>
+          <div id="result-hand"></div>
+        </div>
+        <div id="result-payments" class="sub"></div>
+      </div>
       <button class="big-btn" id="next-hand-btn">下一局</button>
     </div>
   </div>
