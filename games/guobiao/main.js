@@ -7,7 +7,7 @@ import { MahjongScene } from '../mahjong/scene.js';
 import { MahjongScene2D } from '../mahjong/scene2d.js';
 import { Sound } from '../mahjong/sound.js';
 import { buildOrder } from '../mahjong/handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands } from '../mahjong/ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands, SEAT_PORTRAIT } from '../mahjong/ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -104,7 +104,10 @@ function render() {
   // show the pre-draw 13 tiles; the reveal plays when the tick resumes.
   const mtSel = showSel && !animating;
   let handForSync = renderedHand();
-  if (animating && game.drawnTile != null) {
+  // Only when it's the HUMAN's turn has the human drawn — drop that one drawn tile so
+  // its reveal waits for the bot's discard fly. (game.drawnTile is a KIND; without the
+  // myTurn guard a bot drawing a kind the human holds would wrongly trim a held tile.)
+  if (animating && myTurn && game.drawnTile != null) {
     const di = handForSync.lastIndexOf(game.drawnTile);
     if (di >= 0) handForSync = handForSync.slice(0, di).concat(handForSync.slice(di + 1));
   }
@@ -154,6 +157,7 @@ function renderPlate(p) {
   const listen = p === HUMAN && (lockedTing || game.tenpaiInfo(p).tenpai);
   seat.innerHTML =
     `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}">` +
+    (SEAT_PORTRAIT[p] ? `<span class="portrait">${SEAT_PORTRAIT[p]}</span>` : '') +
     `<span class="wind">${WIND[game.seatWind(p)]}</span><span>${SEAT_LABEL[p]}</span>` +
     (p === game.dealer ? '<span class="dealer-dot" title="庄"></span>' : '') +
     (listen ? '<span class="listen">听</span>' : '') +
@@ -246,11 +250,15 @@ function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.curren
 function flushLog() {
   for (let i = lastLogLen; i < game.log.length; i++) {
     const line = game.log[i];
+    // log lines start with the seat's WIND (东/南/西/北) — map it back to the seat so
+    // the call is spoken in that seat's voice.
+    const tok = line.split(' ')[0];
+    let seat = 0; for (let p = 0; p < 4; p++) if (WIND[game.seatWind(p)] === tok) { seat = p; break; }
     if (/自摸|和牌/.test(line)) { toast(line, true); (game.result && game.result.winner === HUMAN ? sound.win() : sound.lose()); }
     else if (/荒牌/.test(line)) { toast(line, true); sound.drawGame(); }
-    else if (/杠/.test(line)) { toast(line, false); sound.kong(); sound.voice('kong'); }
-    else if (/碰/.test(line)) { toast(line, false); sound.pung(); sound.voice('pung'); }
-    else if (/吃/.test(line)) { toast(line, false); sound.select(); sound.voice('chow'); }
+    else if (/杠/.test(line)) { toast(line, false); sound.kong(); sound.voice('kong', seat); }
+    else if (/碰/.test(line)) { toast(line, false); sound.pung(); sound.voice('pung', seat); }
+    else if (/吃/.test(line)) { toast(line, false); sound.select(); sound.voice('chow', seat); }
   }
   lastLogLen = game.log.length;
 }
@@ -262,7 +270,8 @@ function tick() {
   // through to the 胡 confirmation below (no auto-declare).
   if (lockedTing && game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN
       && game.drawnTile != null && !game.selfDrawWin) {
-    game.discard(HUMAN, game.drawnTile); sound.discard();
+    const dt = game.drawnTile;
+    game.discard(HUMAN, dt); sound.discard(); sound.say(tileName(dt), HUMAN);
     tingRevealIdx = game.discardLog.length - 1;
     render();
     tingRevealIdx = -1;
@@ -305,7 +314,8 @@ function tick() {
       if (game.selfDrawWin) { game.declareWin(); tick(); return; } // bots take their self-draw win
       const kong = chooseSelfKong(game, p, level);
       if (kong != null) { game.selfKong(p, kong); tick(); return; }
-      game.discard(p, chooseDiscard(game, p, level)); sound.discard();
+      const dt = chooseDiscard(game, p, level);
+      game.discard(p, dt); sound.discard(); sound.say(tileName(dt), p); // speak the tile in the bot's voice
       if (scene && !FAST && !fastMode) { // fly the discard to the center halt, hold, then drop to pool
         animating = true;
         scene.beginDiscardDemo(p, game.discardLog.length - 1, DISCARD_DEMO_MS);
@@ -344,7 +354,7 @@ function discardSelected(declare) {
     waits = game.handWaits(rest, HUMAN);
     if (!waits.length) declare = false; // safety: not actually 听 → plain discard
   }
-  game.discard(HUMAN, id); sound.discard();
+  game.discard(HUMAN, id); sound.discard(); sound.say(tileName(id), HUMAN); // speak the tile in the player's voice
   selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
   if (declare) { lockedTing = true; tingWaits = waits; toast('听！自动出牌', true); sound.startMusic(); }
   tick();

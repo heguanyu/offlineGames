@@ -7,7 +7,7 @@ import { MahjongScene } from './scene.js';
 import { MahjongScene2D } from './scene2d.js';
 import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands } from './ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands, SEAT_PORTRAIT } from './ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -149,7 +149,11 @@ function render() {
   // show the pre-draw 13 tiles, and let the reveal play when the tick resumes.
   const mt = myTurn && !animating;
   let handForSync = rh;
-  if (animating && game.drawnTile != null) {
+  // Only when it's actually the HUMAN's turn has the human drawn — drop that one drawn
+  // tile so its reveal is held until the bot's discard fly ends. (game.drawnTile is a
+  // KIND, so without the myTurn guard a bot drawing a kind the human holds would wrongly
+  // trim one of the human's tiles, flickering the hand.)
+  if (animating && myTurn && game.drawnTile != null) {
     const di = rh.lastIndexOf(game.drawnTile);
     if (di >= 0) handForSync = rh.slice(0, di).concat(rh.slice(di + 1));
   }
@@ -194,6 +198,7 @@ function renderPlate(p) {
   const isDealer = p === game.dealer;
   seat.innerHTML =
     `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}${isDealer ? ' dealer' : ''}">` +
+    (SEAT_PORTRAIT[p] ? `<span class="portrait">${SEAT_PORTRAIT[p]}</span>` : '') +
     (isDealer ? '<span class="crown" title="庄家">👑</span>' : '') +
     `<span class="wind">${WIND[game.seatWind(p)]}</span>` +
     `<span>${SEAT_LABEL[p]}</span>` +
@@ -242,10 +247,14 @@ function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.claim 
 function flushLogToasts() {
   for (let i = lastLogLen; i < game.log.length; i++) {
     const line = game.log[i];
+    // the claim log line starts with the seat's WIND (东/南/西/北) — map it back to the
+    // seat index so the call is spoken in that seat's voice.
+    const tok = line.split(' ')[0];
+    let seat = 0; for (let p = 0; p < 4; p++) if (WIND[game.seatWind(p)] === tok) { seat = p; break; }
     if (/自摸/.test(line)) { toast(line, true); (game.result && game.result.winner === HUMAN ? sound.win() : sound.lose()); }
     else if (/荒牌/.test(line)) { toast(line, true); sound.drawGame(); }
-    else if (/杠/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.kong(); sound.voice('kong'); }
-    else if (/碰/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.pung(); sound.voice('pung'); }
+    else if (/杠/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.kong(); sound.voice('kong', seat); }
+    else if (/碰/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.pung(); sound.voice('pung', seat); }
   }
   lastLogLen = game.log.length;
 }
@@ -283,8 +292,10 @@ function tick() {
       if (game.selfDrawWin) { game.declareWin(); tick(); return; } // bots take their self-draw win
       const kong = chooseSelfKong(game, p, level);
       if (kong !== null) { game.selfKong(p, kong); tick(); return; }
-      game.discard(p, chooseDiscard(game, p, level));
+      const dt = chooseDiscard(game, p, level);
+      game.discard(p, dt);
       sound.discard();
+      sound.say(tileName(dt), p); // speak the discarded tile in the bot's voice
       if (scene && !FAST && !fastMode) { // fly the discard to the center halt, hold, then drop to pool
         animating = true;
         scene.beginDiscardDemo(p, game.discardLog.length - 1, DISCARD_DEMO_MS);
@@ -338,6 +349,7 @@ function discardSelected() {
   if (id == null || game.isWild(id)) return;
   game.discard(HUMAN, id);
   sound.discard();
+  sound.say(tileName(id), HUMAN); // speak the discarded tile in the player's voice
   selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
   tick();
 }

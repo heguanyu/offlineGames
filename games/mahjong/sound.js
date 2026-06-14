@@ -6,16 +6,62 @@ export class Sound {
   constructor() {
     this.ctx = null;
     this.muted = localStorage.getItem('mahjong-muted') === '1';
-    // Short spoken calls (碰/吃/杠), played via <audio> alongside the WebAudio SFX.
+    // Wav call clips (碰/吃/杠) — only a fallback for browsers without SpeechSynthesis.
     this._voices = {};
     for (const k of ['pung', 'chow', 'kong']) {
       try { const a = new Audio(new URL(`./sounds/${k}.wav`, import.meta.url).href); a.preload = 'auto'; this._voices[k] = a; } catch {}
     }
+    // Spoken voices use the device's built-in Chinese TTS (offline on iOS/iPadOS),
+    // differentiated PER SEAT so the four players sound distinct: the player neutral,
+    // 下家 a young lady (high pitch), 对家 a young man (mid), 上家 a mid-age man (low).
+    // A matching named voice is used when the platform has more than one zh voice;
+    // pitch/rate carry the differentiation otherwise. Indexed by seat 0..3.
+    this.voiceProfiles = [
+      { pitch: 1.0, rate: 1.0, gender: 'any' },     // 0 玩家
+      { pitch: 1.55, rate: 1.08, gender: 'female' }, // 1 下家 — young lady
+      { pitch: 1.02, rate: 1.0, gender: 'male' },     // 2 对家 — young man
+      { pitch: 0.7, rate: 0.92, gender: 'male' },     // 3 上家 — mid-age man
+    ];
+    this._zhVoices = [];
+    const synth = window.speechSynthesis;
+    if (synth) {
+      const load = () => { try { this._zhVoices = synth.getVoices().filter((v) => /^zh|cmn/i.test(v.lang)); } catch {} };
+      load();
+      try { synth.addEventListener('voiceschanged', load); } catch {}
+    }
   }
 
-  // Play a spoken call clip (碰/吃/杠). Best-effort: silent if muted or unavailable.
-  voice(name) {
+  _pickVoice(prof) {
+    const vs = this._zhVoices;
+    if (!vs.length) return null;
+    if (prof.gender === 'female') return vs.find((v) => /ting|mei|female|woman|婷|美|女|li-?mu|sin-?ji/i.test(v.name)) || vs[0];
+    if (prof.gender === 'male') return vs.find((v) => /male|man|男|yu-?shu|kang-?kang|liang/i.test(v.name)) || vs[vs.length - 1];
+    return vs[0];
+  }
+
+  // Speak `text` in the seat's voice (TTS). Best-effort: silent if muted/unavailable.
+  // Cancels any in-flight utterance so calls/discards track the game rather than queue.
+  say(text, seat = 0) {
+    if (this.muted || !text) return;
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'zh-CN';
+      const prof = this.voiceProfiles[seat] || this.voiceProfiles[0];
+      u.pitch = prof.pitch; u.rate = prof.rate; u.volume = 1.0;
+      const v = this._pickVoice(prof); if (v) u.voice = v;
+      synth.cancel();
+      synth.speak(u);
+    } catch {}
+  }
+
+  // A spoken call (碰/吃/杠) in the claiming seat's voice. Falls back to the wav clip
+  // only where SpeechSynthesis is unavailable (then undifferentiated).
+  voice(name, seat = 0) {
     if (this.muted) return;
+    const CALL = { pung: '碰', chow: '吃', kong: '杠' };
+    if (window.speechSynthesis) { this.say(CALL[name] || name, seat); return; }
     const a = this._voices[name];
     if (!a) return;
     try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch {}
@@ -29,6 +75,12 @@ export class Sound {
       if (AC) try { this.ctx = new AC(); } catch {}
     }
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    // iOS keeps SpeechSynthesis silent until a gesture-initiated speak() — prime it
+    // once from this (gesture-driven) resume so later in-game calls are audible.
+    if (!this._spoke && window.speechSynthesis) {
+      this._spoke = true;
+      try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } catch {}
+    }
     return this.ctx;
   }
   setMuted(m) {
