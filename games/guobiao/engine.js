@@ -248,14 +248,17 @@ export class Game {
     this._emit(`${this.seatName(player)} ${byDiscard ? '和牌' : '自摸'} ${result.fan}番`);
   }
 
-  // MCR payment: winner gets (fan + 8). Self-draw → each pays it. Discard → the
-  // 点炮者 pays (fan + 8), the other two pay the 8 base each.
+  // MCR payment: winner gets (fan + base), where base is the 起和番 floor (8 for
+  // standard MCR, 0 for 无定番). Self-draw → each pays it. Discard → the 点炮者 pays
+  // (fan + base), the other two pay the base each. 无定番 (base 0) therefore charges
+  // only the actual fan, with no fixed surcharge.
   _settle(winner, fan, payer) {
     const pay = new Array(4).fill(0);
-    const full = fan + 8;
+    const base = this.minFan;
+    const full = fan + base;
     for (let p = 0; p < 4; p++) {
       if (p === winner) continue;
-      const amt = (payer == null) ? full : (p === payer ? full : 8);
+      const amt = (payer == null) ? full : (p === payer ? full : base);
       pay[p] = -amt; pay[winner] += amt;
     }
     for (let p = 0; p < 4; p++) this.scores[p] += pay[p];
