@@ -528,8 +528,8 @@ function onAction(name) {
     return;
   }
   if (!$('result-overlay').classList.contains('hidden')) {
-    if (name === 'left') { resultFocus = 0; focusResultBtn(); }
-    else if (name === 'right') { resultFocus = 1; focusResultBtn(); }
+    if (name === 'left') { resultFocus = 1; focusResultBtn(); }      // 返回 (top-left)
+    else if (name === 'right') { resultFocus = 0; focusResultBtn(); } // 下一局 (top-right)
     else if (name === 'confirm') (resultFocus === 0 ? nextHand() : returnHub());
     else if (name === 'menu') nextHand();
     return;

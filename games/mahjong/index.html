@@ -99,23 +99,23 @@
   #result-overlay { overflow: hidden; }
   /* wide panel, raised so it clears the player's hand row on the table below */
   #result-overlay .panel { position: relative; z-index: 1; max-width: none; }
-  #result-frame { position: relative; width: min(900px, 86vw); transform: translateY(-4vh); }
+  #result-frame { position: relative; width: min(720px, 70vw); transform: translateY(-10vh); }
   .seat-hand { position: absolute; z-index: 0; display: flex; align-items: flex-end; gap: 9px; pointer-events: none;
     padding: 8px 11px; border-radius: 13px;
     background: rgba(4,18,12,0.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     box-shadow: 0 0 0 1px rgba(232,196,102,0.18), 0 8px 26px rgba(0,0,0,0.45); }
   .seat-hand .meld-group { position: relative; display: flex; gap: 2px; }
-  .seat-hand .tile { --tw: 40px; --th: 54px; }
+  .seat-hand .tile { --tw: 52px; --th: 70px; }
   .seat-hand .meld-tag { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px;
-    font-size: 12px; font-weight: 800; letter-spacing: 1px; color: var(--gold); white-space: nowrap;
+    font-size: 13px; font-weight: 800; letter-spacing: 1px; color: var(--gold); white-space: nowrap;
     -webkit-text-stroke: 0.6px rgba(0,0,0,0.92); text-shadow: 0 1px 2px rgba(0,0,0,0.85); }
-  .seat-hand.bottom { top: 100%;    left: 50%; transform: translate(-50%, 12px); }
-  .seat-hand.top    { bottom: 100%; left: 50%; transform: translate(-50%, -12px); }
-  /* result button row: 下一局 (default focus) + 返回 (to the hub) */
-  .result-btns { display: flex; gap: 12px; margin-top: 10px; }
-  .result-btns .big-btn { margin-top: 0; flex: 1; }
-  .panel .big-btn.ghost-btn { color: #eaf6f0; background: linear-gradient(#1b5e45,#134836); box-shadow: 0 4px 0 #0c3526; }
-  .panel .big-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
+  .seat-hand.top { bottom: 100%; left: 50%; transform: translate(-50%, -12px); }
+  /* result buttons in the panel's top corners, aligned with the title, text-width */
+  .corner-btn { position: absolute; top: 22px; z-index: 3; padding: 8px 15px; border: none; border-radius: 10px;
+    font-size: 0.98rem; font-weight: 800; line-height: 1; cursor: pointer; }
+  .corner-btn.next { right: 22px; color: #3a2a00; background: linear-gradient(#f3d785,#e3b94f); box-shadow: 0 3px 0 #b8902f; }
+  .corner-btn.back { left: 22px; color: #f1cccc; background: linear-gradient(#6e2f2f,#532020); box-shadow: 0 3px 0 #3a1414; }
+  .corner-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
 
   /* ---------- action HUD ---------- */
   #action-hud {
@@ -257,6 +257,8 @@
   <div class="overlay hidden" id="result-overlay">
     <div id="result-frame">
     <div class="panel">
+      <button class="corner-btn back" id="back-hub-btn">返回</button>
+      <button class="corner-btn next" id="next-hand-btn">下一局</button>
       <h2 id="result-title"></h2>
       <div id="result-fans"></div>
       <div id="result-score"></div>
@@ -267,14 +269,9 @@
         </div>
         <div id="result-payments" class="sub"></div>
       </div>
-      <div class="result-btns">
-        <button class="big-btn" id="next-hand-btn">下一局</button>
-        <button class="big-btn ghost-btn" id="back-hub-btn">返回</button>
-      </div>
     </div>
-    <!-- 玩家 (bottom) + 对家 (top) revealed hands, pinned to the panel border -->
-    <div class="seat-hand bottom" id="seat-hand-0" aria-hidden="true"></div>
-    <div class="seat-hand top"    id="seat-hand-2" aria-hidden="true"></div>
+    <!-- 对家 (top) revealed hand, pinned above the panel -->
+    <div class="seat-hand top" id="seat-hand-2" aria-hidden="true"></div>
     </div>
   </div>
 
