@@ -165,9 +165,12 @@ export class MahjongScene {
     this._lights(); this._table();
 
     this.geo = roundedTileGeo();
-    // Side edges are a touch greyer than the (near-white) face so the boundary
-    // between the tile's top face and its sides reads clearly.
-    this.ivory = new THREE.MeshStandardMaterial({ color: 0xc6c0b1, roughness: 0.6, metalness: 0.02 });
+    // Side edges: a faux frosted-glass rim — translucent (90% opaque) and very rough so
+    // it reads matte/glassy without the cost of real transmission. The design face
+    // (group 0) stays opaque, so the art stays crisp and the boundary reads clearly.
+    this.ivory = new THREE.MeshStandardMaterial({
+      color: 0xc6c0b1, roughness: 0.92, metalness: 0.0, transparent: true, opacity: 0.8,
+    });
     this.green = new THREE.MeshStandardMaterial({ color: 0x1c855f, roughness: 0.5, metalness: 0.03 });
     this.faceMat = new Map();   // faceKey -> material
     this.faceRecords = [];      // { canvas, tex, kind, wild } for async redraw on load
@@ -178,13 +181,20 @@ export class MahjongScene {
     this.pickables = [];
     this.scene.add(this.tilesGroup = new THREE.Group());
 
-    // selection glow — an additive sprite that softly lights the lifted tile
-    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: makeGlowTexture(), color: 0xffd27a, transparent: true, opacity: 0,
+    // selection outline — a glowing gold shell tracing the selected tile: a crisp rim
+    // (enlarged back-face hull) plus a soft additive halo. It rides the selected tile's
+    // animated transform each frame (updated in the render loop).
+    const rim = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ color: 0xffd23a, side: THREE.BackSide }));
+    rim.scale.setScalar(1.06);
+    this.outlineHalo = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({
+      color: 0xffd773, side: THREE.BackSide, transparent: true, opacity: 0.4,
       blending: THREE.AdditiveBlending, depthWrite: false }));
-    this.glow.scale.setScalar(0.001);
-    this.scene.add(this.glow);
-    this.glowTarget = { on: false, pos: new THREE.Vector3(), size: 1 };
+    this.outlineHalo.scale.setScalar(1.2);
+    this.outline = new THREE.Group();
+    this.outline.add(rim, this.outlineHalo);
+    this.outline.visible = false;
+    this.scene.add(this.outline);
+    this.selKey = null;
 
     this.raycaster = new THREE.Raycaster();
     this.clock = new THREE.Clock();
@@ -202,7 +212,7 @@ export class MahjongScene {
   resize() { this._resize(); }
 
   _lights() {
-    this.scene.add(new THREE.HemisphereLight(0xbfe6d8, 0x223026, 1.0));
+    this.scene.add(new THREE.HemisphereLight(0xbfe6d8, 0x223026, 1.2)); // ambient fill (+20%)
     const key = new THREE.DirectionalLight(0xfff4d6, 2.7);
     key.position.set(-6, 15, 8); key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
@@ -292,7 +302,7 @@ export class MahjongScene {
 
   sync(game, ui) {
     this.pickables = [];
-    this.glowTarget.on = false;
+    this.selKey = null;
     this.claimable = !!ui.claimable; // only enlarge the pending tile if YOU can claim
     const seen = new Set();
     const HUMAN = 0;
@@ -436,14 +446,10 @@ export class MahjongScene {
       const z = cfg.cz + cfg.dz * off + (it.selected ? cfg.pull : 0);
       this._place(it.key, {
         kind: it.kind, wild: it.wild, pick: it.pick, emissive: it.emissive, scale: s,
-        x, y: baseY + lift, z, rx: cfg.rx + (it.selected ? 0.16 : 0), ry: cfg.ry, rz: it.rz || 0,
+        x, y: baseY + lift, z, rx: it.selected && !cfg.flat ? this.faceCamRx : cfg.rx, ry: cfg.ry, rz: it.rz || 0,
         from: it.from, draw: it.draw, gate: it.gate,
       }, seen);
-      if (it.selected) {
-        this.glowTarget.on = true;
-        this.glowTarget.pos.set(x, baseY + lift, z);
-        this.glowTarget.size = s;
-      }
+      if (it.selected) this.selKey = it.key;
     });
     return s;
   }
@@ -610,13 +616,14 @@ export class MahjongScene {
         m.rotation.y += (rec.try_ - m.rotation.y) * a;
         m.rotation.z += ((rec.trz || 0) - m.rotation.z) * a;
       }
-      // selection glow follow + fade
-      const gt = this.glowTarget, gs = this.glow;
-      gs.material.opacity += ((gt.on ? 1 : 0) - gs.material.opacity) * a;
-      if (gs.material.opacity > 0.01) {
-        gs.position.lerp(gt.pos, Math.min(1, a * 1.6));
-        const pulse = (gt.size ?? 1) * 3.3 * (1 + Math.sin(performance.now() / 300) * 0.07);
-        gs.scale.setScalar(pulse);
+      // selection outline rides the selected tile's (animated) transform
+      const selRec = this.selKey && this.tiles.get(this.selKey);
+      this.outline.visible = !!selRec;
+      if (selRec) {
+        this.outline.position.copy(selRec.mesh.position);
+        this.outline.quaternion.copy(selRec.mesh.quaternion);
+        this.outline.scale.copy(selRec.mesh.scale);
+        this.outlineHalo.material.opacity = 0.34 + 0.16 * Math.sin(performance.now() / 360); // gentle glow
       }
       this.renderer.render(this.scene, this.camera);
       requestAnimationFrame(tick);

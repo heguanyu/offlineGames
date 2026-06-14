@@ -146,8 +146,10 @@
   /* winning modal: lighter blur than other overlays */
   /* lighter than other overlays so the revealed hands show through behind the modal */
   #result-overlay { backdrop-filter: blur(0.5px); background: rgba(3,16,11,0.4); }
-  #result-payments { display: inline-block; text-align: left; min-width: 15em; }
-  #result-payments .bd-title { font-size: 0.7rem; color: var(--gold); letter-spacing: 2px; margin: 2px 0 4px; }
+  #result-payments { display: inline-block; text-align: left; min-width: 17em; }
+  #result-payments .bd-title { font-size: 0.7rem; color: var(--gold); letter-spacing: 2px; margin: 5px 0 4px; }
+  #result-payments .bd-all { display: flex; flex-wrap: wrap; gap: 3px 14px; padding: 0 6px 4px; font-size: 0.9rem; }
+  #result-payments .bd-all-seat { white-space: nowrap; }
   #result-payments .bd-row { display: grid; grid-template-columns: 4.8em 3.2em 1fr; gap: 6px; align-items: baseline; padding: 2px 6px; font-size: 0.84rem; border-radius: 6px; }
   #result-payments .bd-row.win { background: rgba(232,196,102,0.14); }
   #result-payments .bd-net { text-align: right; font-weight: 800; }

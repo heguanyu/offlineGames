@@ -371,15 +371,22 @@ function showResult() {
   ov.classList.remove('hidden');
 }
 
-// Player-POV 得分明细 for the result panel: the human's net split by opponent,
-// each line giving the reason (胡 self-draw / 杠 kong) and a 庄x2 tag when that
-// flow is to/from the 庄家. Mirrors _settle + _settleKongs (self-draw + 庄家加倍).
+// 得分明细 for the result panel. First the overall result — every seat's net for the
+// hand — then the human's own breakdown: net vs each opponent with the 胡/杠 reason and a
+// 庄x2 tag where the flow is to/from the 庄家. Mirrors _settle + _settleKongs (庄家加倍).
 function breakdownHtml(r) {
   const me = HUMAN, dealer = game.dealer, dd = game.dealerDouble;
   const winner = r.type === 'win' ? r.winner : -1;
   const score = r.score || 0;
   const K = r.kongPts ||
     game.melds.map((ms) => ms.reduce((s, m) => s + (m.type === 'kong' ? (game.isWild(m.kind) ? 4 : m.concealed ? 2 : 1) : 0), 0));
+  const col = (v) => (v > 0 ? '#7ddf8a' : v < 0 ? '#ef9a9a' : '#cfe7db');
+  const sgn = (v) => (v > 0 ? '+' : '') + v;
+  // overall — every seat's net for the hand
+  const all = [0, 1, 2, 3].map((p) =>
+    `<span class="bd-all-seat">${p === dealer ? '👑' : ''}${SEAT_LABEL[p]} <b style="color:${col(r.payments[p])}">${sgn(r.payments[p])}</b></span>`
+  ).join('');
+  // your breakdown — net vs each opponent + the 胡/杠 reason
   const dbl = (q) => (dd && (me === dealer || q === dealer)) ? 2 : 1;
   let total = 0;
   const rows = [1, 2, 3].map((off) => {
@@ -388,16 +395,16 @@ function breakdownHtml(r) {
     const kong = (K[me] - K[q]) * dbl(q);
     const net = hu + kong; total += net;
     const why = [];
-    if (hu) why.push(`胡 ${hu > 0 ? '+' : ''}${hu}`);
-    if (kong) why.push(`杠 ${kong > 0 ? '+' : ''}${kong}`);
+    if (hu) why.push(`胡 ${sgn(hu)}`);
+    if (kong) why.push(`杠 ${sgn(kong)}`);
     const tag = dbl(q) === 2 ? ' <span class="dbl">庄x2</span>' : '';
-    const col = net > 0 ? '#7ddf8a' : net < 0 ? '#ef9a9a' : '#cfe7db';
     return `<div class="bd-row"><span class="bd-seat">${q === dealer ? '👑 ' : ''}${SEAT_LABEL[q]}</span>` +
-      `<span class="bd-net" style="color:${col}">${net > 0 ? '+' : ''}${net}</span>` +
+      `<span class="bd-net" style="color:${col(net)}">${sgn(net)}</span>` +
       `<span class="bd-why">${why.join('　') || '—'}${tag}</span></div>`;
   });
-  const tcol = total > 0 ? '#7ddf8a' : total < 0 ? '#ef9a9a' : '#cfe7db';
-  return `<div class="bd-title">得分明细 · 你 <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${tcol}">${total > 0 ? '+' : ''}${total}</span></div>${rows.join('')}`;
+  return `<div class="bd-title">本局得分</div><div class="bd-all">${all}</div>` +
+    `<div class="bd-title">你的明细 · <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${col(total)}">${sgn(total)}</span></div>` +
+    rows.join('');
 }
 
 function nextHand() {
