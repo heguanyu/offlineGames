@@ -94,6 +94,24 @@
   .tile.honor.z-c { color: #c0392b; } .tile.honor.z-f { color: #15803d; } .tile.honor.z-b { color: #2563eb; } .tile.honor.wind { color: #2b3a4a; }
   .tile.wild { background: linear-gradient(165deg,#fff8e6,#f3dd98); }
   .tile.wild::after { content:'混'; position:absolute; top:-6px; right:-5px; width:15px; height:15px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#ffe08a,#d99e21); color:#4a3500; font-size:9px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,0.5); }
+  /* face-down tile (masks a 暗杠's middle pair) */
+  .tile.tile-back { background: repeating-linear-gradient(135deg,#176a4c,#176a4c 5px,#125a40 5px,#125a40 10px); }
+
+  /* result overlay: each seat's revealed hand on its border, behind the panel,
+     each its own frosted (extra-blurred) strip */
+  #result-overlay .panel { position: relative; z-index: 1; }
+  #result-seats { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+  .seat-hand { position: absolute; display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; border-radius: 12px;
+    background: rgba(4,18,12,0.42); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+    box-shadow: 0 0 0 1px rgba(232,196,102,0.16), 0 8px 26px rgba(0,0,0,0.45); }
+  .seat-hand:empty { display: none; }
+  .seat-hand .meld-group { display: flex; gap: 2px; }
+  .seat-hand .tile { --tw: 20px; --th: 27px; }
+  .seat-hand.bottom { left: 50%; bottom: 10px; transform: translateX(-50%); }
+  .seat-hand.top    { left: 50%; top: 10px;    transform: translateX(-50%); }
+  .seat-hand.left   { left: 40px;  top: 50%; transform: translate(-50%,-50%) rotate(90deg); }
+  .seat-hand.right  { right: 40px; top: 50%; transform: translate(50%,-50%) rotate(-90deg); }
 
   /* ---------- action HUD ---------- */
   #action-hud {
@@ -230,6 +248,13 @@
 
   <!-- result -->
   <div class="overlay hidden" id="result-overlay">
+    <!-- each seat's revealed final hand, pinned to its border (behind the panel) -->
+    <div id="result-seats" aria-hidden="true">
+      <div class="seat-hand bottom" id="seat-hand-0"></div>
+      <div class="seat-hand right"  id="seat-hand-1"></div>
+      <div class="seat-hand top"    id="seat-hand-2"></div>
+      <div class="seat-hand left"   id="seat-hand-3"></div>
+    </div>
     <div class="panel">
       <h2 id="result-title"></h2>
       <div id="result-fans"></div>

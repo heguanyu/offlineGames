@@ -59,6 +59,37 @@ export function showClaimArrow(scene) {
   svg.style.display = '';
 }
 
+// A face-down tile (green back) — used to mask the middle two tiles of a 暗杠 /
+// 金杠 so a concealed kong reads differently from an open 明杠.
+export function backTileEl(lg = false) {
+  const el = document.createElement('div');
+  el.className = 'tile tile-back' + (lg ? ' lg' : '');
+  return el;
+}
+
+// Reveal all four seats' final hands around the result overlay — one row pinned
+// to each border (玩家 bottom / 下家 right / 对家 top / 上家 left, via #seat-hand-N's
+// edge class). Each row is the sorted concealed hand followed by every meld as a
+// SEPARATE group (碰 / 吃 / 明杠 / 暗杠 / 金杠); a 暗杠's middle two show as backs.
+// `isWild(id)` flags 混儿 (天津); pass nothing for 国标.
+export function renderSeatHands(game, isWild = () => false) {
+  for (let p = 0; p < 4; p++) {
+    const el = $('seat-hand-' + p);
+    if (!el) continue;
+    el.innerHTML = '';
+    const row = document.createElement('div'); row.className = 'meld-group';
+    for (const id of game.hands[p].slice().sort((a, b) => a - b)) row.appendChild(faceTileEl(id, { wild: isWild(id) }));
+    el.appendChild(row);
+    for (const m of game.melds[p] || []) {
+      const g = document.createElement('div'); g.className = 'meld-group';
+      const hidden = m.type === 'kong' && m.concealed; // 暗杠 / 金杠 — mask the inner pair
+      m.tiles.forEach((id, i) => g.appendChild(
+        hidden && (i === 1 || i === 2) ? backTileEl() : faceTileEl(id, { wild: isWild(id) })));
+      el.appendChild(g);
+    }
+  }
+}
+
 // An action-bar button. `ghost` = secondary style; `extra` = an extra class name.
 export function mkBtn(label, fn, ghost, extra) {
   const b = document.createElement('button');

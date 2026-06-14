@@ -6,7 +6,7 @@ import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from 
 import { MahjongScene } from '../mahjong/scene.js';
 import { Sound } from '../mahjong/sound.js';
 import { buildOrder } from '../mahjong/handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow } from '../mahjong/ui-util.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, showClaimArrow, renderSeatHands } from '../mahjong/ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -376,6 +376,7 @@ function showResult() {
     }
     payEl.innerHTML = breakdownHtml(r);
   }
+  renderSeatHands(game); // reveal every seat's hand on its border
   sound.stopMusic(); // 听 (if any) is over
   saveSession(); ov.classList.remove('hidden');
 }
