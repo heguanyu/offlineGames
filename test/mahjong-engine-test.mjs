@@ -69,11 +69,12 @@ ok(r && r.meta.hunDiao, '混吊 detected');
 ok(!r.meta.su, '混吊 hand is not 素');
 eq(r.score, 2, '混吊(2) = 2');
 
-// A freshly-DRAWN 混儿 only counts as 混吊 when it serves in 捉五 or 龙. Parked in the
-// 将 ({混,混} closed by drawing the 2nd 混儿) it is neither → no 混吊 → 小和 (no win).
-const drewWildPair = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(4), P(5), P(6), 27, 28];
+// A freshly-DRAWN 混儿 that can ONLY pair — the hand has no 4-5-6万 (捉五) and no 龙 for it
+// to serve — is not 混吊 and not a win: parked in the 将 it is a 小和. (With a 4-5-6万
+// present the 混 could instead stand as the 5万 → 捉五; see the 捉五 tests below.)
+const drewWildPair = [M(1), M(2), M(3), M(7), M(8), M(9), P(1), P(2), P(3), P(7), P(8), P(9), 27, 28];
 ok(analyzeWin(drewWildPair, [], { wilds: [27, 28], winningKind: 28 }) === null,
-  'drawn 混儿 parked in the 将 (not 捉五/龙) is not 混吊 → 小和');
+  'drawn 混儿 that can only pair (no 捉五/龙 available) → 小和');
 
 // A drawn 混儿 parking in a plain run (7-8-9s, not 捉五/龙) is likewise not 混吊 → 小和.
 const drewParks = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(9), P(9), S(7), S(8), 27];
@@ -134,6 +135,22 @@ r = analyzeWin(sszw2, [], { wilds: [27, 28], winningKind: 28 });
 ok(r && r.meta.zhuoWu && !r.meta.hunDiao, '捉五 only (all-混儿 run, drawn 混儿 as 5万)');
 eq(r.score, 3, '捉五(3), no 混吊');
 
+// 捉五 where the winning 混儿 must stand as the 5万 in a 4-5-6万 run while the natural
+// 5,6,7万 form a SECOND run: 混,4万,5万,6万,7万,123条,123筒,东东 + drawn 混. The solver
+// must read 567万 natural + 4万-[混]-[混] (wilds at 5/6万), not lock 456万 together —
+// which would miss 捉五 and leave every reading a 小和.
+const zwSplit = [M(4), M(5), M(6), M(7), S(1), S(2), S(3), P(1), P(2), P(3), 27, 27, 31, 31];
+r = analyzeWin(zwSplit, [], { wilds: [31, 32], winningKind: 31 });
+ok(r && r.meta.zhuoWu, '捉五 via 567万 natural + 4万-混-混 (drawn 混 stands as the 5万)');
+eq(r && r.score, 3, '捉五(3): the second man run must not block the 捉五 reading');
+
+// FOUR complete runs + two 混, won by drawing a 混: one 混 stands as the 5万 of the 456万
+// and the natural 5万 slides into the 将 — a genuine 捉五 (best reading), the same shape
+// as a 4_6万 kanchan and consistent with catching the spot on a natural 5万 (not a 小和).
+const zwPair = [M(1), M(2), M(3), M(4), M(5), M(6), P(1), P(2), P(3), P(4), P(5), P(6), 31, 31];
+r = analyzeWin(zwPair, [], { wilds: [31, 32], winningKind: 31 });
+ok(r && r.meta.zhuoWu, '456万 + two 混 (win on 混 as the 5万) is 捉五, not 小和');
+
 // A drawn 混儿 filling a 龙 gap (the 9万 of 1-9万) wins as plain 龙 = 4 — a drawn 混儿
 // is never 混吊, so this is 龙, not 混吊龙. (Wilds are winds, off-suit → no 本混.)
 const hunLong = [M(1), M(2), M(3), M(4), M(5), M(6), M(7), M(8), 27, P(1), P(2), P(3), P(9), P(9)];
@@ -153,15 +170,20 @@ console.log('kong points:');
 {
   const kg = new Game({ rng: () => 0.5, indicator: 31 }); // wilds = 中,發 (31,32)
   ok(kg.isWild(31) && !kg.isWild(0), 'indicator 31 → 中發 are 混儿');
+  kg.dealer = 0;
   kg.melds = [
     [{ type: 'kong', kind: 0, concealed: true }],   // 暗杠 = 2
     [{ type: 'kong', kind: 5, concealed: false }],  // 明杠 = 1
     [{ type: 'kong', kind: 31, concealed: true }],  // 金杠 (中 is a 混儿) = 4
     [],
   ];
+  // K = [2,1,4,0], total = 7. Without 庄家加倍: net = 4K − total.
+  kg.dealerDouble = false;
+  eq(kg._settleKongs([0, 0, 0, 0]).join(), '1,-3,9,-7', '杠分 base net (no 庄家加倍): 暗2 / 明1 / 金4');
+  // With 庄家加倍 (dealer = seat 0): every kong flow to/from the dealer doubles.
+  kg.dealerDouble = true;
   const net = kg._settleKongs([0, 0, 0, 0]);
-  // K = [2,1,4,0], total = 7 → net = 4K − total = [1, −3, 9, −7]
-  eq(net.join(), '1,-3,9,-7', '杠分 net: 暗2 / 明1 / 金4, paid by the other three');
+  eq(net.join(), '2,-4,11,-9', '杠分 net with 庄家加倍 (dealer seat 0 flows ×2)');
   eq(net.reduce((a, b) => a + b, 0), 0, '杠分 is zero-sum');
   // 金杠 is offered for four 混儿 in hand (the only way to kong a wild)
   kg.hands[kg.dealer] = [31, 31, 31, 31, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3];

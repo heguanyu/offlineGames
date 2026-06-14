@@ -27,10 +27,11 @@ const DRAGONS = ['中', '發', '白'];
 const DRAGON_COLOR = ['#c0392b', '#15803d', '#2563eb'];
 
 // ---- tile faces ------------------------------------------------------------
-// Authentic faces come from the FluffyStuff riichi tile set (CC0, vendored in
-// ./tiles). Each SVG is design-only on a transparent 300x400 canvas, so we
-// composite it onto an ivory tile face. Until a design loads (or if it fails)
-// we fall back to a drawn number+suit so a tile is never blank.
+// Authentic faces are photographed real tiles (see tiles/CREDITS.md), cropped to
+// rounded-corner PNGs in ./tiles. Each PNG is a full tile face that drawFace
+// stretches to fill the cap (over a tile-white ground, so the transparent rounded
+// corners don't darken). Until one loads (or if it fails) we fall back to a drawn
+// number+suit so a tile is never blank.
 const KIND_FILE = [
   'Man1', 'Man2', 'Man3', 'Man4', 'Man5', 'Man6', 'Man7', 'Man8', 'Man9',
   'Pin1', 'Pin2', 'Pin3', 'Pin4', 'Pin5', 'Pin6', 'Pin7', 'Pin8', 'Pin9',
@@ -44,14 +45,14 @@ function preloadDesigns() {
     const img = new Image();
     const rec = { img, loaded: false };
     img.onload = () => { rec.loaded = true; onDesignLoad && onDesignLoad(k); };
-    img.src = new URL(`./tiles/${name}.svg`, import.meta.url).href;
+    img.src = new URL(`./tiles/${name}.png`, import.meta.url).href;
     designs.set(k, rec);
   });
 }
 // URL of a tile's face SVG — reused by the HTML 混儿 overlay so it shows the real
 // tile art rather than a drawn number+suit.
 export function tileFaceUrl(kind) {
-  return new URL(`./tiles/${KIND_FILE[kind]}.svg`, import.meta.url).href;
+  return new URL(`./tiles/${KIND_FILE[kind]}.png`, import.meta.url).href;
 }
 function rr(x, X, Y, W, H, r) {
   x.beginPath(); x.moveTo(X + r, Y);
@@ -112,25 +113,28 @@ function roundedTileGeo() {
   uv.needsUpdate = true;
   return geo;
 }
-// Render a complete tile face onto canvas `cv`.
+// Render a complete tile face onto canvas `cv`. The vendored designs are full
+// Chinese tile faces (white ground + border + art), so we draw one to fill the
+// whole cap. Wild (混儿) tiles get a translucent golden wash + a 混 badge so they
+// read as jokers. Until the SVG loads (or if it fails) we draw a number+suit
+// fallback on an ivory ground so a tile is never blank.
 function drawFace(cv, kind, wild) {
   const x = cv.getContext('2d');
   const W = cv.width, H = cv.height;
   x.clearRect(0, 0, W, H);
-  const g = x.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, wild ? '#fff8e4' : '#fcf7ea');
-  g.addColorStop(1, wild ? '#f1dfaa' : '#ece2c8');
-  x.fillStyle = g; rr(x, 0, 0, W, H, W * 0.1); x.fill();
-  x.strokeStyle = wild ? '#d8a93a' : '#d9cfb2'; x.lineWidth = W * 0.025;
-  rr(x, W * 0.035, H * 0.027, W * 0.93, H * 0.946, W * 0.07); x.stroke();
   const rec = designs.get(kind);
   if (rec && rec.loaded) {
-    const mx = W * 0.13, my = H * 0.09;
-    x.drawImage(rec.img, mx, my, W - 2 * mx, H - 2 * my);
+    x.fillStyle = '#eae9e3'; x.fillRect(0, 0, W, H); // tile-white behind the PNG's transparent rounded corners
+    x.drawImage(rec.img, 0, 0, W, H);
   } else {
+    const g = x.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#fcf7ea'); g.addColorStop(1, '#ece2c8');
+    x.fillStyle = g; rr(x, 0, 0, W, H, W * 0.1); x.fill();
     drawTextFallback(x, kind, W, H);
   }
   if (wild) {
+    x.save(); rr(x, 0, 0, W, H, W * 0.075); x.clip();
+    x.fillStyle = 'rgba(228,170,40,0.28)'; x.fillRect(0, 0, W, H); x.restore();
     x.fillStyle = '#d99e21'; x.beginPath(); x.arc(W * 0.84, H * 0.12, W * 0.12, 0, 7); x.fill();
     x.fillStyle = '#4a3500'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.font = `900 ${W * 0.15}px sans-serif`; x.fillText('混', W * 0.84, H * 0.13);
@@ -161,7 +165,9 @@ export class MahjongScene {
     this._lights(); this._table();
 
     this.geo = roundedTileGeo();
-    this.ivory = new THREE.MeshStandardMaterial({ color: 0xece2c8, roughness: 0.6, metalness: 0.02 });
+    // Side edges are a touch greyer than the (near-white) face so the boundary
+    // between the tile's top face and its sides reads clearly.
+    this.ivory = new THREE.MeshStandardMaterial({ color: 0xc6c0b1, roughness: 0.6, metalness: 0.02 });
     this.green = new THREE.MeshStandardMaterial({ color: 0x1c855f, roughness: 0.5, metalness: 0.03 });
     this.faceMat = new Map();   // faceKey -> material
     this.faceRecords = [];      // { canvas, tex, kind, wild } for async redraw on load

@@ -133,11 +133,12 @@ function positionClaimUI() {
 function renderPlate(p) {
   const seat = $('plate-' + p);
   const thinking = game.phase !== PHASE.OVER && game.turn === p && p !== HUMAN;
+  const isDealer = p === game.dealer;
   seat.innerHTML =
-    `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}">` +
+    `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}${isDealer ? ' dealer' : ''}">` +
+    (isDealer ? '<span class="crown" title="庄家">👑</span>' : '') +
     `<span class="wind">${WIND[game.seatWind(p)]}</span>` +
     `<span>${SEAT_LABEL[p]}</span>` +
-    (p === game.dealer ? '<span class="dealer-dot" title="庄"></span>' : '') +
     (thinking ? '<span class="think">思考中…</span>' : '') +
     `</div>`;
 }
@@ -348,7 +349,7 @@ function showResult() {
     scoreEl.textContent = '';
     // a draw still settles 杠分, so show payments if any kong scored
     const hasPay = r.payments && r.payments.some((a) => a !== 0);
-    payEl.innerHTML = hasPay ? '杠分　' + payHtml(r.payments) : '本局无人和牌';
+    payEl.innerHTML = hasPay ? breakdownHtml(r) : '本局无人和牌';
   } else {
     const w = r.winner;
     $('result-title').textContent = `${SEAT_LABEL[w]}（${WIND[game.seatWind(w)]}）自摸！`;
@@ -364,17 +365,39 @@ function showResult() {
       winEl.classList.add('show');
     }
     renderWinningHand(handEl, w, r);
-    payEl.innerHTML = payHtml(r.payments);
+    payEl.innerHTML = breakdownHtml(r);
   }
   saveSession();
   ov.classList.remove('hidden');
 }
 
-// Per-seat payment chips (the net includes 杠分 settled on top of the 胡分).
-function payHtml(payments) {
-  return payments.map((amt, p) =>
-    `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`
-  ).join('　');
+// Player-POV 得分明细 for the result panel: the human's net split by opponent,
+// each line giving the reason (胡 self-draw / 杠 kong) and a 庄x2 tag when that
+// flow is to/from the 庄家. Mirrors _settle + _settleKongs (self-draw + 庄家加倍).
+function breakdownHtml(r) {
+  const me = HUMAN, dealer = game.dealer, dd = game.dealerDouble;
+  const winner = r.type === 'win' ? r.winner : -1;
+  const score = r.score || 0;
+  const K = r.kongPts ||
+    game.melds.map((ms) => ms.reduce((s, m) => s + (m.type === 'kong' ? (game.isWild(m.kind) ? 4 : m.concealed ? 2 : 1) : 0), 0));
+  const dbl = (q) => (dd && (me === dealer || q === dealer)) ? 2 : 1;
+  let total = 0;
+  const rows = [1, 2, 3].map((off) => {
+    const q = (me + off) % 4;
+    const hu = winner === me ? score * dbl(q) : winner === q ? -score * dbl(q) : 0;
+    const kong = (K[me] - K[q]) * dbl(q);
+    const net = hu + kong; total += net;
+    const why = [];
+    if (hu) why.push(`胡 ${hu > 0 ? '+' : ''}${hu}`);
+    if (kong) why.push(`杠 ${kong > 0 ? '+' : ''}${kong}`);
+    const tag = dbl(q) === 2 ? ' <span class="dbl">庄x2</span>' : '';
+    const col = net > 0 ? '#7ddf8a' : net < 0 ? '#ef9a9a' : '#cfe7db';
+    return `<div class="bd-row"><span class="bd-seat">${q === dealer ? '👑 ' : ''}${SEAT_LABEL[q]}</span>` +
+      `<span class="bd-net" style="color:${col}">${net > 0 ? '+' : ''}${net}</span>` +
+      `<span class="bd-why">${why.join('　') || '—'}${tag}</span></div>`;
+  });
+  const tcol = total > 0 ? '#7ddf8a' : total < 0 ? '#ef9a9a' : '#cfe7db';
+  return `<div class="bd-title">得分明细 · 你 <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${tcol}">${total > 0 ? '+' : ''}${total}</span></div>${rows.join('')}`;
 }
 
 function nextHand() {
@@ -508,7 +531,7 @@ function fillRules() {
     捉五、龙<b>相加</b>成底（无则底为 1，即提溜）；本混、混吊、素、杠开各<b>×2</b>。先加后乘。
     <b>起和 2 番</b>，不足 2 番为小和、不能胡。庄家加倍。
     <h3>杠分</h3>
-    明杠 <code>+1</code>，暗杠 <code>+2</code>，金杠（暗杠四张混儿）<code>+4</code>。每家杠分由其它三家补，局末单独结算（不受坐庄翻倍，暂略）。
+    明杠 <code>+1</code>，暗杠 <code>+2</code>，金杠（暗杠四张混儿）<code>+4</code>。每家杠分由其它三家补，局末单独结算；涉及<b>庄家</b>的杠分<b>加倍</b>（庄x2）。
     <h3>操作</h3>
     自摸成胡时出现 <b>胡</b> 按钮（含番种与得分），点它才和牌，也可继续打牌；快捷键 <b>H</b>。
     点牌选中、再点或按「打出」/<b>A</b> 出牌；左右/摇杆移动光标。
@@ -600,6 +623,7 @@ if (new URLSearchParams(location.search).get('fast')) {
       game.wilds = [0, 1]; game.wildSet = new Set([0, 1]);
       game.hands[HUMAN] = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 26, 0];
       game.melds[HUMAN] = [];
+      game.dealer = 1; // 下家 is 庄 — exercises the crown + 庄x2 on a non-winner
       game.phase = PHASE.OVER;
       const S = (...a) => new Set(a);
       game.result = {
@@ -611,7 +635,7 @@ if (new URLSearchParams(location.search).get('fast')) {
           { type: 'chow', kinds: [12, 13, 14], jokers: 0, natural: S(12, 13, 14) },
           { type: 'pair', kinds: [26], jokers: 1, natural: S(26) },
         ],
-        payments: [6, -2, -2, -2],
+        payments: [16, -8, -4, -4], kong: [8, -4, -2, -2], kongPts: [2, 0, 0, 0],
       };
       showResult();
     },

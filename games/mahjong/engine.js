@@ -167,26 +167,35 @@ function searchDecomps(counts, jokers, needMelds, needPair, groups, out) {
     }
 
     // --- Option: chow windows containing anchor k ---
-    // The anchor k is natural. Ranks below k in the window must be jokers (no
-    // naturals remain below k); ranks >= k use a natural if present else a joker.
+    // The anchor k is natural and the lowest remaining kind, so ranks below k in
+    // the window must be jokers. Ranks above k may use a natural (if one is free)
+    // OR a joker — BOTH branches are explored, so a wild can stand in for a tile
+    // that is more useful elsewhere (e.g. read 567万 natural + 4万-[混]-[混] for 捉五
+    // instead of locking 456万 together).
     if (isNumberSuit(k)) {
       const [gStart, gEnd] = groupOf(k);
       for (let start = k - 2; start <= k; start++) {
         if (start < gStart || start + 2 > gEnd) continue; // run must stay in suit
         const ranks = [start, start + 1, start + 2];
-        const c2 = cloneCounts(counts);
-        let jUsed = 0, ok = true;
-        const natural = new Set();
-        for (const r of ranks) {
-          if (r === k) { c2[r] -= 1; natural.add(r); continue; } // anchor natural
-          if (r < k) { jUsed++; continue; }                      // below anchor → joker
-          if (c2[r] > 0) { c2[r] -= 1; natural.add(r); }         // prefer natural
-          else jUsed++;                                          // else joker
+        const choices = ranks.map((r) =>
+          r === k ? ['n'] : r < k ? ['j'] : counts[r] > 0 ? ['n', 'j'] : ['j']);
+        let combos = [[]];
+        for (const ch of choices) {
+          const nx = [];
+          for (const combo of combos) for (const o of ch) nx.push(combo.concat(o));
+          combos = nx;
         }
-        if (jUsed > jokers) ok = false;
-        if (ok) {
-          searchDecomps(c2, jokers - jUsed, needMelds - 1, needPair,
-            groups.concat([{ type: 'chow', kinds: ranks.slice(), jokers: jUsed, natural }]), out);
+        for (const combo of combos) {
+          const c2 = cloneCounts(counts);
+          let jUsed = 0;
+          const natural = new Set();
+          for (let i = 0; i < 3; i++) {
+            if (combo[i] === 'n') { c2[ranks[i]] -= 1; natural.add(ranks[i]); } else jUsed++;
+          }
+          if (jUsed <= jokers) {
+            searchDecomps(c2, jokers - jUsed, needMelds - 1, needPair,
+              groups.concat([{ type: 'chow', kinds: ranks.slice(), jokers: jUsed, natural }]), out);
+          }
         }
       }
     }
@@ -255,9 +264,11 @@ function scoreFromDecomp(decomp, ctx) {
 
   const groupSize = (g) => (g.type === 'pair' ? 2 : 3);
 
-  // 捉五 — a 4-5-6万 run capturing the 5万: won by a natural 5万 (id 4), by a 混儿 filling
-  // the 5万 slot (4/6万 may themselves be 混儿), or by a meld of three 混儿 standing as
-  // 4-5-6万 (decompose() gives those empty kinds, so detect them directly).
+  // 捉五 — a 4-5-6万 run capturing the 5万: won by a natural 5万 (id 4), by a 混儿 standing
+  // as the 5万 (4/6万 may be 混儿 too), or by a meld of three 混儿 as 4-5-6万. The hand is
+  // scored in its best reading, so even four complete runs + a 混 that can stand as the
+  // 5万 (the natural 5万 sliding into the 将) is a genuine 捉五 — the same shape as a 4_6万
+  // kanchan wait, and consistent with catching the spot on a natural 5万.
   const zhuoWu = (winIsWild && decomp.some((g) => g.jokers >= 3))
     || decomp.some((g) => g.type === 'chow' && g.kinds[0] === 3 &&
       ((winningKind === 4 && g.natural.has(4)) || (winIsWild && !g.natural.has(4))));
@@ -558,9 +569,10 @@ export class Game {
   _win(player, result) {
     this.phase = PHASE.OVER;
     const payments = this._settle(player, result.score);
+    const kongPts = this.melds.map((ms) => ms.reduce((s, m) => s + this._kongPoints(m), 0));
     const kong = this._settleKongs(payments); // 杠分, added on top of the 胡分
     this.result = { type: 'win', winner: player, score: result.score, fans: result.fans,
-      decomp: result.decomp, winningTile: this.drawnTile, payments, kong };
+      decomp: result.decomp, winningTile: this.drawnTile, payments, kong, kongPts };
     this._emit(`${this.seatName(player)} 自摸 ${result.fans.join('+')} (${result.score})`);
   }
 
@@ -580,8 +592,9 @@ export class Game {
   }
 
   // 杠分 — every kong scores 明杠 1 / 暗杠 2 / 金杠 4. Each player's kong points are
-  // paid by the other three (incl. the winner), settled at hand end with no 坐庄
-  // doubling. Adds the net into `pay` (and this.scores) and returns the per-seat net.
+  // paid by the other three (incl. the winner), settled pairwise at hand end.
+  // 庄家加倍: any kong payment to or from the dealer is doubled, mirroring the 胡分
+  // rule. Adds the net into `pay` (and this.scores) and returns the per-seat net.
   _kongPoints(m) {
     if (m.type !== 'kong') return 0;
     if (this.isWild(m.kind)) return 4;   // 金杠
@@ -589,8 +602,16 @@ export class Game {
   }
   _settleKongs(pay) {
     const K = this.melds.map((ms) => ms.reduce((s, m) => s + this._kongPoints(m), 0));
-    const total = K[0] + K[1] + K[2] + K[3];
-    const net = K.map((k) => 4 * k - total);
+    const net = [0, 0, 0, 0];
+    for (let p = 0; p < 4; p++) {
+      for (let q = p + 1; q < 4; q++) {
+        // q pays p for p's kong points and vice-versa; double the pairwise flow
+        // when the dealer is one of the pair (庄家加倍).
+        const dbl = this.dealerDouble && (p === this.dealer || q === this.dealer) ? 2 : 1;
+        const flow = (K[p] - K[q]) * dbl; // net points to p from q
+        net[p] += flow; net[q] -= flow;
+      }
+    }
     for (let p = 0; p < 4; p++) { this.scores[p] += net[p]; pay[p] += net[p]; }
     return net;
   }
@@ -598,8 +619,9 @@ export class Game {
   _drawGame() {
     this.phase = PHASE.OVER;
     const pay = [0, 0, 0, 0];
+    const kongPts = this.melds.map((ms) => ms.reduce((s, m) => s + this._kongPoints(m), 0));
     const kong = this._settleKongs(pay); // 杠分 still settles on a draw
-    this.result = { type: 'draw', payments: pay, kong };
+    this.result = { type: 'draw', payments: pay, kong, kongPts };
     this._emit('荒牌');
   }
 

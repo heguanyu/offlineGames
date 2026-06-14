@@ -45,7 +45,8 @@
   .tile .rk { font-size: calc(var(--th) * 0.44); font-weight: 800; } .tile .st { font-size: calc(var(--th) * 0.26); font-weight: 700; }
   .tile.suit-m { color: #15407e; } .tile.suit-p { color: #0e7a48; } .tile.suit-s { color: #b23218; }
   .tile.honor .rk { font-size: calc(var(--th) * 0.5); } .tile.honor.z-c { color: #c0392b; } .tile.honor.z-f { color: #15803d; } .tile.honor.z-b { color: #2563eb; } .tile.honor.wind { color: #2b3a4a; }
-  .tile.face-tile .face { width: 100%; height: 100%; object-fit: contain; padding: 2px; display: block; }
+  .tile.face-tile { background: none; box-shadow: none; }
+  .tile.face-tile .face { width: 100%; height: 100%; object-fit: fill; padding: 0; display: block; }
 
   #action-hud { position: absolute; z-index: 4; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 7px; width: max-content; max-width: 96%; }
   #action-bar { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
