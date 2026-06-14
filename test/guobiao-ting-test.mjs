@@ -27,18 +27,18 @@ try {
   const TENPAI13 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 27];
   await page.evaluate((h) => window.__gb.forceTing(h, 33), TENPAI13);
 
-  // (1) select the drawn 白 → both 打出 and 打出并听牌 appear
+  // (1) select the drawn 白 → the red 打出并听牌 appears; plain discard has no button (tap)
   await page.evaluate(() => window.__gb.selectKind(33));
   const acts = await page.evaluate(() => window.__gb.actions());
   const plain = acts.find((a) => a.text === '打出');
   const riichi = acts.find((a) => a.text === '打出并听牌');
-  assert(plain, '打出 button missing: ' + JSON.stringify(acts));
+  assert(!plain, 'plain 打出 button should be gone (tap to discard): ' + JSON.stringify(acts));
   assert(riichi, '打出并听牌 button missing: ' + JSON.stringify(acts));
   assert(riichi.cls.includes('riichi'), '打出并听牌 missing .riichi class: ' + riichi.cls);
   // No text disclaimer anymore — the red 打出并听牌 button itself is the 听 signal.
   const hint = await page.evaluate(() => window.__gb.hint());
   assert(hint === '', 'discard turn should have no disclaimer text, got: ' + JSON.stringify(hint));
-  console.log('OK split: 打出 + 打出并听牌(riichi), no disclaimer');
+  console.log('OK 打出并听牌(riichi) only, no plain 打出, no disclaimer');
 
   // (2) declare → locks + music starts
   await page.evaluate(() => window.__gb.clickAction('打出并听牌'));

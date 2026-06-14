@@ -11,7 +11,7 @@ import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape
 const sound = new Sound();
 const toast = makeToast();
 const HUMAN = 0;
-const SEAT_LABEL = ['你', '下家', '对家', '上家'];
+const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
 const WIND = ['东', '南', '西', '北'];
 const AI_DELAY = new URLSearchParams(location.search).get('fast') ? 35 : 650;
 
@@ -176,10 +176,8 @@ function renderActions() {
     const sel = renderedHand()[selectableHandIndices()[selIndex]];
     if (tingDiscards().some((t) => t.kind === sel)) {
       center.appendChild(mkBtn('打出并听牌', () => discardSelected(true), false, 'riichi'));
-      center.appendChild(mkBtn('打出', () => discardSelected(false)));
-    } else {
-      buttons.push(mkBtn('打出', () => discardSelected(false)));
     }
+    // plain discard has no button — tap the selected tile / A / controller-A
   } else if (game.phase !== PHASE.OVER) {
     hint.textContent = `${SEAT_LABEL[game.turn]} 行动中…`;
   }
@@ -304,6 +302,31 @@ function doClaimTake(opt) { if (isClaimPhase()) { game.claimTake(opt); tick(); }
 function doClaimPass() { if (isClaimPhase()) { game.claimPass(); tick(); } }
 
 // ---- result / new hand ----
+// 得分明细 for the result panel: every seat's net (本局得分), then the human's net vs
+// each opponent with the reason (自摸 / 点炮 / 底). Mirrors 天津's two-section layout.
+function breakdownHtml(r) {
+  const me = HUMAN;
+  const col = (v) => (v > 0 ? '#7ddf8a' : v < 0 ? '#ef9a9a' : '#cfe7db');
+  const sgn = (v) => (v > 0 ? '+' : '') + v;
+  const all = [0, 1, 2, 3].map((p) =>
+    `<span class="bd-all-seat">${SEAT_LABEL[p]} <b style="color:${col(r.payments[p])}">${sgn(r.payments[p])}</b></span>`
+  ).join('');
+  const discarder = (r.byDiscard && game.lastDiscard) ? game.lastDiscard.player : -1;
+  const rows = [1, 2, 3].map((off) => {
+    const q = (me + off) % 4;
+    let net = 0, why = '—';
+    if (r.winner === me) { net = -r.payments[q]; why = !r.byDiscard ? '自摸' : q === discarder ? '点炮' : '底'; }
+    else if (q === r.winner) { net = r.payments[me]; why = !r.byDiscard ? '自摸' : discarder === me ? '点炮' : '底'; }
+    return `<div class="bd-row"><span class="bd-seat">${SEAT_LABEL[q]}</span>` +
+      `<span class="bd-net" style="color:${col(net)}">${sgn(net)}</span>` +
+      `<span class="bd-why">${why}</span></div>`;
+  });
+  const total = r.payments[me];
+  return `<div class="bd-title">本局得分</div><div class="bd-all">${all}</div>` +
+    `<div class="bd-title">玩家明细 · <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${col(total)}">${sgn(total)}</span></div>` +
+    rows.join('');
+}
+
 function showResult() {
   const r = game.result, ov = $('result-overlay');
   const fansEl = $('result-fans'), scoreEl = $('result-score'), handEl = $('result-hand'), payEl = $('result-payments');
@@ -338,7 +361,7 @@ function showResult() {
       if (r.byDiscard && r.winningTile != null) hand.push(r.winningTile);
       addGroup(hand);
     }
-    payEl.innerHTML = r.payments.map((amt, p) => `${SEAT_LABEL[p]} <b style="color:${amt >= 0 ? '#7ddf8a' : '#ef9a9a'}">${amt >= 0 ? '+' : ''}${amt}</b>`).join('　');
+    payEl.innerHTML = breakdownHtml(r);
   }
   sound.stopMusic(); // 听 (if any) is over
   saveSession(); ov.classList.remove('hidden');
@@ -442,7 +465,7 @@ function fillRules() {
     <h3>番种</h3>采用国标 81 番的常见番种子集：清一色24、混一色6、碰碰和6、字一色88、清/混幺九、大小三元、大小四喜、
     四/三/双暗刻、三色三同顺8、花龙8、一色三步高16、平和2、门前清/不求人、五门齐6、箭/风/幺九刻、单钓/边/坎张等。
     <h3>计分</h3>和牌得 (番 + 8)；自摸三家各付，点炮则点炮者付 (番+8)，余两家各付 8。
-    <h3>操作</h3>点牌选中、再点或按「打出」/<b>A</b> 出牌。轮到可<b>胡/碰/杠/吃</b>时点对应按钮，或<b>过</b>。`;
+    <h3>操作</h3>点牌选中、再点该牌或按 <b>A</b> 出牌（听牌时可「打出并听牌」）。轮到可<b>胡/碰/杠/吃</b>时点对应按钮，或<b>过</b>。`;
 }
 function bindUI() {
   $('level-row').addEventListener('click', (e) => {
@@ -473,6 +496,7 @@ if (new URLSearchParams(location.search).get('fast')) {
     selInfo: () => ({ selIndex, drawn: game && game.drawnTile, selKind: renderedHand()[selectableHandIndices()[selIndex]], revealing: !!(scene && scene.handDrawRevealing) }),
     claim: () => game && game.currentClaim(),
     humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,
+    discard: () => discardSelected(false),
     locked: () => lockedTing,
     music: () => !!(sound._musicWanted || sound._musicOn),
     hint: () => $('hand-hint').textContent,

@@ -17,7 +17,8 @@ try {
   await page.waitForSelector('#start-btn');
   // the header should show 无定番 (config applied through the shared module)
   await page.click('#start-btn');
-  await page.waitForFunction(() => document.querySelector('#action-bar .act-btn') ||
+  await page.waitForFunction(() => (window.__gb && window.__gb.humanTurn()) ||
+    document.querySelector('#action-bar .act-btn') ||
     !document.getElementById('result-overlay').classList.contains('hidden'), { timeout: 8000 });
   const round = await page.$eval('#round-info', (e) => e.textContent);
   if (!round.includes('无定番')) throw new Error('round info missing 无定番: ' + round);
@@ -33,15 +34,17 @@ try {
       if (hu) { hu.click(); return 'win'; }
       const pass = b.find((x) => x.textContent.includes('过'));
       if (pass) { pass.click(); return 'pass'; }
-      const disc = b.find((x) => x.textContent.includes('打出'));
-      if (disc) { disc.click(); return 'discard'; }
+      if (window.__gb && window.__gb.humanTurn()) { window.__gb.discard(); return 'discard'; }
       return 'wait';
     });
     if (phase === 'result') {
       handsResolved++;
       console.log('hand resolved:', await page.$eval('#result-title', (e) => e.textContent));
       await page.click('#next-hand-btn');
-      await page.waitForFunction(() => document.querySelector('#action-bar .act-btn'), { timeout: 8000 });
+      if (handsResolved < 2) {
+        await page.waitForFunction(() => (window.__gb && window.__gb.humanTurn()) || document.querySelector('#action-bar .act-btn') ||
+          !document.getElementById('result-overlay').classList.contains('hidden'), { timeout: 8000 });
+      }
     }
     await new Promise((r) => setTimeout(r, 50));
   }
