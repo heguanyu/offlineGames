@@ -1,0 +1,55 @@
+/* MCR-family (国标 + 无定番) styles, in addition to board.css: dealer dot, 听
+   indicator, 吃 chow buttons, 听 banner, standalone 余N张 chip, riichi button. */
+
+#wall-count { font-size: 0.74rem; color: #b8dccd; background: rgba(4,18,12,0.4); border: 1px solid #1c5a44; border-radius: 999px; padding: 3px 10px; }
+
+ .plate-top { top: 8px; left: 50%; transform: translateX(-50%); }
+
+.nameplate .dealer-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 5px var(--gold); }
+
+.nameplate .listen { color: #0a3526; background: var(--gold); border-radius: 6px; padding: 0 5px; font-size: 0.72rem; font-weight: 900; }
+
+#action-hud.claim .act-btn { font-size: 1.7rem; font-weight: 800; padding: 16px 34px; border-radius: 16px; box-shadow: 0 5px 0 #b8902f, 0 9px 18px rgba(0,0,0,0.5); }
+
+/* 吃 option: the actual run of tile faces with a red ▼ over the claimed tile */
+#action-hud.claim .act-btn.chow-btn { display: inline-flex; gap: 5px; align-items: flex-end; padding: 10px 14px; background: linear-gradient(180deg, #1c6047, #134836); border: 2px solid #2c8160; box-shadow: 0 5px 0 #0c3526, 0 9px 18px rgba(0,0,0,0.5); }
+
+.chow-cell { position: relative; padding-top: 30px; }
+
+.chow-cell .tile { --tw: 42px; --th: 57px; }
+
+.chow-cell.claimed .tile { box-shadow: 0 0 0 2px #ff3b3b, 0 0 12px rgba(255,59,59,0.65); }
+
+.chow-cell.claimed::before { content: '▼'; position: absolute; top: 0; left: 50%; transform: translateX(-50%); color: #ff3b3b; font-size: 1.3rem; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.7); animation: chow-arrow 0.8s ease-in-out infinite; }
+
+@keyframes chow-arrow { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(3px); } }
+
+#ting-center .act-btn.riichi, #ting-center .act-btn.hu {
+  background: linear-gradient(180deg, #ff5c5c, #d31f1f); color: #fff; border: 2px solid #ffdada;
+  animation: riichi-glow 1.15s ease-in-out infinite;
+}
+
+/* 听 waits disclaimer — twice the bottom hint's size, floated just above the hand */
+#ting-banner { position: absolute; z-index: 6; display: none; transform: translate(-50%, -100%);
+  font-size: 1.56rem; font-weight: 700; color: #ffe6a0; text-align: center; white-space: nowrap;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.85); pointer-events: none; }
+
+#ting-banner.show { display: block; }
+
+.panel { background: linear-gradient(#114030, #0c3122); border: 1px solid #2c8160; border-radius: 18px; padding: 24px; max-width: 650px; width: 100%; text-align: center; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
+
+.fan-chip { background: linear-gradient(#f3d785,#e3b94f); color: #4a3500; border-radius: 999px; padding: 5px 11px; font-size: 0.8rem; font-weight: 700; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+
+#result-score { font-size: 2.4rem; color: #fff; font-weight: 900; text-shadow: 0 2px 10px rgba(232,196,102,0.5); }
+
+#result-hand .meld-group.pair, #result-hand .meld-group.span { grid-column: 1 / -1; justify-self: center; }
+
+#result-hand .meld-group.span { flex-wrap: wrap; max-width: 100%; }
+
+#toast.big { font-size: 1.7rem; color: var(--gold); text-shadow: 0 2px 12px rgba(232,196,102,0.6); }
+
+body.flat #round-info { font-size: 0.66rem; line-height: 1.4; }
+
+body.flat #wall-count { text-align: center; font-size: 0.64rem; align-self: stretch; }
+
+body.flat #ting-banner { font-size: 1rem; }

@@ -9,311 +9,77 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0c2a1e">
+<link rel="stylesheet" href="./board.css">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  :root { --gold: #e8c466; }
-  html, body {
-    height: 100%; background: #07150f; color: #f1f5f9;
-    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
-    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
-    overflow: hidden; touch-action: manipulation;
-  }
-  body { display: flex; flex-direction: column; height: 100dvh; }
+.plate-top    { top: 102px; left: 50%; transform: translateX(-50%); }
 
-  /* ---------- top bar ---------- */
-  header {
-    display: flex; align-items: center; gap: 10px 12px; z-index: 5; flex-wrap: wrap;
-    padding: max(8px, env(safe-area-inset-top)) 14px 8px;
-    background: linear-gradient(#06231a, #0a3526); flex: 0 0 auto;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-  }
-  header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
-  #round-info { font-size: 0.82rem; color: #cdeadd; }
-  #round-info b { color: var(--gold); }
-  #scores { display: flex; gap: 6px; margin-left: auto; }
-  .score-chip { font-size: 0.72rem; padding: 3px 8px; border-radius: 999px; background: #0f3d2e; border: 1px solid #1c5a44; white-space: nowrap; }
-  .score-chip.dealer { border-color: var(--gold); box-shadow: 0 0 6px rgba(232,196,102,0.4); }
-  .score-chip .nm { color: #9fd3bf; }
-  .score-chip .pt { color: #fff; font-weight: 700; }
-  .score-chip .pt.neg { color: #ef9a9a; }
-  #menu-btn, #sound-btn { background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
+.nameplate.dealer { font-size: 1.5rem; padding: 7px 15px; border-color: var(--gold); box-shadow: 0 0 14px rgba(232,196,102,0.55); }
 
-  /* ---------- 3D table ---------- */
-  #table { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-  #scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* "where did this claimed tile come from" arrow — overlays the canvas, ignores input */
-  #claim-arrow { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: visible; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7)); }
+.nameplate .crown { font-size: 1.1em; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55)); }
 
-  /* ---------- flat HUD over the canvas ---------- */
-  .hud { position: absolute; z-index: 3; display: flex; align-items: center; gap: 6px; }
-  .plate-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }
-  .plate-top    { top: 102px; left: 50%; transform: translateX(-50%); }
-  .plate-left   { left: 8px; top: 42%; transform: translateY(-50%); }
-  .plate-right  { right: 8px; top: 42%; transform: translateY(-50%); }
-  .nameplate {
-    display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #eaf6f0;
-    background: rgba(4,18,12,0.6); border: 1px solid #1c5a44; border-radius: 999px;
-    padding: 4px 11px; backdrop-filter: blur(2px); white-space: nowrap;
-  }
-  .nameplate.active { border-color: var(--gold); box-shadow: 0 0 12px rgba(232,196,102,0.5); }
-  .nameplate .wind { color: var(--gold); font-weight: 800; }
-  .nameplate.dealer { font-size: 1.5rem; padding: 7px 15px; border-color: var(--gold); box-shadow: 0 0 14px rgba(232,196,102,0.55); }
-  .nameplate .crown { font-size: 1.1em; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55)); }
-  .nameplate .think { color: var(--gold); font-size: 0.7rem; animation: blink 1s infinite; }
-  @keyframes blink { 50% { opacity: 0.35; } }
+/* the round's two 混儿 — a big panel floating at the top-middle of the table */
+#wild-hud {
+  position: absolute; z-index: 4; left: 8px; top: 8px;
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(6,26,18,0.74); border: 1px solid var(--gold); border-radius: 16px;
+  padding: 8px 16px; backdrop-filter: blur(3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5), 0 0 18px rgba(232,196,102,0.22);
+}
 
-  /* the round's two 混儿 — a big panel floating at the top-middle of the table */
-  #wild-hud {
-    position: absolute; z-index: 4; left: 8px; top: 8px;
-    display: flex; align-items: center; gap: 10px;
-    background: rgba(6,26,18,0.74); border: 1px solid var(--gold); border-radius: 16px;
-    padding: 8px 16px; backdrop-filter: blur(3px);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.5), 0 0 18px rgba(232,196,102,0.22);
-  }
-  #wild-hud .lbl { font-size: 0.85rem; color: var(--gold); font-weight: 800; letter-spacing: 0.08em; writing-mode: vertical-rl; }
-  #wild-hud #wall-count { font-size: 0.74rem; color: #cfe7db; }
-  #wild-indicator { display: flex; gap: 8px; }
-  #wild-indicator .tile { --tw: 50px; --th: 68px; }
-  .tile.face-tile { background: none; box-shadow: none; }
-  .tile.face-tile .face { width: 100%; height: 100%; object-fit: fill; padding: 0; display: block; }
+#wild-hud .lbl { font-size: 0.85rem; color: var(--gold); font-weight: 800; letter-spacing: 0.08em; writing-mode: vertical-rl; }
 
-  /* small DOM tiles (wild indicator + result hand only; table tiles are 3D) */
-  .tile {
-    position: relative; flex: 0 0 auto; --tw: 23px; --th: 31px;
-    width: var(--tw); height: var(--th);
-    background: linear-gradient(165deg,#fffdf4,#ece2c8);
-    border-radius: 4px; color: #1f2937; line-height: 1;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    box-shadow: inset 0 1px 1px rgba(255,255,255,0.85), 0 1px 0 #d6ccb4, 0 2px 0 #c3b99f, 0 3px 4px rgba(0,0,0,0.4);
-  }
-  .tile.lg { --tw: 30px; --th: 41px; border-radius: 5px; }
-  .tile .rk { font-size: calc(var(--th) * 0.44); font-weight: 800; }
-  .tile .st { font-size: calc(var(--th) * 0.26); font-weight: 700; }
-  .tile.suit-m { color: #15407e; } .tile.suit-p { color: #0e7a48; } .tile.suit-s { color: #b23218; }
-  .tile.honor .rk { font-size: calc(var(--th) * 0.5); }
-  .tile.honor.z-c { color: #c0392b; } .tile.honor.z-f { color: #15803d; } .tile.honor.z-b { color: #2563eb; } .tile.honor.wind { color: #2b3a4a; }
-  .tile.wild { background: linear-gradient(165deg,#fff8e6,#f3dd98); }
-  .tile.wild::after { content:'混'; position:absolute; top:-6px; right:-5px; width:15px; height:15px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#ffe08a,#d99e21); color:#4a3500; font-size:9px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,0.5); }
-  /* result overlay: each seat's revealed hand pinned just outside the panel's four
-     borders, each its own frosted (extra-blurred) strip with 碰/吃/明杠/暗杠 tags */
-  #result-overlay { overflow: hidden; }
-  /* wide panel, raised so it clears the player's hand row on the table below */
-  #result-overlay .panel { position: relative; z-index: 1; max-width: none; }
-  #result-frame { position: relative; width: min(720px, 70vw); transform: translateY(-10vh); }
-  .seat-hand { position: absolute; z-index: 0; display: flex; align-items: flex-end; gap: 9px; pointer-events: none;
-    padding: 8px 11px; border-radius: 13px;
-    background: rgba(4,18,12,0.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    box-shadow: 0 0 0 1px rgba(232,196,102,0.18), 0 8px 26px rgba(0,0,0,0.45); }
-  .seat-hand .meld-group { position: relative; display: flex; gap: 2px; }
-  .seat-hand .tile { --tw: 52px; --th: 70px; }
-  .seat-hand .meld-tag { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px;
-    font-size: 13px; font-weight: 800; letter-spacing: 1px; color: var(--gold); white-space: nowrap;
-    -webkit-text-stroke: 0.6px rgba(0,0,0,0.92); text-shadow: 0 1px 2px rgba(0,0,0,0.85); }
-  .seat-hand.top { bottom: 100%; left: 50%; transform: translate(-50%, -12px); }
-  /* result buttons in the panel's top corners, aligned with the title, text-width */
-  .corner-btn { position: absolute; top: 22px; z-index: 3; padding: 8px 15px; border: none; border-radius: 10px;
-    font-size: 0.98rem; font-weight: 800; line-height: 1; cursor: pointer; }
-  .corner-btn.next { right: 22px; color: #3a2a00; background: linear-gradient(#f3d785,#e3b94f); box-shadow: 0 3px 0 #b8902f; }
-  .corner-btn.back { left: 22px; color: #f1cccc; background: linear-gradient(#6e2f2f,#532020); box-shadow: 0 3px 0 #3a1414; }
-  .corner-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
+#wild-hud #wall-count { font-size: 0.74rem; color: #cfe7db; }
 
-  /* ---------- action HUD ---------- */
-  #action-hud {
-    position: absolute; z-index: 4; left: 50%; bottom: max(56px, calc(env(safe-area-inset-bottom) + 48px));
-    transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 7px; width: max-content; max-width: 96%;
-  }
-  #action-bar { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
-  .act-btn {
-    font-size: 1rem; font-weight: 700; color: #3a2a00;
-    background: linear-gradient(#f3d785, #e3b94f); border: none; border-radius: 11px;
-    padding: 10px 22px; cursor: pointer; box-shadow: 0 3px 0 #b8902f, 0 5px 12px rgba(0,0,0,0.45);
-  }
-  .act-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #b8902f; }
-  .act-btn.ghost { background: linear-gradient(#1b5e45, #134836); color: #d7efe5; box-shadow: 0 3px 0 #0c3526, 0 5px 12px rgba(0,0,0,0.4); }
-  .act-btn.hu { background: linear-gradient(#ff7a52, #e23b1f); color: #fff; box-shadow: 0 3px 0 #9e2410, 0 5px 14px rgba(226,59,31,0.5); }
-  .act-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
-  .hint { font-size: 0.78rem; color: #bfe0d2; text-align: center; min-height: 1.1em; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
-  /* claim prompt (碰/杠/过): pinned front-center under the big pending tile, ~2x */
-  #action-hud.claim { gap: 14px; }
-  #action-hud.claim .act-btn { font-size: 1.9rem; font-weight: 800; padding: 18px 42px; border-radius: 16px; box-shadow: 0 5px 0 #b8902f, 0 9px 18px rgba(0,0,0,0.5); }
-  #action-hud.claim .act-btn.ghost { box-shadow: 0 5px 0 #0c3526, 0 9px 18px rgba(0,0,0,0.45); }
-  #action-hud.claim .hint { display: none; }
-  /* 和牌(胡) confirmation: big, screen-centered, red + glowing (self-draw only here) */
-  #ting-center { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; gap: 16px; pointer-events: none; }
-  #ting-center:empty { display: none; }
-  #ting-center .act-btn { pointer-events: auto; cursor: pointer; font-size: 1.9rem; font-weight: 800; padding: 20px 44px; border-radius: 18px; }
-  #ting-center .act-btn.hu {
-    background: linear-gradient(180deg, #ff5c5c, #d31f1f); color: #fff; border: 2px solid #ffdada;
-    animation: riichi-glow 1.15s ease-in-out infinite;
-  }
-  @keyframes riichi-glow {
-    0%, 100% { box-shadow: 0 0 0 2px rgba(255,90,90,0.55), 0 0 16px 4px rgba(255,60,60,0.6); }
-    50% { box-shadow: 0 0 0 4px rgba(255,130,130,0.95), 0 0 34px 12px rgba(255,70,70,0.95); }
-  }
+#wild-indicator { display: flex; gap: 8px; }
 
-  /* ---------- overlays ---------- */
-  .overlay { position: fixed; inset: 0; z-index: 20; background: rgba(3,16,11,0.84); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
-  .overlay.hidden { display: none; }
-  .panel { background: linear-gradient(#114030, #0c3122); border: 1px solid #2c8160; border-radius: 18px; padding: 24px; max-width: 624px; width: 100%; text-align: center; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
-  .panel h2 { color: var(--gold); margin-bottom: 6px; font-size: 1.5rem; }
-  .panel p.sub { color: #b6d8ca; font-size: 0.88rem; margin-bottom: 16px; }
-  .level-row { display: flex; gap: 10px; justify-content: center; margin: 14px 0; flex-wrap: wrap; }
-  .level-btn { flex: 1 1 120px; background: #16513c; border: 2px solid #2c8160; border-radius: 13px; padding: 15px 10px; cursor: pointer; color: #eaf6f0; }
-  .level-btn.sel { border-color: var(--gold); background: #1c6047; box-shadow: 0 0 14px rgba(232,196,102,0.3); }
-  .level-btn b { display: block; font-size: 1.15rem; margin-bottom: 3px; }
-  .level-btn span { font-size: 0.74rem; color: #a9ccbd; }
-  .panel .big-btn { margin-top: 8px; width: 100%; font-size: 1.05rem; font-weight: 800; color: #3a2a00; background: linear-gradient(#f3d785,#e3b94f); border: none; border-radius: 13px; padding: 14px; cursor: pointer; box-shadow: 0 4px 0 #b8902f; }
-  .panel .link-btn { background: none; border: none; color: #9fd3bf; text-decoration: underline; cursor: pointer; margin-top: 12px; font-size: 0.85rem; }
-  #result-fans { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 12px 0; }
-  .fan-chip { background: linear-gradient(#f3d785,#e3b94f); color: #4a3500; border-radius: 999px; padding: 5px 13px; font-size: 0.85rem; font-weight: 800; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-  #result-score { font-size: 2.6rem; color: #fff; font-weight: 900; text-shadow: 0 2px 10px rgba(232,196,102,0.5); }
-  /* winning modal: lighter blur than other overlays */
-  /* lighter than other overlays so the revealed hands show through behind the modal */
-  #result-overlay { backdrop-filter: blur(0.5px); background: rgba(3,16,11,0.4); }
-  #result-payments { display: inline-block; text-align: left; min-width: 17em; }
-  #result-payments .bd-title { font-size: 0.7rem; color: var(--gold); letter-spacing: 2px; margin: 5px 0 4px; }
-  #result-payments .bd-all { display: grid; grid-template-columns: repeat(3, minmax(4.4em, 1fr)); gap: 2px 6px; padding: 2px 4px 6px; font-size: 0.88rem; justify-items: center; }
-  #result-payments .bd-all-seat { white-space: nowrap; text-align: center; }
-  #result-payments .bd-all-seat.me { color: var(--gold); font-weight: 700; }
-  #result-payments .bd-grp { margin: 1px 0 3px; }
-  #result-payments .bd-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: baseline; padding: 2px 6px; font-size: 0.86rem; }
-  #result-payments .bd-seat { font-weight: 700; }
-  #result-payments .bd-net { text-align: right; font-weight: 800; }
-  #result-payments .bd-sub { display: grid; grid-template-columns: 1fr auto; gap: 6px; padding: 1px 6px 1px 1.6em; font-size: 0.76rem; color: #aecabd; }
-  #result-payments .bd-sub .s-net { text-align: right; font-weight: 700; }
-  #result-payments .dbl { color: #ffd27a; font-weight: 700; font-size: 0.72rem; border: 1px solid rgba(255,210,122,0.5); border-radius: 4px; padding: 0 3px; margin-left: 5px; white-space: nowrap; }
-  /* emphasize the winning tile in its own highlighted section */
-  #result-winning { display: none; flex-direction: column; align-items: center; gap: 7px; margin: 14px 0 6px; padding: 12px; border-radius: 14px; background: rgba(232,196,102,0.08); border: 1px solid rgba(232,196,102,0.3); }
-  #result-winning.show { display: flex; }
-  #result-winning .cap { font-size: 0.82rem; color: var(--gold); font-weight: 800; letter-spacing: 2px; }
-  #result-winning .tile { transform: scale(1.18); box-shadow: 0 0 0 3px rgba(232,196,102,0.85), 0 0 26px 7px rgba(232,196,102,0.6); border-radius: 9px; }
-  /* winning pattern: 2 melds per row, the 将 spanning the bottom */
-  #result-hand { display: grid; grid-template-columns: auto auto; gap: 7px 16px; justify-content: center; align-items: center; margin: 10px 0; }
-  #result-hand .meld-group.pair { grid-column: 1 / -1; justify-self: center; }
-  /* 龙: one continuous 1-9 run wrapped tight as 5+4 over two rows */
-  .long-run { grid-column: 1 / -1; justify-self: center; display: flex; flex-wrap: wrap; gap: 1px; width: calc(30px * 5 + 4px); }
-  .meld-group { display: flex; gap: 2px; }
-  .meld-group.pair { padding: 0 4px; }
-  /* the winning (drawn) tile glows gold within the laid-out hand */
-  .tile.face-tile.win-tile { box-shadow: 0 0 0 3px rgba(232,196,102,0.9), 0 0 18px 5px rgba(232,196,102,0.6); border-radius: 8px; }
-  /* winning pattern (left) | separator | 得分明细 (right) */
-  #result-cols { display: flex; align-items: stretch; justify-content: center; margin: 12px 0 4px; text-align: left; }
-  #result-pattern { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; padding-right: 16px; }
-  #result-cols #result-payments { flex: 1 1 0; min-width: 0; padding-left: 16px; border-left: 1px solid rgba(232,196,102,0.32); display: block; margin: 0; }
-  .rules-text { text-align: left; font-size: 0.85rem; line-height: 1.65; color: #d7efe5; }
-  .rules-text h3 { color: var(--gold); margin: 12px 0 4px; font-size: 0.98rem; }
-  .rules-text code { background: #08271c; padding: 1px 5px; border-radius: 4px; color: var(--gold); }
-  #toast { position: fixed; left: 50%; top: 15%; transform: translateX(-50%) scale(0.9); background: rgba(0,0,0,0.8); color: #fff; padding: 11px 22px; border-radius: 14px; font-size: 1.15rem; font-weight: 800; z-index: 15; pointer-events: none; opacity: 0; transition: opacity 0.18s, transform 0.18s; text-align: center; }
-  #toast.show { opacity: 1; transform: translateX(-50%) scale(1); }
-  #toast.big { font-size: 1.8rem; color: var(--gold); text-shadow: 0 2px 12px rgba(232,196,102,0.6); }
+#wild-indicator .tile { --tw: 50px; --th: 68px; }
 
-  /* ============ flat 2D (phone) layout ============ */
-  /* The WebGL table is replaced by a DOM board (scene2d.js). The header becomes a
-     vertical left rail (phones are wider than tall in landscape), and the canvas is
-     kept only as a transparent input overlay over the board. */
-  body.flat { flex-direction: row; }
-  body.flat header {
-    flex-direction: column; flex: 0 0 auto; width: 98px; height: 100%;
-    align-items: stretch; gap: 7px; flex-wrap: nowrap; overflow-y: auto;
-    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
-    box-shadow: 2px 0 8px rgba(0,0,0,0.4);
-  }
-  body.flat header a.back { font-size: 1.25rem; }
-  body.flat #round-info { font-size: 0.7rem; line-height: 1.35; }
-  body.flat #scores { flex-direction: column; gap: 4px; margin-left: 0; }
-  body.flat .score-chip { font-size: 0.64rem; text-align: center; }
-  body.flat #sound-btn { margin-top: auto; }
-  body.flat #wild-hud {
-    position: static; left: auto; top: auto; flex-direction: column; gap: 6px;
-    padding: 7px 6px; border-radius: 12px;
-  }
-  body.flat #wild-hud .lbl { writing-mode: horizontal-tb; letter-spacing: 0.04em; text-align: center; }
-  body.flat #wild-indicator { justify-content: center; }
-  body.flat #wild-indicator .tile { --tw: 30px; --th: 41px; }
-  body.flat #wild-hud #wall-count { text-align: center; }
-  /* hide the 3D-only floating nameplates — board2d draws compact ones itself */
-  body.flat .hud.plate-bottom, body.flat .hud.plate-top,
-  body.flat .hud.plate-left, body.flat .hud.plate-right { display: none; }
-  body.flat #scene { background: transparent; }
-  /* keep the bottom action bar (self-杠 / hint) clear of the hand row */
-  body.flat #action-hud { bottom: max(92px, calc(env(safe-area-inset-bottom) + 84px)); }
-  /* claim bar (碰/杠/吃/过): short buttons, wide spacing; the bar's bottom stays
-     pinned just above the hand via worldToScreen, so a shorter button only lowers
-     its top edge. */
-  body.flat #action-bar { gap: 45px; }
-  body.flat #action-hud.claim .act-btn:not(.chow-btn) {
-    height: 35px; min-height: 0; padding: 0 22px; font-size: 1.05rem; border-radius: 10px;
-    display: inline-flex; align-items: center; justify-content: center; }
+.tile.wild { background: linear-gradient(165deg,#fff8e6,#f3dd98); }
 
-  #board2d { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-  #board2d .tile { box-shadow: inset 0 1px 1px rgba(255,255,255,0.8), 0 1px 0 #c3b99f, 0 2px 3px rgba(0,0,0,0.4); }
-  /* opponents: nameplate + back-count + melds */
-  .b2-opp { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .b2-opp-top   { top: 6px; left: 50%; transform: translateX(-50%); }
-  .b2-opp-left  { left: 6px; top: 44%; transform: translateY(-50%); align-items: flex-start; }
-  .b2-opp-right { right: 6px; top: 44%; transform: translateY(-50%); align-items: flex-end; }
-  .b2-plate { display: flex; align-items: center; gap: 5px; font-size: 0.72rem; color: #eaf6f0;
-    background: rgba(4,18,12,0.62); border: 1px solid #1c5a44; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
-  .b2-plate.active { border-color: var(--gold); box-shadow: 0 0 10px rgba(232,196,102,0.5); }
-  .b2-plate.dealer { border-color: var(--gold); }
-  .b2-plate .wind { color: var(--gold); font-weight: 800; }
-  .b2-plate .crown { font-size: 0.95em; }
-  .b2-plate .think { color: var(--gold); font-size: 0.62rem; animation: blink 1s infinite; }
-  .b2-backs { display: flex; align-items: center; }
-  .b2-back { width: 14px; height: 19px; border-radius: 3px; background: linear-gradient(160deg,#1f7d5b,#125c42);
-    box-shadow: inset 0 1px 1px rgba(255,255,255,0.25), 0 1px 2px rgba(0,0,0,0.4); }
-  .b2-back + .b2-back { margin-left: -8px; }
-  .b2-cnt { font-size: 0.64rem; color: #cfe7db; margin-left: 5px; }
-  .b2-melds { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; max-width: 210px; }
-  .b2-melds.demo { filter: drop-shadow(0 0 7px rgba(232,196,102,0.95)); }
-  .b2-meld { position: relative; display: flex; gap: 1px; }
-  .b2-meld .tile { --tw: 18px; --th: 24px; }
-  .b2-tag { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 1px;
-    font-size: 9px; font-weight: 800; color: var(--gold); white-space: nowrap; -webkit-text-stroke: 0.5px rgba(0,0,0,0.9); }
-  /* central discard pool: one wide block per suit, spread across the width;
-     within a suit, 5 tiles per row, piling bottom→top */
-  .b2-pool { position: absolute; left: 50%; top: 43%; transform: translate(-50%,-50%);
-    display: flex; gap: 12px; align-items: flex-end; justify-content: space-evenly; width: 84%; }
-  .b2-pool-type { display: flex; flex-direction: column; gap: 1px; }
-  .b2-pool-row { display: flex; gap: 1px; justify-content: center; }
-  .b2-pool .tile { --tw: 24px; --th: 32px; }
-  /* the claimable tile, pulled out big + glowing */
-  .b2-pending { position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%); }
-  .b2-pending .tile { --tw: 69px; --th: 93px;
-    box-shadow: 0 0 0 3px rgba(232,196,102,0.85), 0 0 22px 6px rgba(232,196,102,0.55); }
-  /* the human's exposed melds, above the hand on the right */
-  .b2-mymelds { position: absolute; right: 8px; bottom: 88px; display: flex; gap: 6px; }
-  .b2-mymelds .tile { --tw: 22px; --th: 30px; }
-  /* the human's hand row */
-  .b2-hand { position: absolute; left: 50%; bottom: max(6px, env(safe-area-inset-bottom));
-    transform: translateX(-50%); display: flex; gap: 3px; align-items: flex-end; }
-  .b2-htile { transition: transform 0.08s; }
-  .b2-htile.sel { transform: translateY(-13px);
-    box-shadow: 0 0 0 2px rgba(232,196,102,0.9), 0 0 14px 4px rgba(232,196,102,0.5); }
+.tile.wild::after { content:'混'; position:absolute; top:-6px; right:-5px; width:15px; height:15px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#ffe08a,#d99e21); color:#4a3500; font-size:9px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,0.5); }
 
-  /* compact winning modal so it fits a phone without scrolling */
-  body.flat #result-frame { width: min(680px, 94vw); transform: none; }
-  body.flat #result-overlay .panel { max-width: none; }
-  body.flat .panel { padding: 12px 16px; max-height: 96vh; border-radius: 14px; }
-  body.flat .panel h2 { font-size: 1.08rem; }
-  body.flat #result-score { font-size: 1.4rem; }
-  body.flat #result-fans { gap: 4px; margin: 6px 0; }
-  body.flat .fan-chip { font-size: 0.66rem; padding: 3px 8px; }
-  body.flat #result-cols { margin: 6px 0 2px; }
-  body.flat #result-pattern { padding-right: 10px; }
-  body.flat #result-cols #result-payments { padding-left: 10px; }
-  body.flat #result-winning { margin: 6px 0 4px; padding: 7px; gap: 4px; }
-  body.flat #result-winning .cap { font-size: 0.7rem; }
-  body.flat #result-hand { gap: 4px 10px; margin: 5px 0; }
-  body.flat #result-hand .tile.lg, body.flat #result-winning .tile.lg { --tw: 21px; --th: 29px; }
-  body.flat .long-run { width: calc(21px * 5 + 4px); }
-  body.flat .corner-btn { top: 12px; font-size: 0.8rem; padding: 6px 11px; }
-  body.flat #result-payments .bd-all { font-size: 0.72rem; }
-  body.flat #result-payments .bd-row { font-size: 0.72rem; }
-  body.flat #result-payments .bd-sub { font-size: 0.66rem; }
-  body.flat .seat-hand { padding: 5px 7px; gap: 5px; }
-  body.flat .seat-hand .tile { --tw: 24px; --th: 33px; }
-  body.flat .seat-hand.top { transform: translate(-50%, -6px); }
+#action-hud.claim .act-btn { font-size: 1.9rem; font-weight: 800; padding: 18px 42px; border-radius: 16px; box-shadow: 0 5px 0 #b8902f, 0 9px 18px rgba(0,0,0,0.5); }
+
+#ting-center .act-btn.hu {
+  background: linear-gradient(180deg, #ff5c5c, #d31f1f); color: #fff; border: 2px solid #ffdada;
+  animation: riichi-glow 1.15s ease-in-out infinite;
+}
+
+.panel { background: linear-gradient(#114030, #0c3122); border: 1px solid #2c8160; border-radius: 18px; padding: 24px; max-width: 624px; width: 100%; text-align: center; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
+
+.fan-chip { background: linear-gradient(#f3d785,#e3b94f); color: #4a3500; border-radius: 999px; padding: 5px 13px; font-size: 0.85rem; font-weight: 800; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+
+#result-score { font-size: 2.6rem; color: #fff; font-weight: 900; text-shadow: 0 2px 10px rgba(232,196,102,0.5); }
+
+#result-payments { display: inline-block; text-align: left; min-width: 17em; }
+
+#result-payments .dbl { color: #ffd27a; font-weight: 700; font-size: 0.72rem; border: 1px solid rgba(255,210,122,0.5); border-radius: 4px; padding: 0 3px; margin-left: 5px; white-space: nowrap; }
+
+#result-hand .meld-group.pair { grid-column: 1 / -1; justify-self: center; }
+
+/* 龙: one continuous 1-9 run wrapped tight as 5+4 over two rows */
+.long-run { grid-column: 1 / -1; justify-self: center; display: flex; flex-wrap: wrap; gap: 1px; width: calc(30px * 5 + 4px); }
+
+.rules-text code { background: #08271c; padding: 1px 5px; border-radius: 4px; color: var(--gold); }
+
+#toast.big { font-size: 1.8rem; color: var(--gold); text-shadow: 0 2px 12px rgba(232,196,102,0.6); }
+
+body.flat #round-info { font-size: 0.7rem; line-height: 1.35; }
+
+body.flat #wild-hud {
+  position: static; left: auto; top: auto; flex-direction: column; gap: 6px;
+  padding: 7px 6px; border-radius: 12px;
+}
+
+body.flat #wild-hud .lbl { writing-mode: horizontal-tb; letter-spacing: 0.04em; text-align: center; }
+
+body.flat #wild-indicator { justify-content: center; }
+
+body.flat #wild-indicator .tile { --tw: 30px; --th: 41px; }
+
+body.flat #wild-hud #wall-count { text-align: center; }
+
+body.flat .long-run { width: calc(21px * 5 + 4px); }
 </style>
 </head>
 <body>
