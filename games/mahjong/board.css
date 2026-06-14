@@ -32,13 +32,23 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 /* Scoreboard — a square panel pinned to the top-right corner of the table, with the
    four seats laid out as a cross that mirrors the table (对家 top, 上家 left, 下家 right,
    玩家 bottom). Floats over the canvas/board in both the 3D and flat layouts. */
-#scores {
+/* top-right stack: the cross scoreboard with the 每圈成绩 button tucked under it */
+#score-stack {
   position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
-  z-index: 6; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(0, auto);
+  z-index: 6; display: flex; flex-direction: column; align-items: stretch; gap: 5px;
+}
+#scores {
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(0, auto);
   gap: 1px 6px; padding: 7px 9px; border-radius: 13px;
   background: rgba(4,18,12,0.66); border: 1px solid #1c5a44; backdrop-filter: blur(3px);
   box-shadow: 0 4px 14px rgba(0,0,0,0.45);
 }
+#rounds-btn {
+  font-size: 0.66rem; font-weight: 800; color: #cfe7db; cursor: pointer; white-space: nowrap;
+  background: rgba(4,18,12,0.66); border: 1px solid #1c5a44; border-radius: 10px;
+  padding: 5px 6px; backdrop-filter: blur(3px); box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+}
+#rounds-btn:hover { border-color: var(--gold); color: var(--gold); }
 .sb-seat { display: flex; flex-direction: column; align-items: center; min-width: 3.4em; line-height: 1.12; }
 .sb-seat.me .sb-name { color: var(--gold); }
 .sb-name { font-size: 0.66rem; color: #9fd3bf; white-space: nowrap; }
@@ -224,6 +234,30 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 .panel .big-btn.hub { background: linear-gradient(#1b5e45, #134836); color: #eaf6f0; box-shadow: 0 4px 0 #0c3526; margin-top: 18px; }
 
 #result-fans { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 12px 0; }
+
+/* ---------- 每圈成绩 table (每圈 deltas + 合计) ---------- */
+.rounds-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; margin: 4px 0; }
+.rounds-table th, .rounds-table td { padding: 6px 8px; text-align: center; border-bottom: 1px solid #1c5a44; }
+.rounds-table thead th { color: #9fd3bf; font-weight: 700; }
+.rounds-table th.me, .rounds-table td.me { color: var(--gold); }
+.rounds-table .rd-wind { color: #cfe7db; font-weight: 700; text-align: left; white-space: nowrap; }
+.rounds-table tr.live .rd-wind { color: var(--gold); }
+.rounds-table tfoot td { font-weight: 800; border-top: 2px solid #2c8160; border-bottom: none; }
+.rounds-table .rd-empty { color: #9fd3bf; padding: 14px; }
+.rounds-table .pos { color: #7ddf8a; } .rounds-table .neg { color: #ef9a9a; } .rounds-table .zero { color: #cfe7db; }
+
+/* ---------- 一锅 final standings ---------- */
+#final-congrats { color: var(--gold); font-weight: 800; font-size: 1.12rem; margin: 10px 0; min-height: 1.2em; }
+#final-standings { margin: 8px 0; }
+.standing { display: flex; align-items: center; gap: 12px; padding: 9px 13px; border-radius: 11px; margin: 6px 0;
+  background: rgba(4,18,12,0.5); border: 1px solid #1c5a44; }
+.standing.me { border-color: var(--gold); box-shadow: 0 0 12px rgba(232,196,102,0.35); }
+.standing .rank { font-size: 1.25rem; width: 1.7em; text-align: center; flex: 0 0 auto; }
+.standing .who { flex: 1 1 auto; text-align: left; color: #eaf6f0; font-weight: 700; }
+.standing .pts { font-weight: 900; font-size: 1.15rem; }
+.standing .pts.pos { color: #7ddf8a; } .standing .pts.neg { color: #ef9a9a; } .standing .pts.zero { color: #cfe7db; }
+#final-rounds-wrap { margin: 12px 0; text-align: left; }
+#final-rounds-wrap summary { cursor: pointer; color: #9fd3bf; font-size: 0.85rem; padding: 4px 0; }
 
 /* winning modal: lighter blur than other overlays */
 /* lighter than other overlays so the revealed hands show through behind the modal */

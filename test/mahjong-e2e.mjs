@@ -58,6 +58,15 @@ try {
 
   if (handsResolved === 0) throw new Error('no hand resolved within timeout');
 
+  // 每圈成绩: the button under the scoreboard opens a table of the current 锅's 圈s.
+  await page.click('#rounds-btn');
+  await page.waitForFunction(() => !document.getElementById('rounds-overlay').classList.contains('hidden'), { timeout: 4000 });
+  const hasTable = await page.$eval('#rounds-body', (e) => !!e.querySelector('table.rounds-table'));
+  if (!hasTable) throw new Error('每圈成绩 modal has no table');
+  await page.click('#rounds-close');
+  await page.waitForFunction(() => document.getElementById('rounds-overlay').classList.contains('hidden'));
+  console.log('每圈成绩 modal opens with a table');
+
   // After scores have accrued, the menu's 重开 must reset them to zero.
   const before = await page.$$eval('#scores .sb-pt', (els) => els.map((e) => e.textContent.trim()));
   if (!before.some((s) => s !== '0')) throw new Error('expected non-zero scores before restart');
@@ -68,6 +77,26 @@ try {
   const after = await page.$$eval('#scores .sb-pt', (els) => els.map((e) => e.textContent.trim()));
   if (!after.every((s) => s === '0')) throw new Error(`重开 did not reset scores: ${after.join(', ')}`);
   console.log('restart reset scores:', before.join(','), '→', after.join(','));
+
+  // 一锅最终成绩: fill four 圈 (debug hook) and verify the final board + 再来一锅 reset.
+  await page.evaluate(() => window.__mj.debugFinal());
+  await page.waitForFunction(() => !document.getElementById('final-overlay').classList.contains('hidden'), { timeout: 4000 });
+  const final = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#final-standings .standing').length,
+    gold: document.querySelector('#final-standings').textContent.includes('🥇'),
+    congrats: document.getElementById('final-congrats').textContent.trim(),
+    rounds: !!document.querySelector('#final-rounds table.rounds-table'),
+  }));
+  if (final.rows !== 4) throw new Error(`final board: expected 4 standings, got ${final.rows}`);
+  if (!final.gold) throw new Error('final board: no 🥇 medal');
+  if (!final.congrats) throw new Error('final board: empty 恭喜 line');
+  if (!final.rounds) throw new Error('final board: missing 每圈成绩 table');
+  await page.click('#final-reset-btn');
+  await page.waitForFunction(() => document.getElementById('final-overlay').classList.contains('hidden') &&
+    ((window.__mj && window.__mj.humanTurn()) || document.querySelector('#action-bar .act-btn')), { timeout: 8000 });
+  const reset = await page.$$eval('#scores .sb-pt', (els) => els.map((e) => e.textContent.trim()));
+  if (!reset.every((s) => s === '0')) throw new Error(`再来一锅 did not reset scores: ${reset.join(', ')}`);
+  console.log('final board (human 🥇) + 再来一锅 reset OK:', final.congrats);
 
   if (errors.length) throw new Error('runtime errors:\n  ' + errors.join('\n  '));
 

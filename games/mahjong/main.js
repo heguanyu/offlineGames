@@ -75,10 +75,19 @@ forceLandscape((p) => { isPortrait = p; if (scene) { scene.setRotated(p); scene.
 function loadSession() {
   try {
     const s = JSON.parse(localStorage.getItem('mahjong-session'));
-    if (s && Array.isArray(s.scores)) return s;
+    if (s && Array.isArray(s.scores)) {
+      if (!Array.isArray(s.rounds)) s.rounds = [];
+      // A finished 锅 (four 圈 recorded) left unreset — e.g. closed from the 最终成绩
+      // board via 返回大厅 — starts the next 锅 fresh rather than resuming the old one.
+      if (s.rounds.length >= 4) return freshSession();
+      return s;
+    }
   } catch {}
-  return { scores: [0, 0, 0, 0], dealer: 0, prevailingWind: 0, hand: 1 };
+  return freshSession();
 }
+// A blank session: zeroed scores, 庄 at seat 0, 东圈, no 圈 recorded yet. `rounds`
+// accumulates one snapshot per completed 圈 (东南西北 = a 锅) for 每圈成绩 + 最终成绩.
+function freshSession() { return { scores: [0, 0, 0, 0], dealer: 0, prevailingWind: 0, hand: 1, rounds: [] }; }
 function saveSession() {
   session.scores = game ? game.scores.slice() : session.scores;
   localStorage.setItem('mahjong-session', JSON.stringify(session));
@@ -518,6 +527,9 @@ function showResult() {
   }
   renderSeatHands(game, (id) => game.isWild(id)); // reveal every seat's hand on its border
   saveSession();
+  // If this hand closes the 北圈, the 锅 is finished — 下一局 leads to the 最终成绩.
+  const endsPot = game.nextDealer() === 0 && game.dealer !== 0 && session.prevailingWind === 3;
+  $('next-hand-btn').textContent = endsPot ? '查看总成绩 🏆' : '下一局';
   ov.classList.remove('hidden');
   resultFocus = 0; focusResultBtn(); // 下一局 focused by default
 }
@@ -577,11 +589,20 @@ function breakdownHtml(r) {
 function nextHand() {
   $('result-overlay').classList.add('hidden');
   const nextDealer = game.nextDealer();
-  // Advance prevailing wind after the dealer button completes a lap back to seat 0.
-  session.hand += 1;
-  if (nextDealer === 0 && game.dealer !== 0) {
+  // A 圈 ends when the 庄 button laps back to seat 0 (东). Four 圈 (东南西北) make a
+  // 锅: when the 北圈 (prevailingWind 3) laps, the 锅 is over → final scoreboard.
+  const roundDone = nextDealer === 0 && game.dealer !== 0;
+  if (roundDone) {
+    // Snapshot the cumulative scores at the close of the 圈 just finished (每圈成绩).
+    session.rounds.push({ wind: session.prevailingWind, scores: game.scores.slice() });
+    if (session.prevailingWind === 3) { // 北圈 done → 锅 complete; stop and tally
+      saveSession();
+      showFinalBoard();
+      return;
+    }
     session.prevailingWind = (session.prevailingWind + 1) % 4;
   }
+  session.hand += 1;
   session.dealer = nextDealer;
   startHand();
 }
@@ -634,8 +655,64 @@ function newGame() {
   // Drop the finished game first: saveSession() derives session.scores from the
   // live game, so leaving the old one around would overwrite the reset scores.
   game = null;
-  session = { scores: [0, 0, 0, 0], dealer: 0, prevailingWind: 0, hand: 1 };
+  session = freshSession();
   startHand(); // builds a fresh game from the zeroed session, then persists it
+}
+
+// ---------------------------------------------------------------------------
+// 每圈成绩 / 一锅最终成绩 — 圈 = one 庄 lap (东南西北 winds); 锅 = four 圈.
+// ---------------------------------------------------------------------------
+
+// The 每圈成绩 table: one row per completed 圈 (its net change per seat), a 进行中 row
+// for the 圈 still in play, and a 合计 footer (cumulative). `live` = the current running
+// scores (game.scores) while a 锅 is in progress, or null.
+function roundsTableHtml(live) {
+  const seats = [0, 1, 2, 3];
+  const cell = (v) => `<td class="${v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero'}">${v > 0 ? '+' : ''}${v}</td>`;
+  const row = (label, delta, cls = '') =>
+    `<tr class="${cls}"><td class="rd-wind">${label}</td>${seats.map((p) => cell(delta[p])).join('')}</tr>`;
+  let prev = [0, 0, 0, 0], body = '';
+  for (const r of session.rounds) {
+    body += row(`${WIND[r.wind]}圈`, r.scores.map((s, i) => s - prev[i]));
+    prev = r.scores;
+  }
+  // the 圈 currently being played is not snapshotted yet — show its partial delta
+  if (live && session.rounds.length < 4) {
+    body += row(`${WIND[session.prevailingWind]}圈 · 进行中`, live.map((s, i) => s - prev[i]), 'live');
+  }
+  if (!body) body = `<tr><td class="rd-empty" colspan="5">本锅还没有完成的圈</td></tr>`;
+  const total = live || (session.rounds.length ? session.rounds[session.rounds.length - 1].scores : [0, 0, 0, 0]);
+  const head = `<tr><th></th>${seats.map((p) => `<th class="${p === HUMAN ? 'me' : ''}">${SEAT_LABEL[p]}</th>`).join('')}</tr>`;
+  const foot = `<tr><td class="rd-wind">合计</td>${seats.map((p) => cell(total[p])).join('')}</tr>`;
+  return `<table class="rounds-table"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+}
+
+function openRounds() {
+  $('rounds-body').innerHTML = roundsTableHtml(game ? game.scores : null);
+  $('rounds-overlay').classList.remove('hidden');
+}
+
+// The 锅 is over (four 圈 done): final standings, a 恭喜 line when the human placed
+// first, the 每圈成绩 breakdown, and a reset to deal a fresh 锅.
+function showFinalBoard() {
+  const scores = game.scores.slice();
+  const order = [0, 1, 2, 3].sort((a, b) => scores[b] - scores[a]); // display: high → low
+  const top = Math.max(...scores);
+  const MEDAL = ['🥇', '🥈', '🥉'];
+  const rankOf = (p) => scores.filter((s) => s > scores[p]).length; // 0-based; ties share a medal
+  $('final-standings').innerHTML = order.map((p) => {
+    const r = rankOf(p), v = scores[p];
+    return `<div class="standing${p === HUMAN ? ' me' : ''}">` +
+      `<span class="rank">${MEDAL[r] || (r + 1)}</span>` +
+      `<span class="who">${SEAT_LABEL[p]}${p === HUMAN ? '（你）' : ''}</span>` +
+      `<span class="pts ${v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero'}">${v > 0 ? '+' : ''}${v}</span></div>`;
+  }).join('');
+  const tiedTop = scores.filter((s) => s === top).length > 1;
+  $('final-congrats').textContent = scores[HUMAN] === top
+    ? (tiedTop ? '🎉 恭喜并列第一！' : '🎉 恭喜你赢得这一锅！')
+    : '本锅惜败，下一锅再战！';
+  $('final-rounds').innerHTML = roundsTableHtml(scores);
+  $('final-overlay').classList.remove('hidden');
 }
 
 // ---------------------------------------------------------------------------
@@ -648,6 +725,15 @@ function onAction(name) {
       !$('rules-overlay').classList.contains('hidden') ||
       !$('start-overlay').classList.contains('hidden')) {
     if (name === 'cancel' || name === 'menu') closeOverlays();
+    return;
+  }
+  if (!$('rounds-overlay').classList.contains('hidden')) {
+    if (name === 'cancel' || name === 'menu' || name === 'confirm') $('rounds-overlay').classList.add('hidden');
+    return;
+  }
+  if (!$('final-overlay').classList.contains('hidden')) {
+    if (name === 'confirm') { $('final-overlay').classList.add('hidden'); newGame(); } // 再来一锅
+    else if (name === 'menu') returnHub();
     return;
   }
   if (!$('result-overlay').classList.contains('hidden')) {
@@ -764,6 +850,10 @@ function bindUI() {
   $('newgame-btn').addEventListener('click', () => { closeOverlays(); newGame(); });
   $('next-hand-btn').addEventListener('click', nextHand);
   $('back-hub-btn').addEventListener('click', returnHub);
+  $('rounds-btn').addEventListener('click', openRounds);
+  $('rounds-close').addEventListener('click', () => $('rounds-overlay').classList.add('hidden'));
+  $('final-reset-btn').addEventListener('click', () => { $('final-overlay').classList.add('hidden'); newGame(); });
+  $('final-hub-btn').addEventListener('click', returnHub);
   $('menu-hub-btn').addEventListener('click', returnHub);
   fillRules();
 }
@@ -855,6 +945,17 @@ if (new URLSearchParams(location.search).get('fast')) {
         payments: [8, -4, -2, -2], kong: [0, 0, 0, 0], kongPts: [0, 0, 0, 0],
       };
       showResult();
+    },
+    // visual/e2e check: fill four 圈 then open the 一锅最终成绩 board (human = 🥇).
+    debugFinal: () => {
+      session.rounds = [
+        { wind: 0, scores: [6, -2, -2, -2] },
+        { wind: 1, scores: [3, 1, -1, -3] },
+        { wind: 2, scores: [9, -1, -3, -5] },
+        { wind: 3, scores: [12, -3, -4, -5] },
+      ];
+      game.scores = session.rounds[3].scores.slice();
+      showFinalBoard();
     },
   };
 }

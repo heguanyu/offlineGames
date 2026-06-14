@@ -91,7 +91,10 @@ body.flat .long-run { width: calc(21px * 5 + 4px); }
 
   <main id="table">
     <canvas id="scene"></canvas>
-    <div id="scores"></div>
+    <div id="score-stack">
+      <div id="scores"></div>
+      <button id="rounds-btn" title="查看每圈成绩">📊 每圈成绩</button>
+    </div>
 
     <div id="wild-hud">
       <span class="lbl">混儿</span>
@@ -145,6 +148,28 @@ body.flat .long-run { width: calc(21px * 5 + 4px); }
     </div>
     <!-- 对家 (top) revealed hand, pinned above the panel -->
     <div class="seat-hand top" id="seat-hand-2" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <!-- 每圈成绩 (per-圈 score breakdown of the current 锅) -->
+  <div class="overlay hidden" id="rounds-overlay">
+    <div class="panel">
+      <h2>每圈成绩</h2>
+      <p class="sub">一圈 = 庄家轮完一圈；四圈 = 一锅</p>
+      <div id="rounds-body"></div>
+      <button class="big-btn" id="rounds-close" style="margin-top:16px;">关闭</button>
+    </div>
+  </div>
+
+  <!-- 一锅结束 · 最终成绩 -->
+  <div class="overlay hidden" id="final-overlay">
+    <div class="panel">
+      <h2 id="final-title">一锅结束 · 最终成绩</h2>
+      <div id="final-congrats"></div>
+      <div id="final-standings"></div>
+      <details id="final-rounds-wrap"><summary>每圈成绩</summary><div id="final-rounds"></div></details>
+      <button class="big-btn" id="final-reset-btn">再来一锅（清零比分）</button>
+      <button class="big-btn hub" id="final-hub-btn">← 返回大厅</button>
     </div>
   </div>
 
