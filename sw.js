@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.4.31';
+const CACHE = 'offline-games-0.4.32';
 
 const ASSETS = [
   './',
@@ -131,6 +131,13 @@ self.addEventListener('activate', (e) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+// Report the running version (the cache name carries it) when the hub asks — so the
+// page can show the version of the worker that is actually in control, not a stale
+// cached copy of sw.js.
+self.addEventListener('message', (e) => {
+  if (e.data === 'version' && e.ports[0]) e.ports[0].postMessage(CACHE);
 });
 
 // Re-emit a response with the headers that enable cross-origin isolation

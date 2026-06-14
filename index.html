@@ -133,6 +133,7 @@
       // fresh assets. (Gated on `updating` so the first visit's claim won't reload.)
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (updating && !reloaded) { reloaded = true; location.reload(); }
+        else showVersion(); // a worker took control without us reloading → refresh the tag
       });
     }
 
@@ -188,14 +189,25 @@
 
     updateNetStatus();
 
-    // The version lives in sw.js's cache name; parse it so it can't drift.
-    fetch('./sw.js')
-      .then((r) => r.text())
-      .then((t) => {
-        const m = t.match(/offline-games-(\d+\.\d+\.\d+)/);
-        if (m) document.getElementById('app-version').textContent = 'v' + m[1] + ' · ';
-      })
-      .catch(() => {});
+    // Show the running version. Ask the active worker for its cache name (which carries
+    // the version) rather than reading a cached sw.js — so the tag reflects the worker
+    // that actually took control after an update, not a possibly-stale cached copy.
+    function setVer(t) {
+      const m = String(t).match(/offline-games-(\d+\.\d+\.\d+)/);
+      if (m) document.getElementById('app-version').textContent = 'v' + m[1] + ' · ';
+    }
+    function showVersion() {
+      const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (sw) {
+        const ch = new MessageChannel();
+        ch.port1.onmessage = (e) => setVer(e.data);
+        sw.postMessage('version', [ch.port2]);
+      } else {
+        // no worker in control yet (or unsupported) — read sw.js straight from network
+        fetch('./sw.js', { cache: 'no-store' }).then((r) => r.text()).then(setVer).catch(() => {});
+      }
+    }
+    showVersion();
   </script>
 </body>
 </html>
