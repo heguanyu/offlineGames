@@ -10,7 +10,7 @@ const $ = (id) => document.getElementById(id);
 const SERVER_URL = new URLSearchParams(location.search).get('server')
   || ((location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? `ws://${location.hostname}:8090`
-    : 'wss://mahjongonline.azurewebsites.net');
+    : 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net');
 
 const WINDS = ['东', '南', '西', '北'];          // seat index → wind label
 const POS = ['east', 'south', 'west', 'north'];  // seat index → chair CSS position

@@ -59,7 +59,7 @@ let fastMode = localStorage.getItem('mahjong-fast') !== '0'; // checked (on) by 
 // the offline single-player game, byte-for-byte unchanged.
 const ONLINE = !!new URLSearchParams(location.search).get('online');
 const ONLINE_URL = new URLSearchParams(location.search).get('server') ||
-  ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? `ws://${location.hostname}:8090` : 'wss://mahjongonline.azurewebsites.net');
+  ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? `ws://${location.hostname}:8090` : 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net');
 
 // `game` is the READ-ONLY GameView handed back by the backend (see backend.js) — the UI
 // renders it but never mutates it; every move goes through `backend`. `backend` is the
