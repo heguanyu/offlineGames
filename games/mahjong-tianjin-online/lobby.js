@@ -18,6 +18,9 @@ const POS = ['east', 'south', 'west', 'north'];  // seat index → chair CSS pos
 let ws = null;
 let state = { tables: [], you: { name: '', seat: null, ready: false } };
 let name = localStorage.getItem('mahjong-online-name') || '';
+// A persistent per-device id so a dropped connection reclaims its seat on reconnect.
+let uid = localStorage.getItem('mahjong-online-uid');
+if (!uid) { uid = (crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2)); localStorage.setItem('mahjong-online-uid', uid); }
 let pendingSit = null;          // a {table, seat} sit queued until a name is entered
 let reconnectTimer = null;
 
@@ -25,7 +28,7 @@ let reconnectTimer = null;
 function connect() {
   setConn('connecting');
   ws = new WebSocket(SERVER_URL);
-  ws.onopen = () => { setConn('on'); send({ type: 'hello', name }); };
+  ws.onopen = () => { setConn('on'); send({ type: 'hello', name, uid }); };
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === 'lobby') { state = m; render(); }

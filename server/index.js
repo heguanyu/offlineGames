@@ -2,19 +2,17 @@
 //
 // Plain `ws` on the HTTP server Azure App Service hands us (listen on process.env.PORT,
 // TLS terminated by the platform → clients connect over wss://). Holds the AUTHORITATIVE
-// lobby state — 4 tables × 4 seats (东南西北) — validates each client move, and PUSHES the
-// full lobby to everyone on every change. With WebSocket the client never polls: it just
-// listens for 'lobby' frames. When a table's four seats are all ready humans / bots, the
-// table flips to 'playing' and the seated humans get a 'gameStart' — the per-hand game loop
-// (reusing ../games/mahjong-tianjin/engine.js + ai.js behind a RemoteBackend) hooks in there.
+// lobby state — 4 tables × 4 seats (东南西北) — and, once a table fills with ready humans /
+// bots, an authoritative Table game (server/table.js). The server PUSHES every change; the
+// client never polls. Players are identified by a persistent `uid` (their localStorage id),
+// so a dropped connection can reconnect to its seat and resync the game in progress.
 //
-// Run locally:  PORT=8090 node index.js     (the lobby client falls back to ws://localhost:8090)
+// Run locally:  PORT=8090 node index.js
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
+import { Table } from './table.js';
 
 const PORT = process.env.PORT || 8090;
-// Allowed browser origins (a light CSRF guard). Override with ALLOWED_ORIGINS (comma list)
-// in Azure App Settings; localhost is kept for local dev.
 const ALLOWED = (process.env.ALLOWED_ORIGINS ||
   'https://heguanyu.github.io,http://localhost:8090,http://127.0.0.1:8090,http://localhost:8137')
   .split(',').map((s) => s.trim());
@@ -23,35 +21,33 @@ const TABLES = 4, SEATS = 4;
 const WIND = ['东', '南', '西', '北'];
 
 // ---- authoritative state --------------------------------------------------
-// seat: null | { kind:'human', clientId, name, ready } | { kind:'bot' }
-const tables = Array.from({ length: TABLES }, (_, id) => ({ id, status: 'waiting', seats: new Array(SEATS).fill(null) }));
-const clients = new Map(); // clientId → { ws, id, name }
+// seat: null | { kind:'human', uid, name, ready } | { kind:'bot' }
+// table: { id, status:'waiting'|'playing', seats:[4], game: Table|null }
+const tables = Array.from({ length: TABLES }, (_, id) => ({ id, status: 'waiting', seats: new Array(SEATS).fill(null), game: null }));
+const clients = new Map(); // clientId → { ws, id, uid, name }
+const uidWs = new Map();    // uid → the live socket for that player (for routing game frames)
 let nextId = 1;
 
-function seatOf(clientId) {
+const sanitizeName = (n) => String(n || '').replace(/\s+/g, ' ').trim().slice(0, 16);
+const send = (ws, msg) => { if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); };
+
+function seatOf(uid) {
+  if (!uid) return null;
   for (const t of tables) for (let s = 0; s < SEATS; s++) {
     const seat = t.seats[s];
-    if (seat && seat.kind === 'human' && seat.clientId === clientId) return { table: t.id, seat: s };
+    if (seat && seat.kind === 'human' && seat.uid === uid) return { table: t.id, seat: s };
   }
   return null;
 }
-function leaveSeat(clientId) {
-  const at = seatOf(clientId);
-  if (at) tables[at.table].seats[at.seat] = null;
-  return at;
-}
 
-// The view a client renders. Only the player's OWN seat coordinates are exposed; other
-// seats show just kind/name/ready (no client ids leak).
-function lobbyFor(clientId) {
-  const mine = seatOf(clientId);
+// The lobby view for one player. Only their own seat coordinates are exposed; other seats
+// show kind/name/ready only (no uids leak).
+function lobbyFor(uid) {
+  const mine = seatOf(uid);
   return {
     type: 'lobby',
-    you: {
-      name: clients.get(clientId)?.name || '',
-      seat: mine,
-      ready: mine ? !!tables[mine.table].seats[mine.seat].ready : false,
-    },
+    you: { name: (uid && [...clients.values()].find((c) => c.uid === uid)?.name) || '', seat: mine,
+      ready: mine ? !!tables[mine.table].seats[mine.seat].ready : false },
     tables: tables.map((t) => ({
       id: t.id, status: t.status,
       seats: t.seats.map((seat) => !seat ? null
@@ -60,50 +56,68 @@ function lobbyFor(clientId) {
     })),
   };
 }
+const broadcastLobby = () => { for (const c of clients.values()) send(c.ws, lobbyFor(c.uid)); };
 
-const send = (ws, msg) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); };
-const broadcastLobby = () => { for (const c of clients.values()) send(c.ws, lobbyFor(c.id)); };
-
-// All four seats filled and every human ready (bots count as ready) → start the hand.
+// All four seats filled and every human ready → start the table's authoritative game.
 function maybeStart(t) {
   if (t.status !== 'waiting') return;
   if (!t.seats.every((s) => s && (s.kind === 'bot' || s.ready))) return;
   t.status = 'playing';
-  for (let s = 0; s < SEATS; s++) {
-    const seat = t.seats[s];
-    if (seat && seat.kind === 'human') send(clients.get(seat.clientId)?.ws, { type: 'gameStart', table: t.id, seat: s, wind: WIND[s] });
-  }
+  const gameSeats = t.seats.map((s) => s.kind === 'bot' ? { kind: 'bot' } : { kind: 'human', uid: s.uid, name: s.name });
+  for (let s = 0; s < SEATS; s++) if (gameSeats[s].kind === 'human') send(uidWs.get(gameSeats[s].uid), { type: 'gameStart', table: t.id, seat: s, wind: WIND[s] });
   broadcastLobby();
-  // TODO(online play): instantiate a Game (engine.js), redact per seat, and drive the hand
-  // via the same events a RemoteBackend consumes; reset to a fresh 锅 here.
+  // route each seat's frames to that player's current socket (reconnection-safe)
+  const emit = (seatIdx, msg) => { const gs = gameSeats[seatIdx]; if (gs.kind === 'human') send(uidWs.get(gs.uid), msg); };
+  t.game = new Table(t.id, gameSeats, emit, () => onPotOver(t));
 }
 
-// ---- per-client messages --------------------------------------------------
+// 锅 finished → back to the lobby: same occupants, humans un-readied for a rematch.
+function onPotOver(t) {
+  if (t.game) t.game.dispose();
+  t.game = null;
+  t.status = 'waiting';
+  for (const seat of t.seats) if (seat && seat.kind === 'human') seat.ready = false;
+  broadcastLobby();
+}
+
+// ---- per-connection messages ----------------------------------------------
 const inRange = (ti, si) => ti >= 0 && ti < TABLES && si >= 0 && si < SEATS;
 
 function handle(client, msg) {
+  // in-game moves route straight to the authoritative table (no lobby broadcast)
+  if (msg.type === 'action') {
+    const at = seatOf(client.uid);
+    if (at && tables[at.table].game) tables[at.table].game.onAction(at.seat, msg);
+    return;
+  }
+
   switch (msg.type) {
-    case 'hello':
+    case 'hello': {
+      client.uid = String(msg.uid || '').slice(0, 64) || ('anon-' + client.id);
+      client.name = sanitizeName(msg.name) || `玩家${client.id}`;
+      uidWs.set(client.uid, client.ws);
+      const at = seatOf(client.uid); // reconnection: reclaim a seat held while we were away
+      if (at) {
+        tables[at.table].seats[at.seat].name = client.name;
+        if (tables[at.table].status === 'playing' && tables[at.table].game) tables[at.table].game.resync(at.seat);
+      }
+      break;
+    }
     case 'setName': {
-      client.name = String(msg.name || '').replace(/\s+/g, ' ').trim().slice(0, 16) || `玩家${client.id}`;
-      const at = seatOf(client.id);
-      if (at) tables[at.table].seats[at.seat].name = client.name; // propagate to a seated player
+      client.name = sanitizeName(msg.name) || client.name || `玩家${client.id}`;
+      const at = seatOf(client.uid);
+      if (at) tables[at.table].seats[at.seat].name = client.name;
       break;
     }
     case 'sit': {
       const ti = msg.table | 0, si = msg.seat | 0;
-      if (!inRange(ti, si) || tables[ti].status !== 'waiting' || tables[ti].seats[si]) return;
-      leaveSeat(client.id); // one seat per client — sitting elsewhere moves you (ready resets)
-      tables[ti].seats[si] = { kind: 'human', clientId: client.id, name: client.name, ready: false };
+      if (!client.uid || !inRange(ti, si) || tables[ti].status !== 'waiting' || tables[ti].seats[si]) return;
+      const cur = seatOf(client.uid); if (cur) tables[cur.table].seats[cur.seat] = null; // one seat per player
+      tables[ti].seats[si] = { kind: 'human', uid: client.uid, name: client.name, ready: false };
       break;
     }
-    case 'leave': leaveSeat(client.id); break;
-    case 'ready': {
-      const at = seatOf(client.id);
-      if (!at) return;
-      tables[at.table].seats[at.seat].ready = !!msg.ready;
-      break;
-    }
+    case 'leave': { const at = seatOf(client.uid); if (at && tables[at.table].status === 'waiting') tables[at.table].seats[at.seat] = null; break; }
+    case 'ready': { const at = seatOf(client.uid); if (!at) return; tables[at.table].seats[at.seat].ready = !!msg.ready; break; }
     case 'addBot': {
       const ti = msg.table | 0, si = msg.seat | 0;
       if (!inRange(ti, si) || tables[ti].status !== 'waiting' || tables[ti].seats[si]) return;
@@ -124,7 +138,6 @@ function handle(client, msg) {
 
 // ---- HTTP + WebSocket -----------------------------------------------------
 const server = http.createServer((req, res) => {
-  // health probe + a friendly root (Azure pings these); the app lives over WS.
   if (req.url === '/health' || req.url === '/') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('mahjong-online ok'); return; }
   res.writeHead(404); res.end();
 });
@@ -132,31 +145,35 @@ const server = http.createServer((req, res) => {
 const localhostOrigin = (o) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o);
 const wss = new WebSocketServer({
   server,
-  // Non-browser clients send no Origin; browsers must match the allowlist (any localhost in dev).
   verifyClient: ({ origin }, cb) => cb(!origin || ALLOWED.includes(origin) || localhostOrigin(origin), 403, 'origin not allowed'),
 });
 
 wss.on('connection', (ws) => {
   const id = nextId++;
-  const client = { ws, id, name: '' };
+  const client = { ws, id, uid: null, name: '' };
   clients.set(id, client);
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
-  send(ws, lobbyFor(id)); // initial snapshot; the client follows with 'hello' (its saved name)
+  send(ws, lobbyFor(null)); // initial snapshot; the client follows with 'hello' (uid + saved name)
   ws.on('message', (data) => {
     let msg; try { msg = JSON.parse(data); } catch { return; }
     try { handle(client, msg); } catch { /* ignore malformed input */ }
   });
-  ws.on('close', () => { leaveSeat(id); clients.delete(id); broadcastLobby(); });
+  ws.on('close', () => {
+    clients.delete(id);
+    if (client.uid && uidWs.get(client.uid) === ws) uidWs.delete(client.uid);
+    const at = seatOf(client.uid);
+    // free the seat only at a waiting table; a seat in a live game is HELD for reconnection
+    // (the table auto-acts on that seat's turn until the player returns).
+    if (at && tables[at.table].status === 'waiting') tables[at.table].seats[at.seat] = null;
+    broadcastLobby();
+  });
   ws.on('error', () => {});
 });
 
-// Heartbeat: cull dead sockets so their seats free up (mobile drops, Azure idle culling).
+// Heartbeat: cull dead sockets (mobile drops, Azure idle culling).
 const heartbeat = setInterval(() => {
-  for (const ws of wss.clients) {
-    if (!ws.isAlive) { ws.terminate(); continue; }
-    ws.isAlive = false; ws.ping();
-  }
+  for (const ws of wss.clients) { if (!ws.isAlive) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); }
 }, 30000);
 wss.on('close', () => clearInterval(heartbeat));
 
