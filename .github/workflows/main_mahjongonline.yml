@@ -1,65 +1,61 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-
+# Deploy the online 天津麻将 server (server/) to the Azure Web App "mahjongonline".
+#
+# The server imports games/mahjong-tianjin/{engine,ai}.js (outside server/), so we STAGE a
+# self-contained package: server/* + those two engine files + a type:module package.json whose
+# start script runs `node server/index.js`. Only `ws` is a real dependency. Auth is OIDC
+# (azure/login) — the publish-profile path is dead (SCM Basic Auth disabled on the app).
 name: Build and deploy Node.js app to Azure Web App - mahjongonline
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'games/mahjong-tianjin/engine.js'
+      - 'games/mahjong-tianjin/ai.js'
+      - '.github/workflows/main_mahjongonline.yml'
   workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read #This is required for actions/checkout
+permissions:
+  id-token: write   # required for the OIDC token azure/login requests
+  contents: read    # required for actions/checkout
 
+concurrency:
+  group: deploy-mahjongonline
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js version
-        uses: actions/setup-node@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '24.x'
+          node-version: '20.x'
 
-      - name: npm install, build, and test
+      - name: Stage a self-contained server package
         run: |
-          npm install
-          npm run build --if-present
-          npm run test --if-present
+          mkdir -p _deploy/server _deploy/games/mahjong-tianjin
+          cp server/index.js server/table.js _deploy/server/
+          cp games/mahjong-tianjin/engine.js games/mahjong-tianjin/ai.js _deploy/games/mahjong-tianjin/
+          echo '{"name":"mahjong-online-deploy","private":true,"type":"module","engines":{"node":">=20"},"scripts":{"start":"node server/index.js"},"dependencies":{"ws":"^8.18.0"}}' > _deploy/package.json
 
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: .
+      - name: Install production dependencies
+        working-directory: _deploy
+        run: npm install --omit=dev --no-audit --no-fund
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
-
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: node-app
-      
-      - name: Login to Azure
+      - name: Login to Azure (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_15791C509140470EA89AB6CA26E26AAD }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_E136FF2A3910415FA62D0C1F56903DDA }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F5E84AA309934630AD0F03621E1CEDD1 }}
 
-      - name: 'Deploy to Azure Web App'
-        id: deploy-to-webapp
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'mahjongonline'
           slot-name: 'Production'
-          package: .
-          
+          package: _deploy
