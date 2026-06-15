@@ -265,14 +265,15 @@ export function mapServerEvent(ev, c, view) {
   const byD = (arr) => (arr ? [0, 1, 2, 3].map((d) => arr[(c + d) % 4]) : arr);
   switch (ev.t) {
     case 'deal': return { type: 'deal' };
-    case 'await': return { type: 'await', who: ev.who };
+    case 'await': return { type: 'await', who: ev.who, timeout: ev.timeout };
     case 'discard': return { type: 'discard', player: rot(ev.player), tile: ev.tile, discardIndex: view.discardLog.length - 1 };
     case 'claim': return { type: 'claim', player: rot(ev.player), claimType: ev.claim, kind: ev.kind };
     case 'selfKong': return { type: 'selfKong', player: rot(ev.player), kind: ev.kind };
     case 'over': return { type: 'over', result: view.result };
-    case 'lazhuang': return { type: 'lazhuang', dealer: rot(ev.dealer) };
+    case 'lazhuang': return { type: 'lazhuang', dealer: rot(ev.dealer), timeout: ev.timeout };
     case 'potOver': return { type: 'potOver', scores: byD(ev.scores), rounds: (ev.rounds || []).map((r) => ({ wind: r.wind, scores: byD(r.scores) })) };
     case 'sync': return { type: 'sync' };
-    default: return null; // 'handEnd' → the result modal's 下一局 sends 'next'
+    case 'handEnd': return { type: 'handEnd', timeout: ev.timeout }; // drives the 下一局 countdown (the modal's button still sends 'next')
+    default: return null;
   }
 }

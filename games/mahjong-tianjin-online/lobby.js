@@ -136,7 +136,18 @@ function render() {
   });
   col.appendChild(tbl);
 
-  if (atTable && t.status === 'waiting') {
+  if (atTable && t.status === 'playing') {
+    // The server holds our seat (by uid) while the table plays — offer to jump back in. This is
+    // how you return to a game after wandering off to the lobby or the main hub.
+    const actions = document.createElement('div'); actions.className = 'table-actions';
+    const back = document.createElement('button'); back.className = 'btn ready on'; back.textContent = '↩ 返回牌桌';
+    back.onclick = goToGame;
+    actions.appendChild(back);
+    col.appendChild(actions);
+    const hint = document.createElement('div'); hint.className = 'table-hint';
+    hint.textContent = '你正在这局牌中 — 点击返回继续';
+    col.appendChild(hint);
+  } else if (atTable && t.status === 'waiting') {
     const actions = document.createElement('div'); actions.className = 'table-actions';
     const leave = document.createElement('button'); leave.className = 'btn leave'; leave.textContent = '离开桌子';
     leave.onclick = () => send({ type: 'leave' });
@@ -165,14 +176,17 @@ function render() {
   root.appendChild(lb);
 }
 
-// ---- game start: hand off to the game page (it connects with the same uid → the server
-// resyncs the table in progress). Pass ?server= through so the game targets the same server.
+// ---- hand off to the game page (it connects with the same uid → the server resyncs the table
+// in progress). Carry server/fast/flat/d3 through so the game targets the same server.
+function goToGame() {
+  const params = new URLSearchParams(location.search);
+  params.set('online', '1');
+  location.href = '../mahjong-tianjin/?' + params.toString();
+}
 function showStart(m) {
   $('start-text').textContent = `你坐在「${m.wind}」位，正在进入第 ${m.table + 1} 桌…`;
   $('start-overlay').classList.remove('hidden');
-  const params = new URLSearchParams(location.search); // carry server/fast/flat/d3 through
-  params.set('online', '1');
-  location.href = '../mahjong-tianjin/?' + params.toString();
+  goToGame();
 }
 $('start-back').addEventListener('click', () => { $('start-overlay').classList.add('hidden'); send({ type: 'leave' }); });
 

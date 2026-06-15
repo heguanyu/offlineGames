@@ -80,6 +80,15 @@ try {
   await B.waitForFunction(() => document.querySelector('.mj-table.playing'), { timeout: 4000 });
   console.log('all ready → A entered the game; table marked 游戏中');
 
+  // rejoin: A wanders back to the lobby (as you might from the hub). The server still holds A's
+  // seat (uid), so the lobby must offer 返回牌桌 and clicking it drops back into the live game.
+  await A.goto(url, { waitUntil: 'domcontentloaded' });
+  await A.waitForFunction(() => document.getElementById('conn').className.includes('on'), { timeout: 6000 });
+  await A.waitForFunction(() => [...document.querySelectorAll('.btn')].some((b) => b.textContent.includes('返回牌桌')), { timeout: 4000 });
+  await A.evaluate(() => [...document.querySelectorAll('.btn')].find((b) => b.textContent.includes('返回牌桌')).click());
+  await A.waitForFunction(() => location.pathname.includes('/mahjong-tianjin/'), { timeout: 6000 });
+  console.log('A returned to the lobby → 返回牌桌 → back in the live game (rejoin)');
+
   if (errors.length) throw new Error('runtime errors:\n  ' + errors.join('\n  '));
   console.log('MAHJONG ONLINE LOBBY E2E PASS');
 } catch (e) {

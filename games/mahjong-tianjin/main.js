@@ -286,6 +286,39 @@ function renderActions() {
 
 function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.claim && game.claim.player === HUMAN; }
 
+// ---- online turn countdown -------------------------------------------------
+// Online the server gives every human a fixed window to act (turn / 拉庄 / 下一局) before it
+// auto-acts; we mirror that as a depleting ring showing the seconds left. Offline never calls
+// this (no server clock), so the ring stays hidden and behaviour is unchanged.
+let ttHandle = null, ttDeadline = 0, ttTotal = 0;
+function startTurnTimer(ms) {
+  if (!ONLINE) return;
+  ttTotal = +ms > 0 ? +ms : 30000;
+  ttDeadline = Date.now() + ttTotal;
+  if (!ttHandle) ttHandle = setInterval(tickTurnTimer, 100);
+  tickTurnTimer();
+}
+function stopTurnTimer() {
+  if (ttHandle) { clearInterval(ttHandle); ttHandle = null; }
+  $('turn-timer').classList.add('hidden');
+}
+function tickTurnTimer() {
+  const left = Math.max(0, ttDeadline - Date.now());
+  const el = $('turn-timer');
+  el.style.setProperty('--tp', (ttTotal > 0 ? (left / ttTotal) * 100 : 0).toFixed(1));
+  el.classList.toggle('low', left <= 5000);
+  $('turn-timer-num').textContent = Math.ceil(left / 1000);
+  el.classList.remove('hidden');
+  if (left <= 0) stopTurnTimer(); // the server's auto-act lands as the next frame
+}
+// Run the clock only while the player has a pending action; hide it otherwise.
+function refreshTurnTimer(ev) {
+  const myTurn = !!game && ((game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) || isClaimPhase());
+  const start = ev.type === 'lazhuang' || ev.type === 'handEnd'
+    || ((ev.type === 'await' || ev.type === 'sync') && myTurn);
+  if (start) startTurnTimer(ev.timeout); else stopTurnTimer();
+}
+
 // ---------------------------------------------------------------------------
 // Toasts for 碰 / 杠 / 自摸 / 荒
 // ---------------------------------------------------------------------------
@@ -316,6 +349,7 @@ function flushLogToasts() {
 async function onBackendEvent(ev) {
   const st = backend.getState();
   if (st) game = st;
+  if (ONLINE) refreshTurnTimer(ev); // mirror the server's per-action clock (no-op offline)
   switch (ev.type) {
     case 'lazhuang': // the human's BLIND 拉庄 choice, before the deal
       if (FAST) { backend.decideLaZhuang(lzTestChoice); return; } // tests skip the panel
