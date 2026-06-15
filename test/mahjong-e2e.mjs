@@ -26,6 +26,16 @@ try {
     !document.getElementById('result-overlay').classList.contains('hidden'), { timeout: 8000 });
   console.log('hand started, 3D scene + action bar live');
 
+  // the online turn timer must never appear offline — check COMPUTED display, not just the class
+  // (a stale #turn-timer{display:flex} once beat .hidden). Both the 2D ring and the 3D mesh stay off.
+  const timerVis = await page.evaluate(() => {
+    const el = document.getElementById('turn-timer');
+    const sc = window.__mj && window.__mj.scene && window.__mj.scene();
+    return { dom: el ? getComputedStyle(el).display !== 'none' : false, mesh: !!(sc && sc.timerMesh && sc.timerMesh.visible) };
+  });
+  if (timerVis.dom || timerVis.mesh) throw new Error(`offline turn timer is showing (dom=${timerVis.dom}, mesh=${timerVis.mesh})`);
+  console.log('offline turn timer correctly hidden');
+
   // round-info reads 圈 · 庄 · 难度 (座风 fixed for the 锅; no more 第N局).
   const roundInfo = await page.$eval('#round-info', (e) => e.textContent);
   if (!roundInfo.includes('圈') || !roundInfo.includes('庄') || roundInfo.includes('局'))

@@ -134,28 +134,78 @@ function tenpaiInfo(hand, wildSet, needMelds) {
   return { tenpai: waits > 0, waits };
 }
 
-// Fan-steering bonus for HARD: value tiles that build the big hands — middle
-// characters (捉五 / 龙) and anything in the wild's suit (本混龙).
-function fanBias(id, wildSuit) {
-  let b = 0;
-  if (isNumberSuit(id)) {
-    if (suitOf(id) === wildSuit) b += 1.5;
-    if (suitOf(id) === 'm' && rankOf(id) >= 3 && rankOf(id) <= 7) b += 0.5;
+// ---- tile counting: what the bot can still draw -----------------------------
+// Everything VISIBLE to this player — its own hand, every meld + discard (both public), and the
+// round indicator. Other players' concealed hands are unknown, so remaining[k] is an upper bound.
+function liveCounts(game, player) {
+  const seen = new Array(KINDS).fill(0);
+  for (const id of game.hands[player]) seen[id]++;
+  for (let p = 0; p < 4; p++) {
+    for (const id of game.discards[p]) seen[id]++;
+    for (const m of game.melds[p]) for (const id of m.tiles) seen[id]++;
   }
-  return b;
+  if (game.indicator != null) seen[game.indicator]++;
+  const rem = seen.map((c) => Math.max(0, 4 - c));
+  let wilds = 0; for (const w of game.wilds) wilds += rem[w];
+  return { rem, wilds };
+}
+
+// Tenpai weighted by AVAILABILITY: the number of LIVE tiles (natural outs + 混儿) that complete the
+// hand. A wait whose natural outs are all gone (e.g. 3万-5万 waiting 4万 when every 4万 is visible)
+// keeps only its 混儿 outs, so a live wait always outscores a dead one — the bot stops chasing dead
+// tiles. `kinds` = how many distinct live wait tiles (a two-sided wait beats a closed one).
+function tenpaiLive(natural, jokers, needMelds, wildSet, rem, liveWilds) {
+  let waits = 0, kinds = 0;
+  if (isWinningHand(natural, jokers + 1, needMelds)) waits += liveWilds; // a 混儿 draw always completes a tenpai
+  for (let k = 0; k < KINDS; k++) {
+    if (wildSet.has(k)) continue;
+    natural.push(k);
+    if (isWinningHand(natural, jokers, needMelds)) { waits += rem[k]; if (rem[k] > 0) kinds++; }
+    natural.pop();
+  }
+  return { tenpai: waits > 0, waits, kinds };
+}
+
+// Live tile-acceptance below tenpai: how many LIVE tiles raise the hand's structure value, weighted
+// by how many remain — the availability-aware efficiency the bot maximises. One shared memo speeds
+// the per-tile structScore probes.
+function ukeireLive(natural, jokers, needMelds, wildSet, rem, liveWilds) {
+  const counts = toCounts(natural), memo = new Map();
+  const base = structScore(counts, jokers, needMelds, true, memo);
+  let acc = 0;
+  if (structScore(counts, jokers + 1, needMelds, true, memo) > base) acc += liveWilds;
+  for (let k = 0; k < KINDS; k++) {
+    if (wildSet.has(k) || rem[k] === 0) continue;
+    counts[k]++;
+    if (structScore(counts, jokers, needMelds, true, memo) > base) acc += rem[k];
+    counts[k]--;
+  }
+  return acc;
+}
+
+// Small "score lean" toward the FAST high-fan Tianjin shapes — standing 混儿 (混吊 / 双混吊, ×2) and a
+// 4万+6万 (捉五). Kept light + only the quick shapes (龙 is too slow to chase without losing the race).
+function scorePotential(natural, jokers) {
+  let s = jokers * 0.8;
+  const counts = toCounts(natural);
+  if (counts[3] > 0 && counts[5] > 0) s += 1.2; // 4万 (id 3) + 6万 (id 5) → 捉五
+  return s;
 }
 
 function rngPick(arr, rng) { return arr[Math.floor(rng() * arr.length)]; }
 
-// Choose a tile to discard from the current player's 14-tile hand. Never a wild.
+// Choose a tile to discard from the current player's 14-tile hand. Never a wild. NORMAL/HARD weigh
+// hand efficiency, tile AVAILABILITY (live outs — don't chase dead tiles) and SCORE potential (steer
+// toward 捉五 / 龙 / 双混); HARD also folds in availability-aware acceptance below tenpai.
 export function chooseDiscard(game, player, level, rng = Math.random) {
   const hand = game.hands[player];
   const wildSet = game.wildSet;
   const needMelds = 4 - game.melds[player].length;
   const candidates = [...new Set(hand.filter((t) => !wildSet.has(t)))];
+  if (candidates.length === 0) return null; // an all-混儿 concealed hand — the caller should declare the win
 
-  // EASY: mostly dump the least-connected tile, with frequent random slips.
-  if (level === LEVELS.EASY && rng() < 0.5) {
+  // EASY: dump the least-connected tile, with the occasional random slip.
+  if (level === LEVELS.EASY) {
     const counts = toCounts(hand);
     let worst = candidates[0], worstScore = Infinity;
     for (const c of candidates) {
@@ -164,28 +214,44 @@ export function chooseDiscard(game, player, level, rng = Math.random) {
         : (counts[c] - 1) * 2;
       if (adj < worstScore) { worstScore = adj; worst = c; }
     }
-    return worst;
+    return rng() < 0.35 ? rngPick(candidates, rng) : worst;
   }
 
-  const wildSuit = game.wildSuit;
-  let best = null, bestVal = -Infinity;
-  for (const c of candidates) {
-    const rest = hand.slice();
-    rest.splice(rest.indexOf(c), 1);
-    let val = evalHand(rest, wildSet, needMelds);
-
-    if (level >= LEVELS.NORMAL) {
+  // NORMAL: solid efficiency — keep the shape worth most, prefer tenpai, with a little noise.
+  if (level < LEVELS.HARD) {
+    let best = null, bestVal = -Infinity;
+    for (const c of candidates) {
+      const rest = hand.slice(); rest.splice(rest.indexOf(c), 1);
+      let val = evalHand(rest, wildSet, needMelds);
       const t = tenpaiInfo(rest, wildSet, needMelds);
       if (t.tenpai) val += 100 + t.waits * 3;
+      val += (rng() - 0.5) * 0.6;
+      if (val > bestVal) { bestVal = val; best = c; }
     }
-    if (level >= LEVELS.HARD) {
-      // Reward keeping fan-building tiles (i.e. penalize discarding them).
-      val -= fanBias(c, wildSuit);
-    }
-    if (level === LEVELS.NORMAL) val += (rng() - 0.5) * 0.5; // mild noise
-    if (val > bestVal) { bestVal = val; best = c; }
+    return best;
   }
-  return best;
+
+  // HARD: a clean lexicographic choice so availability + score never cost a win. Rank residual hands:
+  //   tenpai over not → among tenpai, the WIDEST LIVE wait (most outs still in the wall, counting 混儿
+  //   — never a dead wait) → among non-tenpai, lowest shanten (structScore) then most LIVE acceptance
+  //   (the discard-aware efficiency) → finally a small score lean (混吊 / 捉五) breaks remaining ties.
+  const { rem, wilds: liveWilds } = liveCounts(game, player);
+  const cands = candidates.map((c) => {
+    const rest = hand.slice(); rest.splice(rest.indexOf(c), 1);
+    const { natural, jokers } = split(rest, wildSet);
+    const base = structScore(toCounts(natural), jokers, needMelds, true, new Map());
+    const t = tenpaiLive(natural, jokers, needMelds, wildSet, rem, liveWilds);
+    return { c, natural, jokers, base, tenpai: t.tenpai, live: t.waits, kinds: t.kinds, sp: scorePotential(natural, jokers), uke: 0 };
+  });
+  if (!cands.some((x) => x.tenpai)) { // ukeire only matters below tenpai — compute it for the top shapes
+    const maxBase = Math.max(...cands.map((x) => x.base));
+    for (const x of cands) if (x.base >= maxBase - 3) x.uke = ukeireLive(x.natural, x.jokers, needMelds, wildSet, rem, liveWilds);
+  }
+  cands.sort((a, b) =>
+    (b.tenpai - a.tenpai) ||
+    (a.tenpai ? (b.live - a.live) || (b.kinds - a.kinds) || (b.sp - a.sp)
+              : (b.base - a.base) || (b.uke - a.uke) || (b.sp - a.sp)));
+  return cands[0].c;
 }
 
 // Decide whether to claim a pending discard. Returns 'pung' | 'kong' | null.
