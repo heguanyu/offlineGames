@@ -269,7 +269,7 @@ export function mapServerEvent(ev, c, view) {
     case 'discard': return { type: 'discard', player: rot(ev.player), tile: ev.tile, discardIndex: view.discardLog.length - 1 };
     case 'claim': return { type: 'claim', player: rot(ev.player), claimType: ev.claim, kind: ev.kind };
     case 'selfKong': return { type: 'selfKong', player: rot(ev.player), kind: ev.kind };
-    case 'over': return { type: 'over', result: view.result };
+    case 'over': return { type: 'over', result: view.result, readied: ev.readied }; // readied: re-shown on refresh after we already clicked 我准备好了
     case 'lazhuang': return { type: 'lazhuang', dealer: rot(ev.dealer) }; // halts for everyone — no countdown
     case 'potOver': return { type: 'potOver', scores: byD(ev.scores), rounds: (ev.rounds || []).map((r) => ({ wind: r.wind, scores: byD(r.scores) })) };
     case 'sync': return { type: 'sync' };

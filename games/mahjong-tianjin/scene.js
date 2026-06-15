@@ -410,7 +410,7 @@ export class MahjongScene {
       const isDrawn = i === drawnIdx;
       return {
         key: isDrawn ? 'hdraw' : 'h' + settled++, kind: id, wild: game.isWild(id), pick: i,
-        selected: ui.myTurn && i === ui.selRendered,
+        selected: i === ui.selRendered, // selRendered is gated by render() (on-turn offline; also while waiting online)
         // flank the drawn tile: a half-gap before it and before its right neighbour
         gapBefore: drawnIdx >= 0 && (i === drawnIdx || i === drawnIdx + 1) ? DRAW_MARGIN : 0,
         from: isDrawn ? this.deckPos : null,  // the drawn tile flies from the deck

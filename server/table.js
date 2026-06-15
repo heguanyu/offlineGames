@@ -87,7 +87,7 @@ export class Table {
     let ev = { t: 'sync' };
     if (this._lz && this._lz.need.has(seat)) ev = { t: 'lazhuang', dealer: this.dealer };
     else if (this._waiting && this._waiting.seat === seat) ev = { t: 'await', who: this._waiting.kind, seat, timeout: Math.max(1000, this._waiting.deadline - Date.now()), total: TURN_TIMEOUT_MS };
-    else if (this._next && this._next.need.has(seat)) ev = { t: 'over' }; // re-show the result modal so a returning player can still 我准备好了
+    else if (this._next) ev = { t: 'over', readied: !this._next.need.has(seat) }; // re-show the result on refresh — even for a player who already readied (then it's a 'waiting' state)
     this.emit(seat, { type: 'game', ev, view: this.viewFor(seat) });
   }
 

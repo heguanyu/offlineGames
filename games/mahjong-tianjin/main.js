@@ -197,6 +197,9 @@ function render() {
   // advanced (the human drew), but we don't reveal that draw or allow selection yet —
   // show the pre-draw 13 tiles, and let the reveal play when the tick resumes.
   const mt = myTurn && !animating;
+  // Online you can browse/lift your hand even while waiting for others (you just can't discard yet),
+  // so the table never feels frozen. Offline keeps the on-turn-only behaviour (byte-identical).
+  const canLift = mt || (ONLINE && !animating && !revealing && game.phase !== PHASE.OVER && !isClaimPhase());
   let handForSync = rh;
   // Only when it's actually the HUMAN's turn has the human drawn — drop that one drawn
   // tile so its reveal is held until the bot's discard fly ends. (game.drawnTile is a
@@ -209,7 +212,7 @@ function render() {
   if (scene) scene.sync(game, {
     renderedHand: handForSync,
     myTurn: mt,
-    selRendered: mt && !revealing ? selRendered : null,
+    selRendered: canLift && !revealing ? selRendered : null,
     claimable: !animating && isClaimPhase(),
     drawnTile: (mt && game.drawnTile != null) ? game.drawnTile : null,
     reveal: game.phase === PHASE.OVER,
@@ -287,29 +290,29 @@ function renderActions() {
 function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.claim && game.claim.player === HUMAN; }
 
 // ---- online turn countdown -------------------------------------------------
-// The server gives each human a fixed window to act and auto-acts on timeout. It sends the
-// REMAINING ms with every turn prompt (and again on reconnect, via resync), plus the full window
-// as `total`; we anchor a deadline to that and count down to 0. Shown ONLY while it is actually
-// your turn to play (discard / claim). Offline never anchors a deadline, so the ring stays hidden.
-let ttHandle = null, ttDeadline = 0, ttTotal = 30000;
-function myTurnNow() { return !!game && ((game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) || isClaimPhase()); }
-// Re-anchor when the server hands us a fresh remaining time (an 'await' on our turn / its resync).
-function anchorTurnTimer(ev) {
-  if (ev && ev.timeout != null) { ttDeadline = Date.now() + ev.timeout; ttTotal = +ev.total || +ev.timeout; }
-}
-function updateTurnTimer() {
+// The server awaits ONLY humans (bots act on their own clock), so an 'await' frame means a PLAYER
+// is on the clock — show the ring with the server's remaining ms + full window (`total`). EVERY
+// other frame means the wait is over (a bot is acting, or the player moved) → hide. So it tracks
+// whoever is being waited on — your own turn or another human's — and stays hidden through bots'
+// turns. The ring counts to 0; the next frame hides it. Offline never sends 'await' → never shows.
+let ttHandle = null, ttDeadline = 0, ttTotal = 30000, ttWaiting = false;
+function drawTurnTimer() {
   const el = $('turn-timer');
-  if (!ONLINE || !myTurnNow()) { // hide whenever it is not our turn (bots, 拉庄, 下一局, between hands)
-    el.classList.add('hidden');
-    if (ttHandle) { clearInterval(ttHandle); ttHandle = null; }
-    return;
-  }
-  if (!ttHandle) ttHandle = setInterval(updateTurnTimer, 100);
-  const left = Math.max(0, ttDeadline - Date.now()); // counts to 0; the server's auto-act frame then hides it
+  if (!ttWaiting) { el.classList.add('hidden'); if (ttHandle) { clearInterval(ttHandle); ttHandle = null; } return; }
+  const left = Math.max(0, ttDeadline - Date.now());
   el.style.setProperty('--tp', (ttTotal > 0 ? Math.min(100, (left / ttTotal) * 100) : 0).toFixed(1));
   el.classList.toggle('low', left <= 5000);
   $('turn-timer-num').textContent = Math.round(left / 1000);
   el.classList.remove('hidden');
+}
+function syncTurnTimer(ev) {
+  if (ev.type === 'await') { // a player (human) is on the clock
+    ttWaiting = true;
+    ttDeadline = Date.now() + (+ev.timeout > 0 ? +ev.timeout : 30000);
+    ttTotal = +ev.total || +ev.timeout || 30000;
+    if (!ttHandle) ttHandle = setInterval(drawTurnTimer, 100);
+  } else ttWaiting = false; // bot's turn / 拉庄 / 下一局 / between hands → no clock
+  drawTurnTimer();
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +345,7 @@ function flushLogToasts() {
 async function onBackendEvent(ev) {
   const st = backend.getState();
   if (st) game = st;
-  if (ONLINE) { anchorTurnTimer(ev); updateTurnTimer(); } // server-anchored turn clock (no-op offline)
+  if (ONLINE) syncTurnTimer(ev); // show the ring whenever a player is on the clock (no-op offline)
   switch (ev.type) {
     case 'lazhuang': // the human's BLIND 拉庄 choice, before the deal
       $('result-overlay').classList.add('hidden'); // a new hand is starting → drop any lingering result panel
@@ -405,6 +408,8 @@ async function onBackendEvent(ev) {
     case 'over':
       render();      // flush the 自摸 / 荒牌 toast + win/lose sound from the log
       showResult();
+      // resync after a refresh: if we'd already readied, re-show the modal in its 'waiting' state
+      if (ev.readied) { const b = $('next-hand-btn'); b.disabled = true; b.textContent = '⏳ 等待其他玩家…'; }
       return;
 
     // ---- online only ----
@@ -433,9 +438,11 @@ function ensureSelection() {
 // Tapping a tile only SELECTS it (lifts + highlights); discarding is a separate
 // confirm (打出 button / A / Enter). Tapping the already-selected tile confirms.
 function onPickTile(renderedIdx) {
-  if (dealing || animating) return;
-  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
+  if (!game || dealing || animating) return;
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
+  if (game.phase === PHASE.OVER || isClaimPhase()) return; // not while the result / a claim prompt is up
+  const mine = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
+  if (!mine && !ONLINE) return; // offline: the hand is inert off-turn (unchanged)
   const id = renderedHand()[renderedIdx];
   if (id == null) return;
   if (game.isWild(id)) { toast('混儿不能打出'); return; } // 混儿 (incl. the drawn one): complain, no action
@@ -443,8 +450,8 @@ function onPickTile(renderedIdx) {
   drawnWildSelected = false;                  // picking a normal tile drops the drawn-混儿 selection
   const pos = selectableHandIndices().indexOf(renderedIdx);
   if (pos < 0) return;
-  if (pos === selIndex && !wasWildSel) discardSelected(); // second tap on the lifted tile confirms
-  else { selIndex = pos; sound.select(); render(); }
+  if (pos === selIndex && !wasWildSel && mine) discardSelected(); // second tap confirms — only on your turn
+  else { selIndex = pos; sound.select(); render(); }             // otherwise just select (also while waiting online)
 }
 
 function discardSelected() {
@@ -750,15 +757,16 @@ function resolveLz(yes) {
 $('scene').addEventListener('pointerdown', (e) => {
   if (!scene || !gameStarted || dealing || animating) return;
   sound.resume(); // touch is a user gesture — unlock audio
-  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   const idx = scene.pick(e.clientX, e.clientY);
-  if (idx != null) onPickTile(idx);
+  if (idx != null) onPickTile(idx); // onPickTile selects always (online) but only discards on your turn
 });
 // PC only: hovering a hand tile selects it (same as a click-to-select). Mouse-only
 // so touch is unaffected; 混儿 aren't selectable so hovering them is ignored.
 $('scene').addEventListener('pointermove', (e) => {
-  if (e.pointerType !== 'mouse' || !scene || !gameStarted || dealing || animating) return;
-  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || scene.handDrawRevealing) return;
+  if (e.pointerType !== 'mouse' || !scene || !gameStarted || dealing || animating || !game) return;
+  if (scene.handDrawRevealing || game.phase === PHASE.OVER || isClaimPhase()) return;
+  const mine = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD;
+  if (!mine && !ONLINE) return; // offline: only hover-select on your turn (unchanged)
   const idx = scene.pick(e.clientX, e.clientY);
   if (idx == null) return;
   const pos = selectableHandIndices().indexOf(idx);
@@ -922,6 +930,12 @@ function onAction(name) {
     else if (name === 'menu') openMenu();
     else if (name === 'cancel') openMenu();
     return;
+  }
+
+  // Online: keep the hand browsable while waiting for others (no discard) so the table isn't frozen.
+  if (ONLINE && (name === 'left' || name === 'right')) {
+    const n = selectableHandIndices().length;
+    if (n) { drawnWildSelected = false; selIndex = (selIndex + (name === 'left' ? -1 : 1) + n) % n; sound.select(); render(); return; }
   }
 
   if (name === 'menu') openMenu();

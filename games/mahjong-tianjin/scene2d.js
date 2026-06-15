@@ -211,7 +211,7 @@ export class MahjongScene2D {
       t.style.setProperty('--th', th + 'px');
       if (i === drawnIdx) { t.style.marginLeft = DRAW_GAP + 'px'; t.style.marginRight = DRAW_GAP + 'px'; }
       t.dataset.pick = i;
-      if (ui.myTurn && i === ui.selRendered) t.classList.add('sel');
+      if (i === ui.selRendered) t.classList.add('sel'); // selRendered gated by render() (on-turn offline; also waiting online)
       handEl.appendChild(t);
     });
     b.appendChild(handEl);
