@@ -260,6 +260,37 @@ export class MahjongScene {
       new THREE.MeshStandardMaterial({ map: this._feltTexture(), color: 0x178a63, roughness: 0.96 }));
     felt.position.y = -0.26; felt.receiveShadow = true; this.scene.add(felt);
     this._turnRing();
+    this._turnTimer();
+  }
+
+  // Online turn countdown as a 3D panel floating over the table centre, billboarded to the camera.
+  // A canvas texture draws a depleting ring + the seconds; setTurnTimer() updates it. Hidden offline.
+  _turnTimer() {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    this._tt = { canvas: c, ctx: c.getContext('2d'), tex: new THREE.CanvasTexture(c) };
+    this._tt.tex.anisotropy = 4;
+    const mat = new THREE.MeshBasicMaterial({ map: this._tt.tex, transparent: true, depthWrite: false, depthTest: false });
+    this.timerMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 2.8), mat);
+    this.timerMesh.position.set(0, 2.1, 0);
+    this.timerMesh.renderOrder = 999;
+    this.timerMesh.visible = false;
+    this.scene.add(this.timerMesh);
+  }
+  // o: { show, secs, frac (1→0), low }
+  setTurnTimer(o) {
+    if (!this.timerMesh) return;
+    if (!o || !o.show) { this.timerMesh.visible = false; return; }
+    const x = this._tt.ctx, S = 256, cx = 128, cy = 128, R = 92;
+    const col = o.low ? '#ff5c5c' : '#6fe08a';
+    x.clearRect(0, 0, S, S);
+    x.beginPath(); x.arc(cx, cy, R + 22, 0, Math.PI * 2); x.fillStyle = 'rgba(6,26,18,0.9)'; x.fill();
+    x.lineWidth = 18; x.lineCap = 'round';
+    x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.strokeStyle = 'rgba(0,0,0,0.45)'; x.stroke();
+    x.beginPath(); x.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(1, o.frac))); x.strokeStyle = col; x.stroke();
+    x.fillStyle = o.low ? '#ff9a9a' : '#eaf6f0'; x.font = '900 122px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(String(o.secs), cx, cy + 6);
+    this._tt.tex.needsUpdate = true;
+    this.timerMesh.visible = true;
   }
   // A single glowing quarter-ring laid on the felt's drawn circle, centered at the table
   // origin. It rotates (in-plane) to face whichever seat's turn it is and pulses; hidden
@@ -958,6 +989,7 @@ export class MahjongScene {
         this.turnRing.rotation.z += d * a;
         this.turnRing.material.opacity = 0.55 + 0.35 * Math.sin(performance.now() / 320);
       }
+      if (this.timerMesh && this.timerMesh.visible) this.timerMesh.quaternion.copy(this.camera.quaternion); // billboard
       this.renderer.render(this.scene, this.camera);
       requestAnimationFrame(tick);
     };

@@ -231,6 +231,7 @@ export class RemoteBackend {
   async declareWin() { this._act({ do: 'win' }); }
   decideLaZhuang(yes) { this._act({ do: 'lazhuang', yes }); }
   next() { this._act({ do: 'next' }); }
+  unready() { this._act({ do: 'unready' }); } // cancel "我准备好了" before the next hand deals
 }
 
 // Rotate a server view (absolute seats) to the player's perspective and rebuild a GameView
@@ -240,8 +241,9 @@ export function buildRemoteView(sv, c) {
   const rot = (p) => (p - c + 4) % 4;                 // absolute seat → display index
   const byD = (arr) => (arr ? [0, 1, 2, 3].map((d) => arr[(c + d) % 4]) : arr); // re-index a per-seat array
   const result = sv.result ? {
-    ...sv.result, winner: rot(sv.result.winner),
+    ...sv.result, winner: rot(sv.result.winner), // decomp tiles are kinds (not seat-relative) — only rebuild the natural Sets
     payments: byD(sv.result.payments), kong: byD(sv.result.kong), kongPts: byD(sv.result.kongPts),
+    decomp: sv.result.decomp ? sv.result.decomp.map((g) => ({ ...g, natural: new Set(g.natural || []) })) : null,
   } : null;
   const snap = {
     prevailingWind: sv.prevailingWind ?? 0, seatBase: ((sv.seatBase ?? 0) - c + 4) % 4,

@@ -70,6 +70,16 @@ export class MahjongScene2D {
   // goes unused; done() resumes main.js's tick().
   beginDeal(game, done) { this._render(game, { renderedHand: game.hands[HUMAN], myTurn: false }); requestAnimationFrame(() => done()); }
 
+  // Flat mode has no 3D table, so the turn countdown uses the 2D DOM ring (#turn-timer).
+  setTurnTimer(o) {
+    const el = document.getElementById('turn-timer'); if (!el) return;
+    if (!o || !o.show) { el.classList.add('hidden'); return; }
+    el.style.setProperty('--tp', (o.frac * 100).toFixed(1));
+    el.classList.toggle('low', !!o.low);
+    const n = document.getElementById('turn-timer-num'); if (n) n.textContent = o.secs;
+    el.classList.remove('hidden');
+  }
+
   beginClaimDemo(player, ms = 2000) { this.claimDemo = { player, until: performance.now() + ms }; if (this._last) this._render(this._last.game, this._last.ui); }
   // A bot's discard (discardLog index `idx`) flies from its seat to the center halt,
   // holds, then drops into the pool. The fly element is built in _render; main.js holds

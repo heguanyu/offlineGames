@@ -20,12 +20,14 @@ const botLaZhuang = (/* seat, dealer */) => false;
 // safe auto-move when a human stalls: discard the first non-wild (a 混儿 can't be discarded).
 const autoDiscardTile = (g, p) => g.hands[p].find((t) => !g.isWild(t));
 
-// Strip the win result to JSON-safe fields (decomp carries Sets → omit it for now; the
-// result modal's hand breakdown is wired with the client RemoteBackend later).
+// Strip the win result to JSON-safe fields. decomp's per-group `natural` is a Set → send it as an
+// array; the client rebuilds the Set so the result modal can render the winning hand pattern.
 function safeResult(r) {
   if (!r) return null;
   return { type: r.type, winner: r.winner, score: r.score, fans: r.fans,
-    winningTile: r.winningTile, payments: r.payments, kong: r.kong, kongPts: r.kongPts };
+    winningTile: r.winningTile, payments: r.payments, kong: r.kong, kongPts: r.kongPts,
+    decomp: r.decomp ? r.decomp.map((g) => ({ type: g.type, kinds: g.kinds, jokers: g.jokers, natural: g.natural ? [...g.natural] : [] })) : null,
+    meta: r.meta ? { winGroupIdx: r.meta.winGroupIdx, long: r.meta.long, longSuit: r.meta.longSuit } : null };
 }
 
 export class Table {
@@ -114,9 +116,9 @@ export class Table {
       if (this._lz.need.size === 0) this._lz.finish();
     } else if (this._waiting && this._waiting.seat === seat && this._isMoveFor(this._waiting.kind, msg)) {
       this._waiting.finish(msg);
-    } else if (this._next && this._next.need.has(seat) && msg.do === 'next') {
-      this._next.need.delete(seat);
-      if (this._next.need.size === 0) this._next.finish();
+    } else if (this._next && this.isHuman(seat) && (msg.do === 'next' || msg.do === 'unready')) {
+      if (msg.do === 'unready') this._next.need.add(seat);           // cancel readiness — hold the next hand
+      else { this._next.need.delete(seat); if (this._next.need.size === 0) this._next.finish(); } // ready → deal once all are
     }
   }
   _isMoveFor(kind, msg) {
