@@ -30,7 +30,7 @@ async function run(url, vp, shot, flat) {
   await page.close();
 }
 try {
-  await run('/games/mahjong/?flat=1', {width:844,height:390,deviceScaleFactor:2}, 'mahjong-flat-discard.png', true);
+  await run('/games/mahjong-tianjin/?flat=1', {width:844,height:390,deviceScaleFactor:2}, 'mahjong-flat-discard.png', true);
   await run('/games/guobiao/?flat=1', {width:844,height:390,deviceScaleFactor:2}, 'guobiao-flat-discard.png', true);
   console.log(errors.length?('ERRORS:\n  '+errors.join('\n  ')):'no page errors');
 } catch(e){ console.error('FAIL:',e.message); process.exitCode=1; }

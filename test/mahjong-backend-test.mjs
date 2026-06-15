@@ -2,8 +2,8 @@
 // across. Covers the factory, the LocalBackend event flow + action handling (the in-process
 // "server"), and that the RemoteBackend has the same shape with stubs awaiting server calls.
 // Usage: node test/mahjong-backend-test.mjs
-import { createBackend, LocalBackend, RemoteBackend, HUMAN } from '../games/mahjong/backend.js';
-import { PHASE } from '../games/mahjong/engine.js';
+import { createBackend, LocalBackend, RemoteBackend, HUMAN } from '../games/mahjong-tianjin/backend.js';
+import { PHASE } from '../games/mahjong-tianjin/engine.js';
 
 let passed = 0, failed = 0;
 function ok(c, m) { if (c) passed++; else { failed++; console.error('  FAIL:', m); } }

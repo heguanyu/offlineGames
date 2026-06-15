@@ -37,7 +37,7 @@ try {
   for (const [w, h, label] of [[1024, 720, 'landscape'], [560, 960, 'portrait']]) {
     const page = await browser.newPage();
     await page.setViewport({ width: w, height: h });
-    await page.goto(`http://localhost:${PORT}/games/mahjong/?fast=1`, { waitUntil: 'networkidle0' });
+    await page.goto(`http://localhost:${PORT}/games/mahjong-tianjin/?fast=1`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('#start-btn');
     await page.click('#start-btn');
     await page.waitForFunction(() => window.__mj && window.__mj.humanTurn && window.__mj.scene(), { timeout: 8000 });

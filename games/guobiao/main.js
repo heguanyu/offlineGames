@@ -3,11 +3,11 @@
 // claim-queue orchestration (胡 > 碰/杠 > 吃 priority, win off discards, 听).
 import { Game, PHASE, tileName, MIN_FAN } from './engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
-import { MahjongScene } from '../mahjong/scene.js';
-import { MahjongScene2D } from '../mahjong/scene2d.js';
-import { Sound } from '../mahjong/sound.js';
-import { buildOrder } from '../mahjong/handorder.js';
-import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands } from '../mahjong/ui-util.js';
+import { MahjongScene } from '../mahjong-tianjin/scene.js';
+import { MahjongScene2D } from '../mahjong-tianjin/scene2d.js';
+import { Sound } from '../mahjong-tianjin/sound.js';
+import { buildOrder } from '../mahjong-tianjin/handorder.js';
+import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands } from '../mahjong-tianjin/ui-util.js';
 
 const sound = new Sound();
 const toast = makeToast();

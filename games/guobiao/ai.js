@@ -2,7 +2,7 @@
 // and whether to claim 胡 / 碰 / 杠 / 吃 off a discard. Three strengths. Because
 // the win minimum is 8 fan, the bots steer toward high-fan shapes (one-suit
 // flush, honor/terminal pungs, all-pungs) which naturally clear the bar.
-import { KINDS, suitOf, rankOf, isNumberSuit, toCounts, groupOf } from '../mahjong/engine.js';
+import { KINDS, suitOf, rankOf, isNumberSuit, toCounts, groupOf } from '../mahjong-tianjin/engine.js';
 
 export const LEVELS = { EASY: 1, NORMAL: 2, HARD: 3 };
 export const LEVEL_NAMES = { 1: '新手', 2: '普通', 3: '高手' };
