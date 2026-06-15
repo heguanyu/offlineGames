@@ -232,6 +232,7 @@ export class RemoteBackend {
   decideLaZhuang(yes) { this._act({ do: 'lazhuang', yes }); }
   next() { this._act({ do: 'next' }); }
   unready() { this._act({ do: 'unready' }); } // cancel "我准备好了" before the next hand deals
+  dealDone() { this._act({ do: 'dealDone' }); } // my deal animation finished — the server may now drive the bots
 }
 
 // Rotate a server view (absolute seats) to the player's perspective and rebuild a GameView

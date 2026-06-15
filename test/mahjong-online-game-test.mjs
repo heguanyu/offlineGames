@@ -71,6 +71,7 @@ function onMsg(msg) {
 
   // Play the WHOLE 锅: each hand ends with 'over' (result) then 'handEnd' (→ 下一局); the 锅
   // ends with 'potOver'. Partway through we DROP and reconnect (same uid) and must resume.
+  if (ev.t === 'deal') { act({ do: 'dealDone' }); return; }  // a real client acks when its deal animation ends → server drives the bots
   if (ev.t === 'potOver') { potDone = true; return; } // wait for the lobby frame that records the score
   if (ev.t === 'over') { overSeen++; return; }         // result pushed; the server follows with handEnd
   if (ev.t === 'handEnd') { act({ do: 'next' }); return; }

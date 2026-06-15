@@ -72,7 +72,7 @@ const backend = createBackend({ mode: 'remote', url: `ws://localhost:${PORT}`, u
 backend.onEvent(async (ev) => {
   const g = backend.getState();
   if (ev.type === 'lazhuang') { backend.decideLaZhuang(false); return; }
-  if (ev.type === 'deal' || ev.type === 'sync') { sawDeal = sawDeal || ev.type === 'deal'; if (g && g.phase) actIfMyTurn(g); return; }
+  if (ev.type === 'deal' || ev.type === 'sync') { sawDeal = sawDeal || ev.type === 'deal'; if (ev.type === 'deal') backend.dealDone(); if (g && g.phase) actIfMyTurn(g); return; }
   if (ev.type === 'over') {
     overSeen++;
     ok(backend.yourSeat === 2, 'RemoteBackend knows it is absolute seat 2');

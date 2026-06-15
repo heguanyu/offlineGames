@@ -383,6 +383,7 @@ async function onBackendEvent(ev) {
         dealing = false;
       }
       render();
+      if (ONLINE && backend.dealDone) backend.dealDone(); // table's dealt → let the server start the opponents (paced, not bunched)
       return;
 
     case 'discard': {
@@ -535,26 +536,27 @@ function renderWinningHand(handEl, w, r) {
     if (g.kinds.length) { const k = g.kinds[0], nat = 2 - g.jokers; return [0, 1].map((i) => ({ kind: k, wild: i >= nat })); }
     return [{ kind: game.wilds[0], wild: true }, { kind: game.wilds[0], wild: true }];
   };
-  // Highlight the winning (drawn) tile: a 混 if it was wild, else the natural tile
-  // in the very group it completed (winGroupIdx, from the scored decomposition) so
-  // we glow the 6筒 in the 将 rather than an identical 6筒 elsewhere. 'called' groups
-  // never hold it; mark exactly one tile.
+  // Highlight the winning (drawn) tile in the exact group the engine says it completed
+  // (winGroupIdx, from the scored decomposition) — so a 混吊 glows the 混 in the 将, not an
+  // identical 混 used elsewhere, and a natural win glows the 6筒 in its own group, not a
+  // copy. Within that group: the 混 slot if the drawn tile was wild, else the natural slot
+  // matching its kind. 'called' groups never hold it; mark exactly one tile.
   const winKind = r.winningTile;
   const winIsWild = winKind != null && game.isWild(winKind);
   const winGrp = (r.decomp && r.meta && r.meta.winGroupIdx >= 0) ? r.decomp[r.meta.winGroupIdx] : null;
   let winMarked = false;
+  const isWinTile = (t, srcGroup) => {
+    if (winKind == null) return false;
+    if (winGrp ? srcGroup !== winGrp : false) return false; // only the completed group
+    return winIsWild ? t.wild : (!t.wild && t.kind === winKind);
+  };
   const addGroup = (tiles, extra, parent = handEl, srcGroup = null) => {
     const wrap = document.createElement('div');
     wrap.className = 'meld-group' + (extra || '');
     // wild slots show the original 混 face; natural slots show their own tile.
     for (const t of tiles) {
       const el = faceTileEl(t.wild ? wildFace() : t.kind, { lg: true, wild: t.wild });
-      if (!winMarked && winKind != null && srcGroup !== 'called') {
-        const hit = winIsWild
-          ? t.wild
-          : (!t.wild && t.kind === winKind && (winGrp ? srcGroup === winGrp : true));
-        if (hit) { el.classList.add('win-tile'); winMarked = true; }
-      }
+      if (!winMarked && srcGroup !== 'called' && isWinTile(t, srcGroup)) { el.classList.add('win-tile'); winMarked = true; }
       wrap.appendChild(el);
     }
     parent.appendChild(wrap);
@@ -581,9 +583,7 @@ function renderWinningHand(handEl, w, r) {
     const lr = document.createElement('div'); lr.className = 'long-run'; handEl.appendChild(lr);
     for (const t of longTiles) {
       const el = faceTileEl(t.wild ? wildFace() : t.kind, { lg: true, wild: t.wild });
-      if (!winMarked && winKind != null && (winIsWild ? t.wild : (!t.wild && t.kind === winKind && (winGrp ? t.g === winGrp : true)))) {
-        el.classList.add('win-tile'); winMarked = true;
-      }
+      if (!winMarked && isWinTile(t, t.g)) { el.classList.add('win-tile'); winMarked = true; }
       lr.appendChild(el);
     }
   }
@@ -1221,6 +1221,31 @@ if (new URLSearchParams(location.search).get('fast')) {
         ],
         meta: { su: false, hunDiao: true, shuangHun: false, winGroupIdx: 4 },
         payments: [20, 8, -14, -14], kong: [8, 16, -12, -12], kongPts: [4, 4, 0, 0],
+      };
+      showResult();
+    },
+    // e2e/visual: a 混吊 self-draw — the winning tile is itself a 混儿 closing the 将 (a pair
+    // of two 混儿). The highlight must land on a 混 IN THE PAIR (the group the engine flags via
+    // winGroupIdx), not on a 混 used inside an earlier meld.
+    debugHunDiao: () => {
+      game.wilds = [0, 1]; game.wildSet = new Set([0, 1]);
+      game.laZhuang = []; game.dealer = 0;
+      // 3 natural chows + a chow that consumes a 混 (id 0) + the 将 of two 混儿 (ids 0,0).
+      game.hands[HUMAN] = [3, 4, 5, 6, 7, 8, 12, 13, 14, 0, 16, 17, 0, 0];
+      game.melds[HUMAN] = []; game.melds[1] = []; game.melds[2] = []; game.melds[3] = [];
+      game.phase = PHASE.OVER;
+      const S = (...a) => new Set(a);
+      game.result = {
+        type: 'win', winner: HUMAN, score: 2, fans: ['混吊'], winningTile: 0, // 和的这张是混儿
+        decomp: [
+          { type: 'chow', kinds: [3, 4, 5], jokers: 0, natural: S(3, 4, 5) },
+          { type: 'chow', kinds: [6, 7, 8], jokers: 0, natural: S(6, 7, 8) },
+          { type: 'chow', kinds: [12, 13, 14], jokers: 0, natural: S(12, 13, 14) },
+          { type: 'chow', kinds: [15, 16, 17], jokers: 1, natural: S(16, 17) }, // 15 filled by a 混
+          { type: 'pair', kinds: [], jokers: 2, natural: S() },                  // 将 = 两张混儿 (混吊)
+        ],
+        meta: { su: false, hunDiao: true, shuangHun: false, winGroupIdx: 4 },
+        payments: [6, -2, -2, -2], kong: [0, 0, 0, 0], kongPts: [0, 0, 0, 0],
       };
       showResult();
     },

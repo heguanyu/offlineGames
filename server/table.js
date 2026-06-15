@@ -11,6 +11,7 @@ import { chooseDiscard, chooseClaim, chooseSelfKong } from '../games/mahjong-tia
 
 const BOT_THINK_MS = +process.env.BOT_THINK_MS || 700; // bot "thinking" pace (tests set it low)
 const TURN_TIMEOUT_MS = 30000;  // auto-act if a human doesn't move
+const DEAL_ACK_TIMEOUT_MS = 8000; // proceed even if a client never reports its deal animation done
 const LZ_TIMEOUT_MS = 15000;    // auto-不拉 if a human doesn't answer 拉庄
 const NEXT_TIMEOUT_MS = 25000;  // auto-advance if a human doesn't click 下一局
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -56,6 +57,7 @@ export class Table {
     this._waiting = null;   // { seat, kind, finish } — a single human move in flight
     this._lz = null;        // { need:Set, answers:{}, finish } — 拉庄 answers in flight
     this._next = null;      // { need:Set, finish } — 下一局 acks in flight
+    this._dealAck = null;   // { need:Set, finish } — clients finishing the deal animation
     this._run().catch(() => {});
   }
 
@@ -104,6 +106,7 @@ export class Table {
     if (!this.isHuman(seat)) return;
     let ev = { t: 'sync' };
     if (this._lz && this._lz.need.has(seat)) ev = { t: 'lazhuang', dealer: this.dealer };
+    else if (this._dealAck && this._dealAck.need.has(seat)) ev = { t: 'deal' }; // re-run the deal animation; its 'dealDone' releases the bots
     else if (this._waiting && this._waiting.seat === seat) ev = { t: 'await', who: this._waiting.kind, seat, timeout: Math.max(1000, this._waiting.deadline - Date.now()), total: TURN_TIMEOUT_MS };
     else if (this._next) ev = { t: 'over', readied: !this._next.need.has(seat) }; // re-show the result on refresh — even for a player who already readied (then it's a 'waiting' state)
     this.emit(seat, { type: 'game', ev, view: this.viewFor(seat) });
@@ -119,6 +122,8 @@ export class Table {
     } else if (this._next && this.isHuman(seat) && (msg.do === 'next' || msg.do === 'unready')) {
       if (msg.do === 'unready') this._next.need.add(seat);           // cancel readiness — hold the next hand
       else { this._next.need.delete(seat); if (this._next.need.size === 0) this._next.finish(); } // ready → deal once all are
+    } else if (this._dealAck && this.isHuman(seat) && msg.do === 'dealDone') {
+      this._dealAck.need.delete(seat); if (this._dealAck.need.size === 0) this._dealAck.finish(); // bots wait for all deal animations
     }
   }
   _isMoveFor(kind, msg) {
@@ -136,6 +141,8 @@ export class Table {
       if (gen !== this._gen) return;
       this.game = new Game({ dealer: this.dealer, prevailingWind: this.prevailingWind, scores: this.scores, seatBase: this.seatBase, laZhuang });
       this.pushEvent({ t: 'deal' });
+      await this._awaitDealDone(gen);        // hold the bots until every client's deal animation finishes
+      if (gen !== this._gen) return;
       await this._playHand(gen);
       if (gen !== this._gen) return;
       this.scores = this.game.scores.slice();
@@ -237,12 +244,28 @@ export class Table {
     });
   }
 
+  // Hold the opponents until every human's deal animation has finished (each client sends
+  // 'dealDone' when it does), so the bots don't burn their think-time during the deal and then
+  // dump a burst of moves the instant the table appears — they start playing on a clean, dealt
+  // table, paced one move at a time, exactly like offline. A timeout guards against a client that
+  // never acks (old client / lost frame) so the hand can never wedge.
+  _awaitDealDone(gen) {
+    const need = new Set(this.humans());
+    if (need.size === 0) return delay(300);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { if (this._dealAck && this._dealAck.gen === gen) this._dealAck.finish(); }, DEAL_ACK_TIMEOUT_MS);
+      const finish = () => { clearTimeout(timer); this._dealAck = null; resolve(); };
+      this._dealAck = { need, gen, finish };
+    });
+  }
+
   dispose() {
     this._gen++; // any in-flight wait now resolves and _run bails on the gen check (no timeouts to rely on)
-    const w = this._waiting, lz = this._lz, nx = this._next;
-    this._waiting = this._lz = this._next = null;
+    const w = this._waiting, lz = this._lz, nx = this._next, da = this._dealAck;
+    this._waiting = this._lz = this._next = this._dealAck = null;
     if (w) w.finish(null);
     if (lz) lz.finish();
     if (nx) nx.finish();
+    if (da) da.finish();
   }
 }

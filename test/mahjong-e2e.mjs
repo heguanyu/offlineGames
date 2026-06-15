@@ -164,6 +164,18 @@ try {
     throw new Error(`杠分 split missing gain/loss lines (+16 金杠 / −16 下家金杠): ${split}`);
   console.log('杠分 split: gain (+) and opponent-杠 loss (−) shown separately OK');
 
+  // 混吊: the highlighted winning tile must be the 混 inside the 将 (pair), not a 混 in a meld.
+  await page.evaluate(() => window.__mj.debugHunDiao());
+  await page.waitForFunction(() => !document.getElementById('result-overlay').classList.contains('hidden'));
+  const hd = await page.evaluate(() => {
+    const win = document.querySelector('#result-hand .win-tile');
+    if (!win) return { ok: false, why: 'no .win-tile' };
+    const grp = win.closest('.meld-group');
+    return { ok: !!(grp && grp.classList.contains('pair')), isWild: win.classList.contains('wild'), inPair: !!(grp && grp.classList.contains('pair')) };
+  });
+  if (!hd.ok || !hd.isWild) throw new Error(`混吊 highlight wrong: ${JSON.stringify(hd)} (want a wild tile inside the .pair group)`);
+  console.log('混吊: winning 混 highlighted inside the 将/pair OK');
+
   if (errors.length) throw new Error('runtime errors:\n  ' + errors.join('\n  '));
 
   console.log(`resolved ${handsResolved} hand(s), no runtime errors`);

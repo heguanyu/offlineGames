@@ -38,6 +38,7 @@ function onMsg(m) {
   if (ev.t === 'lazhuang') { act({ do: 'lazhuang', yes: false }); return; }
   if (ev.t === 'deal') {
     deals++;
+    act({ do: 'dealDone' }); // ack the deal (as a real client does) so the server drives the bots without the 8s fallback
     if (phase === 2) return checkResume(view);
     if (deals >= 4) return restart(); // hands 1-3 are committed by now → kill mid-hand-4
     return;

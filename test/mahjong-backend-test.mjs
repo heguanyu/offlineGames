@@ -78,7 +78,7 @@ async function run() {
   // RemoteBackend now implemented (online play); the full drive is in mahjong-online-client-test.
   console.log('RemoteBackend shape:');
   const r = createBackend({ mode: 'remote', url: 'ws://localhost:1', uid: 'x' });
-  for (const m of ['onEvent', 'getState', 'connect', 'dispose', 'discard', 'claim', 'pass', 'selfKong', 'declareWin', 'decideLaZhuang', 'next'])
+  for (const m of ['onEvent', 'getState', 'connect', 'dispose', 'discard', 'claim', 'pass', 'selfKong', 'declareWin', 'decideLaZhuang', 'next', 'unready', 'dealDone'])
     ok(typeof r[m] === 'function', `RemoteBackend implements ${m}()`);
   ok(r.getState() === null, 'RemoteBackend.getState() is null before any frame');
 
