@@ -84,10 +84,10 @@ export class Table {
   // a returning client can still answer (its 拉庄 prompt, or its turn).
   resync(seat) {
     if (!this.isHuman(seat)) return;
-    const left = (d) => Math.max(1000, (d || 0) - Date.now()); // ms still on the clock (floor 1s)
     let ev = { t: 'sync' };
-    if (this._lz && this._lz.need.has(seat)) ev = { t: 'lazhuang', dealer: this.dealer, timeout: left(this._lz.deadline) };
-    else if (this._waiting && this._waiting.seat === seat) ev = { t: 'await', who: this._waiting.kind, seat, timeout: left(this._waiting.deadline) };
+    if (this._lz && this._lz.need.has(seat)) ev = { t: 'lazhuang', dealer: this.dealer };
+    else if (this._waiting && this._waiting.seat === seat) ev = { t: 'await', who: this._waiting.kind, seat, timeout: Math.max(1000, this._waiting.deadline - Date.now()), total: TURN_TIMEOUT_MS };
+    else if (this._next && this._next.need.has(seat)) ev = { t: 'over' }; // re-show the result modal so a returning player can still 我准备好了
     this.emit(seat, { type: 'game', ev, view: this.viewFor(seat) });
   }
 
@@ -184,7 +184,7 @@ export class Table {
     return new Promise((resolve) => {
       const timer = setTimeout(() => { if (this._waiting && this._waiting.gen === gen) { this._waiting = null; resolve(null); } }, TURN_TIMEOUT_MS);
       this._waiting = { seat, kind, gen, deadline: Date.now() + TURN_TIMEOUT_MS, finish: (m) => { clearTimeout(timer); this._waiting = null; resolve(m); } };
-      this.pushEvent({ t: 'await', who: kind, seat, timeout: TURN_TIMEOUT_MS });
+      this.pushEvent({ t: 'await', who: kind, seat, timeout: TURN_TIMEOUT_MS, total: TURN_TIMEOUT_MS });
     });
   }
 
@@ -197,13 +197,12 @@ export class Table {
     return new Promise((resolve) => {
       const answers = {};
       const finish = () => {
-        clearTimeout(timer); this._lz = null;
+        this._lz = null;
         const all = challengers.concat(Object.keys(answers).filter((s) => answers[s]).map(Number));
         resolve(all.sort((a, b) => a - b));
       };
-      const timer = setTimeout(() => { if (this._lz && this._lz.gen === gen) finish(); }, LZ_TIMEOUT_MS);
-      this._lz = { need, answers, gen, deadline: Date.now() + LZ_TIMEOUT_MS, finish };
-      for (const s of need) this.emit(s, { type: 'game', ev: { t: 'lazhuang', dealer: this.dealer, timeout: LZ_TIMEOUT_MS }, view: this.viewFor(s) });
+      this._lz = { need, answers, gen, finish }; // no timeout — the deal halts until EVERY human chooses 拉庄/不拉
+      for (const s of need) this.emit(s, { type: 'game', ev: { t: 'lazhuang', dealer: this.dealer }, view: this.viewFor(s) });
     });
   }
 
@@ -211,13 +210,19 @@ export class Table {
   _awaitNext(gen) {
     const need = new Set(this.humans());
     if (need.size === 0) return delay(800);
-    this.pushEvent({ t: 'handEnd', timeout: NEXT_TIMEOUT_MS });
+    this.pushEvent({ t: 'handEnd' });
     return new Promise((resolve) => {
-      const finish = () => { clearTimeout(timer); this._next = null; resolve(); };
-      const timer = setTimeout(() => { if (this._next && this._next.gen === gen) finish(); }, NEXT_TIMEOUT_MS);
-      this._next = { need, gen, deadline: Date.now() + NEXT_TIMEOUT_MS, finish };
+      const finish = () => { this._next = null; resolve(); };
+      this._next = { need, gen, finish }; // no timeout — wait until EVERY human clicks 我准备好了
     });
   }
 
-  dispose() { this._gen++; this._waiting = this._lz = this._next = null; }
+  dispose() {
+    this._gen++; // any in-flight wait now resolves and _run bails on the gen check (no timeouts to rely on)
+    const w = this._waiting, lz = this._lz, nx = this._next;
+    this._waiting = this._lz = this._next = null;
+    if (w) w.finish(null);
+    if (lz) lz.finish();
+    if (nx) nx.finish();
+  }
 }

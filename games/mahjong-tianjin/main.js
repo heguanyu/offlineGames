@@ -287,36 +287,29 @@ function renderActions() {
 function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.claim && game.claim.player === HUMAN; }
 
 // ---- online turn countdown -------------------------------------------------
-// Online the server gives every human a fixed window to act (turn / 拉庄 / 下一局) before it
-// auto-acts; we mirror that as a depleting ring showing the seconds left. Offline never calls
-// this (no server clock), so the ring stays hidden and behaviour is unchanged.
-let ttHandle = null, ttDeadline = 0, ttTotal = 0;
-function startTurnTimer(ms) {
-  if (!ONLINE) return;
-  ttTotal = +ms > 0 ? +ms : 30000;
-  ttDeadline = Date.now() + ttTotal;
-  if (!ttHandle) ttHandle = setInterval(tickTurnTimer, 100);
-  tickTurnTimer();
+// The server gives each human a fixed window to act and auto-acts on timeout. It sends the
+// REMAINING ms with every turn prompt (and again on reconnect, via resync), plus the full window
+// as `total`; we anchor a deadline to that and count down to 0. Shown ONLY while it is actually
+// your turn to play (discard / claim). Offline never anchors a deadline, so the ring stays hidden.
+let ttHandle = null, ttDeadline = 0, ttTotal = 30000;
+function myTurnNow() { return !!game && ((game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) || isClaimPhase()); }
+// Re-anchor when the server hands us a fresh remaining time (an 'await' on our turn / its resync).
+function anchorTurnTimer(ev) {
+  if (ev && ev.timeout != null) { ttDeadline = Date.now() + ev.timeout; ttTotal = +ev.total || +ev.timeout; }
 }
-function stopTurnTimer() {
-  if (ttHandle) { clearInterval(ttHandle); ttHandle = null; }
-  $('turn-timer').classList.add('hidden');
-}
-function tickTurnTimer() {
-  const left = Math.max(0, ttDeadline - Date.now());
+function updateTurnTimer() {
   const el = $('turn-timer');
-  el.style.setProperty('--tp', (ttTotal > 0 ? (left / ttTotal) * 100 : 0).toFixed(1));
+  if (!ONLINE || !myTurnNow()) { // hide whenever it is not our turn (bots, 拉庄, 下一局, between hands)
+    el.classList.add('hidden');
+    if (ttHandle) { clearInterval(ttHandle); ttHandle = null; }
+    return;
+  }
+  if (!ttHandle) ttHandle = setInterval(updateTurnTimer, 100);
+  const left = Math.max(0, ttDeadline - Date.now()); // counts to 0; the server's auto-act frame then hides it
+  el.style.setProperty('--tp', (ttTotal > 0 ? Math.min(100, (left / ttTotal) * 100) : 0).toFixed(1));
   el.classList.toggle('low', left <= 5000);
-  $('turn-timer-num').textContent = Math.ceil(left / 1000);
+  $('turn-timer-num').textContent = Math.round(left / 1000);
   el.classList.remove('hidden');
-  if (left <= 0) stopTurnTimer(); // the server's auto-act lands as the next frame
-}
-// Run the clock only while the player has a pending action; hide it otherwise.
-function refreshTurnTimer(ev) {
-  const myTurn = !!game && ((game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) || isClaimPhase());
-  const start = ev.type === 'lazhuang' || ev.type === 'handEnd'
-    || ((ev.type === 'await' || ev.type === 'sync') && myTurn);
-  if (start) startTurnTimer(ev.timeout); else stopTurnTimer();
 }
 
 // ---------------------------------------------------------------------------
@@ -349,14 +342,16 @@ function flushLogToasts() {
 async function onBackendEvent(ev) {
   const st = backend.getState();
   if (st) game = st;
-  if (ONLINE) refreshTurnTimer(ev); // mirror the server's per-action clock (no-op offline)
+  if (ONLINE) { anchorTurnTimer(ev); updateTurnTimer(); } // server-anchored turn clock (no-op offline)
   switch (ev.type) {
     case 'lazhuang': // the human's BLIND 拉庄 choice, before the deal
+      $('result-overlay').classList.add('hidden'); // a new hand is starting → drop any lingering result panel
       if (FAST) { backend.decideLaZhuang(lzTestChoice); return; } // tests skip the panel
       showLaZhuangPanel(ev.dealer, (yes) => backend.decideLaZhuang(yes));
       return;
 
     case 'deal':
+      $('result-overlay').classList.add('hidden'); // the next hand is dealing → auto-hide the result panel
       selIndex = 0; focusIndex = 0; drawnWildSelected = false; lastLogLen = 0;
       if (!ONLINE) saveSession(); // online: the server is the source of truth, nothing to persist
       if (scene && !FAST) { // serve the tiles from the wall, then play
@@ -378,10 +373,11 @@ async function onBackendEvent(ev) {
       if (scene && !FAST && !fastMode) { // fly to the center halt, hold, drop into the pool
         if (human) sound.say(tileName(ev.tile), HUMAN);
         animating = true;
-        scene.beginDiscardDemo(ev.player, ev.discardIndex, DISCARD_DEMO_MS);
-        render(); // place the flying tile; claim UI + the human's drawn tile stay held
-        await delay(DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
-        animating = false;
+        try {
+          scene.beginDiscardDemo(ev.player, ev.discardIndex, DISCARD_DEMO_MS);
+          render(); // place the flying tile; claim UI + the human's drawn tile stay held
+          await delay(DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
+        } finally { animating = false; } // never leave the action bar wedged if a frame mid-animation throws
       }
       render();
       return;
@@ -611,7 +607,8 @@ function showResult() {
   // If this hand closes the 北圈, the 锅 is finished — 下一局 leads to the 最终成绩. Online: the
   // server decides and sends 'potOver', so the button is always 下一局.
   const endsPot = !ONLINE && game.nextDealer() === 0 && game.dealer !== 0 && session.prevailingWind === 3;
-  $('next-hand-btn').textContent = endsPot ? '查看总成绩 🏆' : '下一局';
+  const nb = $('next-hand-btn'); nb.disabled = false; // re-armed (it becomes a 'waiting' state once clicked online)
+  nb.textContent = endsPot ? '查看总成绩 🏆' : (ONLINE ? '我准备好了' : '下一局');
   ov.classList.remove('hidden');
   resultFocus = 0; focusResultBtn(); // 下一局 focused by default
 }
@@ -670,8 +667,14 @@ function breakdownHtml(r) {
 }
 
 function nextHand() {
+  if (ONLINE) {
+    // Ready up. The server starts the next hand only once EVERY human is ready (no timeout), so
+    // keep the result panel up as a 'waiting' state — it auto-hides when the next hand deals.
+    const btn = $('next-hand-btn'); btn.disabled = true; btn.textContent = '⏳ 等待其他玩家…';
+    backend.next();
+    return;
+  }
   $('result-overlay').classList.add('hidden');
-  if (ONLINE) { backend.next(); return; } // the server advances the match (or sends 'potOver')
   const nextDealer = game.nextDealer();
   // A 圈 ends when the 庄 button laps back to seat 0 (东). Four 圈 (东南西北) make a
   // 锅: when the 北圈 (prevailingWind 3) laps, the 锅 is over → final scoreboard.

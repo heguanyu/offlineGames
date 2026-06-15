@@ -81,19 +81,19 @@ body.flat .long-run { width: calc(21px * 5 + 4px); }
 
 /* online turn countdown — a depleting ring with the seconds left before the server auto-acts */
 #turn-timer {
-  position: absolute; z-index: 9; right: 20px; bottom: 92px; pointer-events: none;
-  width: 62px; height: 62px; border-radius: 50%;
+  position: absolute; z-index: 9; top: 72px; left: 50%; transform: translateX(-50%); pointer-events: none;
+  width: 118px; height: 118px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   background: conic-gradient(var(--tc, #6fe08a) calc(var(--tp, 100) * 1%), rgba(0,0,0,0.42) 0);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.55);
+  box-shadow: 0 5px 18px rgba(0,0,0,0.6);
 }
-#turn-timer::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: rgba(6,26,18,0.94); }
-#turn-timer-num { position: relative; font-size: 1.55rem; font-weight: 900; color: #eaf6f0; line-height: 1; }
+#turn-timer::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: rgba(6,26,18,0.95); }
+#turn-timer-num { position: relative; font-size: 3rem; font-weight: 900; color: #eaf6f0; line-height: 1; }
 #turn-timer.low { --tc: #ff5c5c; animation: tt-pulse 0.7s ease-in-out infinite; }
 #turn-timer.low #turn-timer-num { color: #ff8a8a; }
-@keyframes tt-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
-body.flat #turn-timer { right: 10px; bottom: 76px; width: 50px; height: 50px; }
-body.flat #turn-timer-num { font-size: 1.2rem; }
+@keyframes tt-pulse { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.07); } }
+body.flat #turn-timer { top: 54px; width: 92px; height: 92px; }
+body.flat #turn-timer-num { font-size: 2.3rem; }
 </style>
 </head>
 <body>
