@@ -5,10 +5,12 @@
 // ready players/bots the server sends 'gameStart'.
 const $ = (id) => document.getElementById(id);
 
-// Local dev falls back to the dev server; in prod we hit the Azure Web App over wss://.
-const SERVER_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-  ? `ws://${location.hostname}:8090`
-  : 'wss://mahjongonline.azurewebsites.net';
+// ?server=wss://… overrides the target (handy for testing a deployed server from a local
+// page); otherwise localhost → the dev server, anything else → the Azure Web App.
+const SERVER_URL = new URLSearchParams(location.search).get('server')
+  || ((location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ? `ws://${location.hostname}:8090`
+    : 'wss://mahjongonline.azurewebsites.net');
 
 const WINDS = ['东', '南', '西', '北'];          // seat index → wind label
 const POS = ['east', 'south', 'west', 'north'];  // seat index → chair CSS position
