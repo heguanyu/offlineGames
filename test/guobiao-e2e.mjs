@@ -23,6 +23,16 @@ try {
     !document.getElementById('result-overlay').classList.contains('hidden'), { timeout: 8000 });
   console.log('hand started, 3D scene + action bar live');
 
+  // the scoreboard must be anchored top-right (#scores wrapped in the positioned #score-stack), not
+  // floating unpositioned — regression guard for the bare-#scores layout break.
+  const sb = await page.evaluate(() => {
+    const ss = document.getElementById('score-stack'); const sc = document.getElementById('scores');
+    const r = ss && getComputedStyle(ss);
+    return { positioned: !!(r && r.position === 'absolute'), seats: sc ? sc.children.length : 0, rightHalf: ss ? ss.getBoundingClientRect().x > innerWidth / 2 : false };
+  });
+  if (!sb.positioned || sb.seats < 4 || !sb.rightHalf) throw new Error(`scoreboard layout broken: ${JSON.stringify(sb)}`);
+  console.log('scoreboard anchored top-right');
+
   const deadline = Date.now() + 90000;
   let handsResolved = 0;
   while (Date.now() < deadline && handsResolved < 3) {

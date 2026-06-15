@@ -23,6 +23,14 @@ try {
   const round = await page.$eval('#round-info', (e) => e.textContent);
   if (!round.includes('无定番')) throw new Error('round info missing 无定番: ' + round);
 
+  // scoreboard anchored top-right (#scores inside the positioned #score-stack) — same fix as guobiao
+  const sb = await page.evaluate(() => {
+    const ss = document.getElementById('score-stack'); const sc = document.getElementById('scores');
+    const r = ss && getComputedStyle(ss);
+    return { positioned: !!(r && r.position === 'absolute'), seats: sc ? sc.children.length : 0, rightHalf: ss ? ss.getBoundingClientRect().x > innerWidth / 2 : false };
+  });
+  if (!sb.positioned || sb.seats < 4 || !sb.rightHalf) throw new Error(`scoreboard layout broken: ${JSON.stringify(sb)}`);
+
   const deadline = Date.now() + 60000;
   let handsResolved = 0;
   while (Date.now() < deadline && handsResolved < 2) {

@@ -129,6 +129,35 @@
     </div>
   </div>
   <section class="cat-section">
+    <h2 class="cat-title" data-i18n="cat-mahjong">🀄 麻将</h2>
+    <nav>
+      <a class="card" href="./games/mahjong-tianjin/">
+        <span class="emoji">🀄</span>
+        <span data-i18n="card-tianjin">天津麻将</span>
+      </a>
+      <a class="card" href="./games/guobiao/">
+        <span class="emoji">🀅</span>
+        <span data-i18n="card-guobiao">国标麻将</span>
+      </a>
+      <a class="card" href="./games/guobiao-free/">
+        <span class="emoji">🀆</span>
+        <span data-i18n="card-guobiao-free">国标（无定番）</span>
+      </a>
+    </nav>
+  </section>
+
+  <section class="cat-section">
+    <h2 class="cat-title" data-i18n="cat-mahjong-online">📶 麻将联机</h2>
+    <nav>
+      <a class="card" href="./games/mahjong-tianjin-online/">
+        <span class="wifi" aria-hidden="true">📶</span>
+        <span class="emoji">🀄</span>
+        <span data-i18n="card-tianjin-online">天津麻将联机版</span>
+      </a>
+    </nav>
+  </section>
+
+  <section class="cat-section">
     <h2 class="cat-title" data-i18n="cat-emulator">🕹️ 模拟器游戏</h2>
     <nav>
       <a class="card" href="./games/gba/?core=mgba">
@@ -147,29 +176,6 @@
   </section>
 
   <section class="cat-section">
-    <h2 class="cat-title" data-i18n="cat-mahjong">🀄 麻将</h2>
-    <nav>
-      <a class="card" href="./games/mahjong-tianjin/">
-        <span class="emoji">🀄</span>
-        <span data-i18n="card-tianjin">天津麻将</span>
-      </a>
-      <a class="card" href="./games/mahjong-tianjin-online/">
-        <span class="wifi" aria-hidden="true">📶</span>
-        <span class="emoji">🀄</span>
-        <span data-i18n="card-tianjin-online">天津麻将联机版</span>
-      </a>
-      <a class="card" href="./games/guobiao/">
-        <span class="emoji">🀅</span>
-        <span data-i18n="card-guobiao">国标麻将</span>
-      </a>
-      <a class="card" href="./games/guobiao-free/">
-        <span class="emoji">🀆</span>
-        <span data-i18n="card-guobiao-free">国标（无定番）</span>
-      </a>
-    </nav>
-  </section>
-
-  <section class="cat-section">
     <h2 class="cat-title" data-i18n="cat-tools">🛠️ 工具</h2>
     <nav>
       <a class="card" href="./games/pad-test/">
@@ -183,7 +189,7 @@
     const I18N = {
       zh: {
         title: '离线游戏',
-        'cat-emulator': '🕹️ 模拟器游戏', 'cat-mahjong': '🀄 麻将', 'cat-tools': '🛠️ 工具',
+        'cat-emulator': '🕹️ 模拟器游戏', 'cat-mahjong': '🀄 麻将', 'cat-mahjong-online': '📶 麻将联机', 'cat-tools': '🛠️ 工具',
         'card-gba-mgba': 'GBA · mGBA', 'card-gba-vbam': 'GBA · VBA-M', 'card-nds': '任天堂 DS',
         'card-tianjin': '天津麻将', 'card-tianjin-online': '天津麻将联机版',
         'card-guobiao': '国标麻将', 'card-guobiao-free': '国标（无定番）',
@@ -201,7 +207,7 @@
       },
       en: {
         title: 'Offline Games',
-        'cat-emulator': '🕹️ Emulator Games', 'cat-mahjong': '🀄 Mahjong', 'cat-tools': '🛠️ Tools',
+        'cat-emulator': '🕹️ Emulator Games', 'cat-mahjong': '🀄 Mahjong', 'cat-mahjong-online': '📶 Mahjong Online', 'cat-tools': '🛠️ Tools',
         'card-gba-mgba': 'GBA · mGBA', 'card-gba-vbam': 'GBA · VBA-M', 'card-nds': 'Nintendo DS',
         'card-tianjin': 'Tianjin Mahjong', 'card-tianjin-online': 'Tianjin Mahjong · Online',
         'card-guobiao': 'Guobiao (MCR)', 'card-guobiao-free': 'Guobiao (no minimum)',
