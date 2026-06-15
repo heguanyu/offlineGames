@@ -191,9 +191,21 @@ body.flat .long-run { width: calc(21px * 5 + 4px); }
     <div class="panel">
       <h2>菜单</h2>
       <button class="big-btn" id="resume-btn">继续</button>
+      <button class="big-btn" id="menu-history-btn">📜 历史战绩</button>
       <button class="big-btn danger" id="newgame-btn">重开（清零比分）</button>
       <button class="link-btn" id="menu-rules-link">规则</button>
       <button class="big-btn hub" id="menu-hub-btn">← 返回大厅</button>
+    </div>
+  </div>
+
+  <!-- 历史战绩 (final scores of every finished 锅) -->
+  <div class="overlay hidden" id="history-overlay">
+    <div class="panel">
+      <h2>历史战绩</h2>
+      <p class="sub">已打完的每一锅最终得分</p>
+      <div id="history-body"></div>
+      <button class="link-btn" id="history-clear">清空历史</button>
+      <button class="big-btn" id="history-close" style="margin-top:12px;">关闭</button>
     </div>
   </div>
 

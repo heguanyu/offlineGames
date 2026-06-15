@@ -77,6 +77,7 @@ function loadSession() {
     const s = JSON.parse(localStorage.getItem('mahjong-session'));
     if (s && Array.isArray(s.scores)) {
       if (!Array.isArray(s.rounds)) s.rounds = [];
+      if (s.seatBase == null) s.seatBase = 0; // 座风 base (东 seat) for the 锅
       // A finished 锅 (four 圈 recorded) left unreset — e.g. closed from the 最终成绩
       // board via 返回大厅 — starts the next 锅 fresh rather than resuming the old one.
       if (s.rounds.length >= 4) return freshSession();
@@ -85,13 +86,28 @@ function loadSession() {
   } catch {}
   return freshSession();
 }
-// A blank session: zeroed scores, 庄 at seat 0, 东圈, no 圈 recorded yet. `rounds`
-// accumulates one snapshot per completed 圈 (东南西北 = a 锅) for 每圈成绩 + 最终成绩.
-function freshSession() { return { scores: [0, 0, 0, 0], dealer: 0, prevailingWind: 0, hand: 1, rounds: [] }; }
+// A blank session: zeroed scores, 庄 at seat 0, 东圈, no 圈 recorded yet. seatBase fixes
+// the 座风 (seat 0 = 东) for the whole 锅; `rounds` accumulates one snapshot per completed
+// 圈 (东南西北 = a 锅) for 每圈成绩 + 最终成绩.
+function freshSession() { return { scores: [0, 0, 0, 0], dealer: 0, prevailingWind: 0, hand: 1, rounds: [], seatBase: 0 }; }
 function saveSession() {
   session.scores = game ? game.scores.slice() : session.scores;
   localStorage.setItem('mahjong-session', JSON.stringify(session));
   localStorage.setItem('mahjong-level', String(level));
+}
+
+// Persistent 锅 history — one record { at, scores } per FINISHED 锅. Kept under its own
+// key so resetting the live session (重开 / 再来一锅 / reload) never clears it; only the
+// explicit 清空历史 does. Read/append lazily so it survives even a freshSession().
+function loadHistory() {
+  try { const h = JSON.parse(localStorage.getItem('mahjong-history')); if (Array.isArray(h)) return h; } catch {}
+  return [];
+}
+function recordPotHistory() {
+  const hist = loadHistory();
+  hist.push({ at: Date.now(), scores: game.scores.slice() });
+  while (hist.length > 50) hist.shift(); // cap growth; keep the most recent 50 锅
+  localStorage.setItem('mahjong-history', JSON.stringify(hist));
 }
 {
   const lv = parseInt(localStorage.getItem('mahjong-level'), 10);
@@ -115,8 +131,9 @@ function renderedHand() { return buildOrder(game.hands[HUMAN], isWildFn); }
 // so the deal animation can show it without touching the 3D table.
 function renderHud() {
   // ---- header ----
+  // 圈 (prevailing wind) · 庄 (the 庄's fixed 座风 — only the 庄 moves within the 锅) · 难度
   $('round-info').innerHTML =
-    `<b>${WIND[session.prevailingWind]}圈</b> · 第 ${session.hand} 局 · ` +
+    `<b>${WIND[session.prevailingWind]}圈</b> · <b>${WIND[game.seatWind(game.dealer)]}庄</b> · ` +
     `难度 <b>${LEVEL_NAMES[level]}</b>`;
   renderScores();
 
@@ -597,6 +614,7 @@ function nextHand() {
     // Snapshot the cumulative scores at the close of the 圈 just finished (每圈成绩).
     session.rounds.push({ wind: session.prevailingWind, scores: game.scores.slice() });
     if (session.prevailingWind === 3) { // 北圈 done → 锅 complete; stop and tally
+      recordPotHistory(); // append this 锅's final scores to the persistent 历史战绩
       saveSession();
       showFinalBoard();
       return;
@@ -623,6 +641,7 @@ function beginHand(laZhuang) {
     prevailingWind: session.prevailingWind,
     scores: session.scores,
     laZhuang,
+    seatBase: session.seatBase, // 座风 fixed for the 锅 (only the 庄 moves)
   });
   lastLogLen = 0;
   selIndex = 0; focusIndex = 0; drawnWildSelected = false;
@@ -744,6 +763,33 @@ function openRounds() {
   $('rounds-overlay').classList.remove('hidden');
 }
 
+// 历史战绩: one row per finished 锅 (date + its final per-seat scores) and a 合计 footer
+// with the lifetime total. Columns are the human-relative seats (玩家/下家/对家/上家).
+function historyTableHtml() {
+  const hist = loadHistory();
+  if (!hist.length) return '<p class="sub" style="padding:16px 8px;">还没有打完的锅</p>';
+  const seats = [0, 1, 2, 3];
+  const cell = (v) => `<td class="${v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero'}">${v > 0 ? '+' : ''}${v}</td>`;
+  const z = (n) => String(n).padStart(2, '0');
+  const date = (ts) => { const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()} ${z(d.getHours())}:${z(d.getMinutes())}`; };
+  const total = [0, 0, 0, 0];
+  const body = hist.map((rec) => {
+    rec.scores.forEach((s, p) => { total[p] += s; });
+    return `<tr><td class="rd-wind">${date(rec.at)}</td>${seats.map((p) => cell(rec.scores[p])).join('')}</tr>`;
+  }).join('');
+  const head = `<tr><th></th>${seats.map((p) => `<th class="${p === HUMAN ? 'me' : ''}">${SEAT_LABEL[p]}</th>`).join('')}</tr>`;
+  const foot = `<tr><td class="rd-wind">合计 (${hist.length}锅)</td>${seats.map((p) => cell(total[p])).join('')}</tr>`;
+  return `<table class="rounds-table"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+}
+
+let histClearArm = false; // 清空历史 needs two clicks to confirm
+function openHistory() {
+  $('history-body').innerHTML = historyTableHtml();
+  histClearArm = false; $('history-clear').textContent = '清空历史';
+  $('menu-overlay').classList.add('hidden');
+  $('history-overlay').classList.remove('hidden');
+}
+
 // The 锅 is over (four 圈 done): final standings, a 恭喜 line when the human placed
 // first, the 每圈成绩 breakdown, and a reset to deal a fresh 锅.
 function showFinalBoard() {
@@ -787,6 +833,10 @@ function onAction(name) {
   }
   if (!$('rounds-overlay').classList.contains('hidden')) {
     if (name === 'cancel' || name === 'menu' || name === 'confirm') $('rounds-overlay').classList.add('hidden');
+    return;
+  }
+  if (!$('history-overlay').classList.contains('hidden')) {
+    if (name === 'cancel' || name === 'menu' || name === 'confirm') $('history-overlay').classList.add('hidden');
     return;
   }
   if (!$('final-overlay').classList.contains('hidden')) {
@@ -916,6 +966,13 @@ function bindUI() {
   $('lazhuang-no').addEventListener('click', () => { sound.resume(); resolveLz(false); });
   $('final-reset-btn').addEventListener('click', () => { $('final-overlay').classList.add('hidden'); newGame(); });
   $('final-hub-btn').addEventListener('click', returnHub);
+  $('menu-history-btn').addEventListener('click', openHistory);
+  $('history-close').addEventListener('click', () => $('history-overlay').classList.add('hidden'));
+  $('history-clear').addEventListener('click', () => {
+    if (!histClearArm) { histClearArm = true; $('history-clear').textContent = '确定清空？（再点一次）'; return; }
+    localStorage.removeItem('mahjong-history'); histClearArm = false; $('history-clear').textContent = '清空历史';
+    $('history-body').innerHTML = historyTableHtml();
+  });
   $('menu-hub-btn').addEventListener('click', returnHub);
   fillRules();
 }
@@ -1022,6 +1079,8 @@ if (new URLSearchParams(location.search).get('fast')) {
     },
     // e2e: deal a real hand with the human 拉庄 vs 庄 = 下家(1) (exercises askLaZhuang).
     dealLz: () => { lzTestChoice = true; session.dealer = 1; startHand(); },
+    // e2e: append the live game's scores to 历史战绩 (the 锅-completion record path).
+    recordPot: () => recordPotHistory(),
     // e2e/visual: the 拉庄 confirmation panel (records the click on window.__lz).
     debugLzPanel: () => showLaZhuangPanel(1, (yes) => { window.__lz = yes; }),
     // visual/e2e: a 拉庄 win — human (0) 拉庄 vs 庄 = 下家(1); the 下家 row carries 庄x2 +

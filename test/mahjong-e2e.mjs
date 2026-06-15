@@ -26,6 +26,12 @@ try {
     !document.getElementById('result-overlay').classList.contains('hidden'), { timeout: 8000 });
   console.log('hand started, 3D scene + action bar live');
 
+  // round-info reads 圈 · 庄 · 难度 (座风 fixed for the 锅; no more 第N局).
+  const roundInfo = await page.$eval('#round-info', (e) => e.textContent);
+  if (!roundInfo.includes('圈') || !roundInfo.includes('庄') || roundInfo.includes('局'))
+    throw new Error(`round-info should be 圈·庄·难度, got: ${roundInfo}`);
+  console.log('round-info:', roundInfo.replace(/\s+/g, ' ').trim());
+
   // Auto-play: pass every claim, discard on every turn, until a result shows.
   const deadline = Date.now() + 60000;
   let handsResolved = 0;
@@ -97,6 +103,24 @@ try {
   const reset = await page.$$eval('#scores .sb-pt', (els) => els.map((e) => e.textContent.trim()));
   if (!reset.every((s) => s === '0')) throw new Error(`再来一锅 did not reset scores: ${reset.join(', ')}`);
   console.log('final board (human 🥇) + 再来一锅 reset OK:', final.congrats);
+
+  // 历史战绩: a finished 锅 is recorded persistently and shown via the menu's history modal.
+  await page.evaluate(() => {
+    localStorage.removeItem('mahjong-history');
+    window.__mj.game().scores = [7, -3, -2, -2];
+    window.__mj.recordPot();
+  });
+  if (await page.evaluate(() => JSON.parse(localStorage.getItem('mahjong-history')).length) !== 1)
+    throw new Error('历史战绩 did not record the finished 锅');
+  await page.click('#menu-btn');
+  await page.waitForFunction(() => !document.getElementById('menu-overlay').classList.contains('hidden'));
+  await page.click('#menu-history-btn');
+  await page.waitForFunction(() => !document.getElementById('history-overlay').classList.contains('hidden'), { timeout: 4000 });
+  const histRows = await page.$$eval('#history-body .rounds-table tbody tr', (els) => els.length);
+  if (histRows !== 1) throw new Error(`历史战绩 modal should show 1 锅 row, got ${histRows}`);
+  await page.click('#history-close');
+  await page.waitForFunction(() => document.getElementById('history-overlay').classList.contains('hidden'));
+  console.log('历史战绩: record + menu modal OK');
 
   // 拉庄: the blind double-down panel, the ⚔️ badge, and the doubled 庄 row in the modal.
   await page.evaluate(() => window.__mj.debugLzPanel());

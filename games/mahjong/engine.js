@@ -387,7 +387,8 @@ export const PHASE = {
 };
 
 export class Game {
-  // opts: { rng, dealer (0..3), prevailingWind (0..3), scores:[4], laZhuang:[seats] }
+  // opts: { rng, dealer (0..3), prevailingWind (0..3), scores:[4], laZhuang:[seats],
+  //         seatBase (0..3) — the seat fixed as 东 for the whole 锅; only 庄 rotates }
   constructor(opts = {}) {
     this.rng = opts.rng || Math.random;
     this.dealer = opts.dealer ?? 0;
@@ -397,6 +398,10 @@ export class Game {
     // 拉庄 (blind double-down): the non-庄 seats that chose to double their stakes with
     // the 庄 this hand. Decided before the deal; affects only settlement, never the play.
     this.laZhuang = opts.laZhuang ? opts.laZhuang.slice() : [];
+    // The 座风 (seat wind 东南西北) is fixed for the whole 锅 — the 庄 button moves but
+    // the winds don't. seatBase is the 东 seat (the 锅's first 庄); defaults to the
+    // current dealer so a standalone Game still reads 庄 = 东.
+    this.seatBase = opts.seatBase ?? this.dealer;
     this.log = [];
     this._deal(opts);
   }
@@ -434,7 +439,7 @@ export class Game {
     this._draw(this.dealer, false);
   }
 
-  seatWind(player) { return (player - this.dealer + 4) % 4; } // 0=东 for dealer
+  seatWind(player) { return (player - this.seatBase + 4) % 4; } // 0=东; fixed per 锅, not per 庄
 
   isWild(id) { return this.wildSet.has(id); }
 

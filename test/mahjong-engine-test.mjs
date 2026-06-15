@@ -245,6 +245,22 @@ console.log('拉庄:');
   eq(g4._settle(0, 3).join(','), '12,-6,-3,-3', 'no 拉庄: 庄 pays 2× (6) baseline');
 }
 
+// --- 座风 fixed per 锅 (only the 庄 moves, the winds don't) ------------------------
+console.log('座风:');
+{
+  // seatBase = 0 → seat 0 is 东 no matter which seat holds the 庄 button.
+  const a = new Game({ rng: () => 0.5, indicator: 31, dealer: 0, seatBase: 0 });
+  eq(a.seatWind(0), 0, '座风: seat 0 = 东 (东庄 when 庄 = seat 0)');
+  eq(a.seatWind(1), 1, '座风: seat 1 = 南');
+  const b = new Game({ rng: () => 0.5, indicator: 31, dealer: 2, seatBase: 0 });
+  eq(b.seatWind(0), 0, '座风 fixed: seat 0 still 东 when 庄 = seat 2');
+  eq(b.seatWind(1), 1, '座风 fixed: seat 1 still 南 regardless of 庄');
+  eq(b.seatWind(2), 2, '座风: the 庄 (seat 2) reads 西庄, not 东庄');
+  // no seatBase → legacy 庄-relative reading (庄 = 东) keeps standalone Games unchanged.
+  const c = new Game({ rng: () => 0.5, indicator: 31, dealer: 2 });
+  eq(c.seatWind(2), 0, 'default seatBase = 庄, so the 庄 still reads 东 (legacy)');
+}
+
 // --- full game state machine: random self-play terminates, scores zero-sum ----
 console.log('state machine:');
 function autoplay(seed) {
