@@ -1,7 +1,7 @@
 // Server-restart persistence: play a few hands, KILL the server (SIGTERM → it flushes the 锅
-// standings), restart it on the same state file, reconnect, re-ready, and confirm the 锅 resumes
-// from the saved scores / 圈 / 庄 — NOT a reset to round 1. Also checks the seats were restored.
-// Usage: node test/mahjong-online-persist-test.mjs
+// standings), restart it on the same state file, and just RECONNECT (no re-ready) — the 锅 must
+// auto-resume from the saved scores / 圈 / 庄 (NOT a reset to round 1), landing back on the table.
+// Also checks the seats were restored. Usage: node test/mahjong-online-persist-test.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -30,7 +30,7 @@ const onTurn = (v) => { if (v.phase === 'await-discard' && v.turn === 0) act({ d
 function onMsg(m) {
   if (m.type === 'lobby') {
     if (phase === 1 && !setup && m.you && !m.you.seat) { send({ type: 'sit', table: 0, seat: 0 }); for (const s of [1, 2, 3]) send({ type: 'addBot', table: 0, seat: s }); send({ type: 'ready', ready: true }); setup = true; }
-    else if (phase === 2 && m.you && m.you.seat) { if (!setup) { setup = true; send({ type: 'ready', ready: true }); } } // restored seat → re-ready to resume
+    // phase 2: do NOTHING in the lobby — reconnecting (hello) must auto-resume the 锅 on its own.
     return;
   }
   if (m.type !== 'game') return;

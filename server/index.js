@@ -105,10 +105,9 @@ function lobbyFor(uid) {
 }
 const broadcastLobby = () => { for (const c of clients.values()) send(c.ws, lobbyFor(c.uid)); };
 
-// All four seats filled and every human ready → start the table's authoritative game.
-function maybeStart(t) {
-  if (t.status !== 'waiting') return;
-  if (!t.seats.every((s) => s && (s.kind === 'bot' || s.ready))) return;
+// Stand up the authoritative game for a full table (every seat occupied). Tells each human to
+// open the game page, then routes that seat's frames to the player's current socket.
+function startGame(t) {
   t.status = 'playing';
   const gameSeats = t.seats.map((s) => s.kind === 'bot' ? { kind: 'bot' } : { kind: 'human', uid: s.uid, name: s.name });
   for (let s = 0; s < SEATS; s++) if (gameSeats[s].kind === 'human') send(uidWs.get(gameSeats[s].uid), { type: 'gameStart', table: t.id, seat: s, wind: WIND[s] });
@@ -119,6 +118,24 @@ function maybeStart(t) {
   // persist after every hand so a crash resumes from the latest round.
   t.game = new Table(t.id, gameSeats, emit, (finalScores) => onPotOver(t, gameSeats, finalScores), 3, t.resume, persist);
   persist();
+}
+
+// All four seats filled and every human ready → start the table's authoritative game.
+function maybeStart(t) {
+  if (t.status !== 'waiting') return;
+  if (!t.seats.every((s) => s && (s.kind === 'bot' || s.ready))) return;
+  startGame(t);
+}
+
+// A 锅 interrupted by a server restart resumes the moment one of its occupants returns — the
+// seats were restored from the snapshot, so there's nothing to re-ready. Returns true if it
+// (re)started the game. The disconnected seats are held and auto-act until those players are back,
+// exactly like a mid-game drop.
+function resumeTable(t) {
+  if (t.status !== 'waiting' || t.game || !t.resume) return false;
+  if (!t.seats.every((s) => s)) return false; // a 锅 always has four occupied seats
+  startGame(t);
+  return true;
 }
 
 // 锅 finished → persist each player's lifetime score, then back to the lobby (same occupants,
@@ -150,9 +167,14 @@ function handle(client, msg) {
       client.name = sanitizeName(msg.name) || `玩家${client.id}`;
       uidWs.set(client.uid, client.ws);
       const at = seatOf(client.uid); // reconnection: reclaim a seat held while we were away
-      if (at) tables[at.table].seats[at.seat].name = client.name;
-      if (at && tables[at.table].status === 'playing' && tables[at.table].game) tables[at.table].game.resync(at.seat);
-      else send(client.ws, { type: 'noGame' }); // no live game on this socket → a game page returns to the lobby
+      const t = at ? tables[at.table] : null;
+      if (t) t.seats[at.seat].name = client.name;
+      // Live game → resync onto the table. A 锅 interrupted by a server restart (seat restored,
+      // standings saved, but no game object) → resume it now so a refresh lands back on the table
+      // instead of bouncing to the lobby. Otherwise → no live game, the game page returns to the lobby.
+      if (t && t.status === 'playing' && t.game) t.game.resync(at.seat);
+      else if (t && resumeTable(t)) t.game.resync(at.seat);
+      else send(client.ws, { type: 'noGame' });
       break;
     }
     case 'setName': {

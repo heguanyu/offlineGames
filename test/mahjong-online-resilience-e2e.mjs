@@ -1,7 +1,7 @@
 // Resilience e2e: start a game, KILL the server, and confirm the game page shows the reconnect
 // banner then returns to the lobby; the lobby shows the "维护中" status; and once the server is
-// restarted (same state file) the lobby reconnects with the seat RESTORED — ready to resume the 锅.
-// Usage: node test/mahjong-online-resilience-e2e.mjs
+// restarted (same state file) the client reconnects and AUTO-RESUMES the 锅 — landing back on the
+// table (no manual re-ready). Usage: node test/mahjong-online-resilience-e2e.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -55,10 +55,11 @@ try {
   srv = spawnServer(); await waitListen(srv);
   console.log('server restarted');
 
-  // the lobby reconnects → maintenance hides AND the seat is restored (chair[seat 0] is "me")
-  await page.waitForFunction(() => document.getElementById('maint-overlay').classList.contains('hidden'), { timeout: 8000 });
-  await page.waitForFunction(() => { const c = document.querySelector('.chair[data-table="0"][data-seat="0"]'); return c && c.classList.contains('me'); }, { timeout: 6000 });
-  console.log('lobby reconnected; seat restored — ready to resume the 锅');
+  // the client reconnects, the server still holds the in-progress 锅, and it AUTO-RESUMES: the
+  // lobby is handed straight back into the game page and the table comes alive again — no re-ready.
+  await page.waitForFunction(() => location.pathname.includes('/mahjong-tianjin/'), { timeout: 12000 });
+  await page.waitForFunction(() => window.__mj && window.__mj.game && window.__mj.game(), { timeout: 12000 });
+  console.log('server back → 锅 auto-resumed on the table (no re-ready)');
   console.log('MAHJONG ONLINE RESILIENCE E2E PASS');
 } catch (e) {
   console.error('MAHJONG ONLINE RESILIENCE E2E FAIL:', e.message);
