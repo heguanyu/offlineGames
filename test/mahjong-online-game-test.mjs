@@ -11,7 +11,7 @@ import { ROOT as root } from './harness.mjs';
 
 const PORT = 8191;
 const UID = 'test-uid-1';
-const srv = spawn(process.execPath, [path.join(root, 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT) }, stdio: ['ignore', 'pipe', 'pipe'] });
+const srv = spawn(process.execPath, [path.join(root, 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), BOT_THINK_MS: '20' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let srvErr = '';
 srv.stderr.on('data', (d) => { srvErr += d; });
 await new Promise((res) => { srv.stdout.on('data', (d) => { if (/listening/.test(d)) res(); }); setTimeout(res, 2500); });

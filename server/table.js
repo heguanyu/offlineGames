@@ -9,7 +9,7 @@
 import { Game, PHASE } from '../games/mahjong-tianjin/engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong } from '../games/mahjong-tianjin/ai.js';
 
-const BOT_THINK_MS = 700;       // bot "thinking" pace
+const BOT_THINK_MS = +process.env.BOT_THINK_MS || 700; // bot "thinking" pace (tests set it low)
 const TURN_TIMEOUT_MS = 30000;  // auto-act if a human doesn't move
 const LZ_TIMEOUT_MS = 15000;    // auto-不拉 if a human doesn't answer 拉庄
 const NEXT_TIMEOUT_MS = 25000;  // auto-advance if a human doesn't click 下一局
@@ -61,7 +61,8 @@ export class Table {
       seatKinds: this.seats.map((s) => s.kind),
     };
     if (!g) return base;
-    const hand = (p) => (p === seat ? g.hands[p].slice() : g.hands[p].map(() => -1)); // -1 = hidden
+    // own hand always; everyone's revealed at the showdown (OVER) for the result modal.
+    const hand = (p) => (p === seat || g.phase === PHASE.OVER ? g.hands[p].slice() : g.hands[p].map(() => -1));
     return {
       ...base,
       phase: g.phase, turn: g.turn, dealer: g.dealer, wilds: g.wilds, indicator: g.indicator,
@@ -78,7 +79,15 @@ export class Table {
 
   pushEvent(ev) { for (const s of this.humans()) this.emit(s, { type: 'game', ev, view: this.viewFor(s) }); }
   // reconnection: re-send the full current state to one seat
-  resync(seat) { if (this.isHuman(seat)) this.emit(seat, { type: 'game', ev: { t: 'sync' }, view: this.viewFor(seat) }); }
+  // reconnection: re-send the full state, RE-EMITTING any request pending from this seat so
+  // a returning client can still answer (its 拉庄 prompt, or its turn).
+  resync(seat) {
+    if (!this.isHuman(seat)) return;
+    let ev = { t: 'sync' };
+    if (this._lz && this._lz.need.has(seat)) ev = { t: 'lazhuang', dealer: this.dealer };
+    else if (this._waiting && this._waiting.seat === seat) ev = { t: 'await', who: this._waiting.kind, seat };
+    this.emit(seat, { type: 'game', ev, view: this.viewFor(seat) });
+  }
 
   // ---- action routing (called from index.js for the seat's socket) ----------
   onAction(seat, msg) {

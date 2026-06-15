@@ -75,12 +75,12 @@ async function run() {
   ok(b3.getState().dealer === 0, 'the latest startHand wins; the abandoned one does not clobber it');
 
   // --- RemoteBackend: same contract, stubs not implemented --------------------
-  console.log('RemoteBackend stub:');
-  const r = createBackend({ mode: 'remote' });
-  for (const m of ['onEvent', 'getState', 'startHand', 'discard', 'claim', 'pass', 'selfKong', 'declareWin', 'decideLaZhuang', 'dispose'])
+  // RemoteBackend now implemented (online play); the full drive is in mahjong-online-client-test.
+  console.log('RemoteBackend shape:');
+  const r = createBackend({ mode: 'remote', url: 'ws://localhost:1', uid: 'x' });
+  for (const m of ['onEvent', 'getState', 'connect', 'dispose', 'discard', 'claim', 'pass', 'selfKong', 'declareWin', 'decideLaZhuang', 'next'])
     ok(typeof r[m] === 'function', `RemoteBackend implements ${m}()`);
-  let threw = false; try { await r.startHand({}); } catch { threw = true; }
-  ok(threw, 'RemoteBackend.startHand throws (stub — the server call goes here)');
+  ok(r.getState() === null, 'RemoteBackend.getState() is null before any frame');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
