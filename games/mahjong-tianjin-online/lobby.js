@@ -112,50 +112,57 @@ function render() {
   if (document.activeElement !== $('name-input')) $('name-input').value = state.you.name || name;
   const root = $('lobby');
   root.innerHTML = '';
-  const mine = state.you.seat;
-  state.tables.forEach((t, ti) => {
-    const atThisTable = mine && mine.table === ti;
-    const card = document.createElement('div');
-    card.className = 'table-card' + (t.status === 'playing' ? ' playing' : '') + (atThisTable ? ' mine' : '');
+  const t = state.tables[0];
+  if (!t) return;
+  const mine = state.you.seat;          // we only ever have one table now
+  const atTable = mine && mine.table === 0;
 
-    const title = document.createElement('div');
-    title.className = 'table-title';
-    title.innerHTML = `<b>第 ${ti + 1} 桌</b>` + (t.status === 'playing' ? ' · 游戏中' : '');
-    card.appendChild(title);
-
-    const grid = document.createElement('div'); grid.className = 'table-grid';
-    const square = document.createElement('div'); square.className = 'square'; square.textContent = '🀄';
-    grid.appendChild(square);
-
-    t.seats.forEach((seat, si) => {
-      const isMe = atThisTable && mine.seat === si;
-      const chair = document.createElement('div');
-      chair.dataset.table = ti; chair.dataset.seat = si;
-      chair.className = `chair ${POS[si]}` +
-        (!seat ? ' empty' : seat.kind === 'bot' ? ' bot' : '') +
-        (isMe ? ' me' : '') + (t.status === 'playing' ? ' playing' : '');
-      const who = !seat ? '空位' : seat.kind === 'bot' ? '🤖 机器人' : seat.name;
-      chair.innerHTML = `<span class="wind">${WINDS[si]}</span><span class="who">${esc(who)}</span>` +
-        (seat && seat.kind === 'human'
-          ? `<span class="ready ${seat.ready ? 'yes' : 'no'}">${seat.ready ? '✓ 已准备' : '未准备'}</span>` : '');
-      chair.onclick = (ev) => onChairClick(ev, ti, si);
-      grid.appendChild(chair);
-    });
-    card.appendChild(grid);
-
-    if (atThisTable && t.status === 'waiting') {
-      const actions = document.createElement('div'); actions.className = 'table-actions';
-      const leave = document.createElement('button'); leave.className = 'btn leave'; leave.textContent = '离开桌子';
-      leave.onclick = () => send({ type: 'leave' });
-      const ready = document.createElement('button');
-      ready.className = 'btn ready' + (state.you.ready ? ' on' : '');
-      ready.textContent = state.you.ready ? '取消准备' : '我准备好了';
-      ready.onclick = () => send({ type: 'ready', ready: !state.you.ready });
-      actions.append(leave, ready);
-      card.appendChild(actions);
-    }
-    root.appendChild(card);
+  // ---- the table: a felt surface with four chairs (东南西北) around it ----
+  const col = document.createElement('div'); col.className = 'table-col';
+  const tbl = document.createElement('div'); tbl.className = 'mj-table' + (t.status === 'playing' ? ' playing' : '') + (atTable ? ' mine' : '');
+  const felt = document.createElement('div'); felt.className = 'felt';
+  felt.innerHTML = `<span class="felt-mark">🀄</span><span class="felt-status">${t.status === 'playing' ? '游戏中' : '等待开局'}</span>`;
+  tbl.appendChild(felt);
+  t.seats.forEach((seat, si) => {
+    const isMe = atTable && mine.seat === si;
+    const chair = document.createElement('div');
+    chair.dataset.table = 0; chair.dataset.seat = si;
+    chair.className = `chair ${POS[si]}` + (!seat ? ' empty' : seat.kind === 'bot' ? ' bot' : '') + (isMe ? ' me' : '') + (t.status === 'playing' ? ' playing' : '');
+    const who = !seat ? '空位' : seat.kind === 'bot' ? '🤖 机器人' : seat.name;
+    chair.innerHTML = `<span class="seat-pad"><span class="wind">${WINDS[si]}</span><span class="who">${esc(who)}</span>` +
+      (seat && seat.kind === 'human' ? `<span class="ready ${seat.ready ? 'yes' : 'no'}">${seat.ready ? '✓ 已准备' : '未准备'}</span>` : '') + `</span>`;
+    chair.onclick = (ev) => onChairClick(ev, 0, si);
+    tbl.appendChild(chair);
   });
+  col.appendChild(tbl);
+
+  if (atTable && t.status === 'waiting') {
+    const actions = document.createElement('div'); actions.className = 'table-actions';
+    const leave = document.createElement('button'); leave.className = 'btn leave'; leave.textContent = '离开桌子';
+    leave.onclick = () => send({ type: 'leave' });
+    const ready = document.createElement('button');
+    ready.className = 'btn ready' + (state.you.ready ? ' on' : '');
+    ready.textContent = state.you.ready ? '取消准备' : '我准备好了';
+    ready.onclick = () => send({ type: 'ready', ready: !state.you.ready });
+    actions.append(leave, ready);
+    col.appendChild(actions);
+  } else {
+    const hint = document.createElement('div'); hint.className = 'table-hint';
+    hint.textContent = t.status === 'playing' ? '本桌正在游戏中…' : '点击空位坐下，或添加机器人';
+    col.appendChild(hint);
+  }
+  root.appendChild(col);
+
+  // ---- lifetime leaderboard (server-kept, keyed by uid) ----
+  const lb = document.createElement('aside'); lb.id = 'leaderboard';
+  const rows = state.leaderboard || [];
+  lb.innerHTML = `<h2>🏆 排行榜</h2>` + (rows.length
+    ? `<table class="lb-table"><thead><tr><th>#</th><th>玩家</th><th>总分</th><th>锅</th></tr></thead><tbody>` +
+      rows.map((r, i) => `<tr class="${r.mine ? 'me' : ''}"><td class="lb-rank">${i + 1}</td><td class="lb-name">${esc(r.name)}</td>` +
+        `<td class="lb-pts ${r.total > 0 ? 'pos' : r.total < 0 ? 'neg' : 'zero'}">${r.total > 0 ? '+' : ''}${r.total}</td><td class="lb-pots">${r.pots}</td></tr>`).join('') +
+      `</tbody></table>`
+    : `<p class="lb-empty">还没有人打完一锅 — 打完一锅即可上榜！</p>`);
+  root.appendChild(lb);
 }
 
 // ---- game start: hand off to the game page (it connects with the same uid → the server

@@ -9,6 +9,8 @@
 //
 // Run locally:  PORT=8090 node index.js
 import http from 'node:http';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Table } from './table.js';
 
@@ -17,8 +19,31 @@ const ALLOWED = (process.env.ALLOWED_ORIGINS ||
   'https://heguanyu.github.io,http://localhost:8090,http://127.0.0.1:8090,http://localhost:8137')
   .split(',').map((s) => s.trim());
 
-const TABLES = 4, SEATS = 4;
+const TABLES = 1, SEATS = 4;
 const WIND = ['东', '南', '西', '北'];
+
+// ---- persistent lifetime scores -------------------------------------------
+// Keyed by the player's uid; each finished 锅 adds its per-seat score. Persisted to a JSON
+// file (set SCORES_FILE on Azure to a path under /home so it survives restarts/redeploys).
+const SCORES_FILE = process.env.SCORES_FILE || fileURLToPath(new URL('./scores.json', import.meta.url));
+let scoreBook = {}; // uid → { name, total, pots }
+try { const raw = JSON.parse(fs.readFileSync(SCORES_FILE, 'utf8')); if (raw && typeof raw === 'object') scoreBook = raw; } catch {}
+let saveTimer = null;
+function saveScores() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(SCORES_FILE, JSON.stringify(scoreBook)); } catch {} }, 200); }
+// Record one finished 锅: each human seat's final score is added to their lifetime total.
+function recordPot(seats, finalScores) {
+  for (let s = 0; s < SEATS; s++) {
+    const seat = seats[s];
+    if (seat && seat.kind === 'human' && seat.uid) {
+      const rec = scoreBook[seat.uid] || (scoreBook[seat.uid] = { name: seat.name, total: 0, pots: 0 });
+      rec.name = seat.name || rec.name; rec.total += finalScores[s] | 0; rec.pots += 1;
+    }
+  }
+  saveScores();
+}
+const leaderboard = (uid) => Object.entries(scoreBook)
+  .sort((a, b) => b[1].total - a[1].total).slice(0, 50)
+  .map(([k, r]) => ({ name: r.name, total: r.total, pots: r.pots, mine: k === uid }));
 
 // ---- authoritative state --------------------------------------------------
 // seat: null | { kind:'human', uid, name, ready } | { kind:'bot' }
@@ -54,6 +79,7 @@ function lobbyFor(uid) {
         : seat.kind === 'bot' ? { kind: 'bot' }
         : { kind: 'human', name: seat.name, ready: !!seat.ready }),
     })),
+    leaderboard: leaderboard(uid),
   };
 }
 const broadcastLobby = () => { for (const c of clients.values()) send(c.ws, lobbyFor(c.uid)); };
@@ -68,11 +94,13 @@ function maybeStart(t) {
   broadcastLobby();
   // route each seat's frames to that player's current socket (reconnection-safe)
   const emit = (seatIdx, msg) => { const gs = gameSeats[seatIdx]; if (gs.kind === 'human') send(uidWs.get(gs.uid), msg); };
-  t.game = new Table(t.id, gameSeats, emit, () => onPotOver(t));
+  t.game = new Table(t.id, gameSeats, emit, (finalScores) => onPotOver(t, gameSeats, finalScores));
 }
 
-// 锅 finished → back to the lobby: same occupants, humans un-readied for a rematch.
-function onPotOver(t) {
+// 锅 finished → persist each player's lifetime score, then back to the lobby (same occupants,
+// humans un-readied for a rematch).
+function onPotOver(t, gameSeats, finalScores) {
+  if (gameSeats && finalScores) recordPot(gameSeats, finalScores);
   if (t.game) t.game.dispose();
   t.game = null;
   t.status = 'waiting';

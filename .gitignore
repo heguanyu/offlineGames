@@ -13,3 +13,6 @@ test/cl/
 test/*.log
 test/_*.mjs
 test/_commitmsg.txt
+
+# online server runtime data (lifetime scores)
+server/scores.json

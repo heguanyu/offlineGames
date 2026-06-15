@@ -69,6 +69,7 @@ export class Table {
       scores: g.scores, wallCount: g.wall.length, laZhuang: g.laZhuang, dealerDouble: g.dealerDouble,
       hands: [0, 1, 2, 3].map(hand),
       melds: g.melds, discards: g.discards, discardLog: g.discardLog,
+      lastDiscard: g.lastDiscard || null, // public: who discarded the tile on the table (for the claim hint)
       drawnTile: seat === g.turn ? g.drawnTile : null,
       claim: g.claim ? (g.claim.player === seat ? g.claim : { player: g.claim.player }) : null,
       canWin: seat === g.turn && !!g.selfDrawWin,
@@ -127,7 +128,7 @@ export class Table {
       const nd = this.game.nextDealer();
       if (nd === 0 && this.dealer !== 0) {
         this.rounds.push({ wind: this.prevailingWind, scores: this.scores.slice() });
-        if (this.prevailingWind === 3) { this.pushEvent({ t: 'potOver', rounds: this.rounds, scores: this.scores }); this.onPotOver(); return; }
+        if (this.prevailingWind === 3) { this.pushEvent({ t: 'potOver', rounds: this.rounds, scores: this.scores }); this.onPotOver(this.scores.slice()); return; }
         this.prevailingWind = (this.prevailingWind + 1) % 4;
       }
       this.dealer = nd;

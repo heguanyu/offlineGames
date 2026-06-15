@@ -57,28 +57,28 @@ try {
   if (!(await seatText(B, 0, 0)).includes('阿强')) throw new Error('cross-client sync failed');
   console.log('B sees A seated (cross-client push)');
 
-  // A readies FIRST while seats are still empty — must NOT start yet.
+  // add/remove bot (the single table, while waiting): B adds a bot to seat 2 then removes it.
+  await B.click('.chair[data-table="0"][data-seat="2"]');
+  await clickMenu(B, '加机器人');
+  await B.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="2"]').classList.contains('bot'), { timeout: 4000 });
+  await B.click('.chair[data-table="0"][data-seat="2"]');
+  await clickMenu(B, '移除机器人');
+  await B.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="2"]').classList.contains('empty'), { timeout: 4000 });
+  console.log('add/remove bot OK');
+
+  // A readies FIRST while seats are still empty — must NOT start (no navigation).
   await A.evaluate(() => [...document.querySelectorAll('.btn.ready')].find((b) => b.textContent.includes('准备')).click());
   await A.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="0"] .ready.yes'), { timeout: 4000 });
-  if (await vis(A, 'start-overlay')) throw new Error('game started before the table was full');
+  await new Promise((r) => setTimeout(r, 250));
+  if (!(await A.evaluate(() => location.pathname)).includes('mahjong-tianjin-online')) throw new Error('game started before the table was full');
   console.log('A readied (table not full → no start)');
 
   // Then fill with bots. The table completes on the LAST bot, which must re-trigger the
-  // start check (regression: addBot used to skip it). → gameStart hands A off to the game page.
+  // start check (regression: addBot used to skip it). → A is handed off to the game page.
   for (const s of [1, 2, 3]) { await A.click(`.chair[data-table="0"][data-seat="${s}"]`); await clickMenu(A, '加机器人'); await new Promise((r) => setTimeout(r, 150)); }
   await A.waitForFunction(() => location.pathname.includes('/mahjong-tianjin/'), { timeout: 8000 }); // navigated to the game
-  // B should now see table 0 as 游戏中 (playing)
-  await B.waitForFunction(() => document.querySelector('.table-card').classList.contains('playing'), { timeout: 4000 });
+  await B.waitForFunction(() => document.querySelector('.mj-table.playing'), { timeout: 4000 });
   console.log('all ready → A entered the game; table marked 游戏中');
-
-  // remove-bot path: a fresh table, add then remove a bot
-  await B.click('.chair[data-table="1"][data-seat="2"]');
-  await clickMenu(B, '加机器人');
-  await B.waitForFunction(() => document.querySelector('.chair[data-table="1"][data-seat="2"]').classList.contains('bot'));
-  await B.click('.chair[data-table="1"][data-seat="2"]');
-  await clickMenu(B, '移除机器人');
-  await B.waitForFunction(() => document.querySelector('.chair[data-table="1"][data-seat="2"]').classList.contains('empty'));
-  console.log('add/remove bot OK');
 
   if (errors.length) throw new Error('runtime errors:\n  ' + errors.join('\n  '));
   console.log('MAHJONG ONLINE LOBBY E2E PASS');
