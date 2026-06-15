@@ -1,0 +1,37 @@
+name: Deploy server to Azure
+
+# Manual trigger (Actions tab → Run workflow), plus auto-deploy when /server changes on
+# these branches. Adding/editing THIS file does not trigger a deploy (only server/** does),
+# so it's safe to land before the publish-profile secret exists.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, mahjong-online]
+    paths: ['server/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # Build production deps in the runner so the package is self-contained (no reliance
+      # on Azure's Oryx build). `ws`'s native deps are optional, so this is pure-JS safe.
+      - name: Install production deps
+        working-directory: server
+        run: npm install --omit=dev --no-audit --no-fund
+      - name: Deploy /server to the Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: mahjongonline
+          package: server
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
