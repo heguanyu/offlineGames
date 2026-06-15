@@ -1,8 +1,9 @@
 // Tianjin mahjong — UI glue: drives the 3D scene (scene.js), the HTML HUD, input
 // (touch raycast / keyboard / Xbox controller) and the turn orchestration that
 // paces the AI so the human can follow along.
-import { Game, PHASE, tileName } from './engine.js';
-import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
+import { PHASE, tileName } from './engine.js';
+import { LEVELS, LEVEL_NAMES } from './ai.js';
+import { createBackend } from './backend.js';
 import { MahjongScene } from './scene.js';
 import { MahjongScene2D } from './scene2d.js';
 import { Sound } from './sound.js';
@@ -53,15 +54,20 @@ const DISCARD_DEMO_MS = 900;  // 0.4s rise + ~0.5s halt at the center
 const DISCARD_SETTLE_MS = 220; // covers the ~0.18s fall into the pool
 let fastMode = localStorage.getItem('mahjong-fast') !== '0'; // checked (on) by default
 
+// `game` is the READ-ONLY GameView handed back by the backend (see backend.js) — the UI
+// renders it but never mutates it; every move goes through `backend`. `backend` is the
+// calculation layer (local engine+AI today, a remote server tomorrow), created via the
+// factory and driven through events.
 let game = null;
+let backend = null;
 let scene = null;             // MahjongScene (3D table)
 let level = LEVELS.NORMAL;
 let session = loadSession();   // { scores, dealer, prevailingWind, hand }
 let selIndex = 0;              // cursor into the human's selectable (non-wild) tiles
 let drawnWildSelected = false; // a freshly-drawn 混儿 is the lifted tile (can't discard)
 let focusIndex = 0;           // cursor into action-bar buttons (claims)
-let pendingTimer = null;
 let lastLogLen = 0;
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 let dealing = false;          // the initial-deal animation is running (input is held)
 let animating = false;        // a bot's discard fly is playing — tick + input are held
 let isPortrait = false;        // device held portrait → page force-rotated to landscape
@@ -294,55 +300,75 @@ function flushLogToasts() {
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
-function tick() {
-  render();
-  if (game.phase === PHASE.OVER) { showResult(); return; }
+// The backend pushes one event per move; this async handler is the whole UI-side
+// orchestration that used to be the synchronous tick() loop. Each case renders + plays
+// the matching animation/sound and AWAITS it, so the backend (local sim or remote server)
+// is held until the table catches up before sending the next event. The 碰/杠/自摸/荒 toasts
+// + voices ride the engine log and flush inside render(), so most cases just call render().
+async function onBackendEvent(ev) {
+  const st = backend.getState();
+  if (st) game = st;
+  switch (ev.type) {
+    case 'lazhuang': // the human's BLIND 拉庄 choice, before the deal
+      if (FAST) { backend.decideLaZhuang(lzTestChoice); return; } // tests skip the panel
+      showLaZhuangPanel(ev.dealer, (yes) => backend.decideLaZhuang(yes));
+      return;
 
-  if (game.phase === PHASE.AWAIT_CLAIM) {
-    if (game.claim.player === HUMAN) { focusIndex = 0; render(); return; } // wait for human
-    schedule(() => {
-      const c = game.claim;
-      const dec = chooseClaim(game, c.player, c, level);
-      if (dec) {
-        game.claimDiscard(dec);
-        if (scene) { // show the bot's 碰/杠 off, then HOLD all logic until it settles
-          scene.beginClaimDemo(c.player, CLAIM_DEMO_MS);
-          render();                                        // lift the meld + play the voice now
-          schedule(tick, CLAIM_DEMO_MS + CLAIM_SETTLE_MS); // pause draws/turns until the animation ends
-          return;
-        }
-      } else game.passClaim();
-      tick();
-    }, AI_DELAY);
-    return;
-  }
-
-  if (game.phase === PHASE.AWAIT_DISCARD) {
-    if (game.turn === HUMAN) { ensureSelection(); render(); return; } // wait for human (胡 button or discard)
-    schedule(() => {
-      const p = game.turn;
-      if (game.selfDrawWin) { game.declareWin(); tick(); return; } // bots take their self-draw win
-      const kong = chooseSelfKong(game, p, level);
-      if (kong !== null) { game.selfKong(p, kong); tick(); return; }
-      const dt = chooseDiscard(game, p, level);
-      game.discard(p, dt);
-      sound.discard();
-      if (!fastMode) sound.say(tileName(dt), p); // speak the discarded tile in the bot's voice (not in fast mode)
-      if (scene && !FAST && !fastMode) { // fly the discard to the center halt, hold, then drop to pool
-        animating = true;
-        scene.beginDiscardDemo(p, game.discardLog.length - 1, DISCARD_DEMO_MS);
-        render();                                              // place the flying tile; claim UI suppressed
-        schedule(() => { animating = false; tick(); }, DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
-        return;
+    case 'deal':
+      selIndex = 0; focusIndex = 0; drawnWildSelected = false; lastLogLen = 0;
+      saveSession();
+      if (scene && !FAST) { // serve the tiles from the wall, then play
+        dealing = true;
+        renderHud();
+        $('action-bar').innerHTML = ''; $('ting-center').innerHTML = '';
+        $('hand-hint').textContent = '发牌中…';
+        await new Promise((res) => scene.beginDeal(game, res, () => sound.select()));
+        dealing = false;
       }
-      tick();
-    }, AI_DELAY);
-  }
-}
+      render();
+      return;
 
-function schedule(fn, delay) {
-  clearTimeout(pendingTimer);
-  pendingTimer = setTimeout(fn, delay);
+    case 'discard': {
+      const human = ev.player === HUMAN;
+      sound.discard();
+      if (human) selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
+      else if (!fastMode) sound.say(tileName(ev.tile), ev.player); // bot speaks its discard
+      if (scene && !FAST && !fastMode) { // fly to the center halt, hold, drop into the pool
+        if (human) sound.say(tileName(ev.tile), HUMAN);
+        animating = true;
+        scene.beginDiscardDemo(ev.player, ev.discardIndex, DISCARD_DEMO_MS);
+        render(); // place the flying tile; claim UI + the human's drawn tile stay held
+        await delay(DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
+        animating = false;
+      }
+      render();
+      return;
+    }
+
+    case 'claim':
+      if (ev.player === HUMAN) { selIndex = 0; drawnWildSelected = false; } // then they discard
+      else if (scene) { // show the bot's 碰/杠 lifted, hold until it settles
+        scene.beginClaimDemo(ev.player, CLAIM_DEMO_MS);
+        render();
+        await delay(CLAIM_DEMO_MS + CLAIM_SETTLE_MS);
+      }
+      render();
+      return;
+
+    case 'selfKong':
+      render(); // the 杠 toast + voice flush from the engine log
+      return;
+
+    case 'await': // the human must act: a claimable discard, or their own turn
+      if (ev.who === 'claim') focusIndex = 0; else ensureSelection();
+      render();
+      return;
+
+    case 'over':
+      render();      // flush the 自摸 / 荒牌 toast + win/lose sound from the log
+      showResult();
+      return;
+  }
 }
 
 function ensureSelection() {
@@ -372,30 +398,19 @@ function onPickTile(renderedIdx) {
 }
 
 function discardSelected() {
-  if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
+  if (!game || game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   if (drawnWildSelected) { toast('混儿不能打出'); return; } // the lifted tile is the drawn 混儿
   const hand = renderedHand();
   const sel = selectableHandIndices();
   const id = hand[sel[selIndex]];
   if (id == null || game.isWild(id)) return;
-  game.discard(HUMAN, id);
-  sound.discard();
-  selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
-  if (scene && !FAST && !fastMode) { // the player's discard flies + halts too, holding the tick before bots act
-    sound.say(tileName(id), HUMAN);
-    animating = true;
-    scene.beginDiscardDemo(HUMAN, game.discardLog.length - 1, DISCARD_DEMO_MS);
-    render();
-    schedule(() => { animating = false; tick(); }, DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
-    return;
-  }
-  tick();
+  backend.discard(id); // the 'discard' event animates it, then the backend drives the bots
 }
 
 function doDeclareWin() {
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
-  if (game.declareWin()) tick();
+  backend.declareWin();
 }
 // When the freshly-drawn tile finishes its reveal, auto-select it (ready to discard).
 // A drawn 混儿 is selected too (lifted/highlighted) but isn't discardable — it stays
@@ -414,22 +429,17 @@ function selectDrawnTile() {
 function doSelfKong(kind) {
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD) return;
-  game.selfKong(HUMAN, kind);
-  tick();
+  backend.selfKong(kind);
 }
 function doClaim(type) {
   if (!isClaimPhase()) return;
   if (!game.claim.options.includes(type)) return;
-  game.claimDiscard(type);
-  // After 碰/杠 the player must discard — default-select the first non-混 tile. (A 杠's
-  // replacement draw re-fires selectDrawnTile afterwards, which overrides this.)
-  selIndex = 0; drawnWildSelected = false;
-  tick();
+  // After 碰/杠 the human must discard; the 'claim'/'await' events reset the selection.
+  backend.claim(type);
 }
 function doPass() {
   if (!isClaimPhase()) return;
-  game.passClaim();
-  tick();
+  backend.pass();
 }
 
 // ---------------------------------------------------------------------------
@@ -627,63 +637,26 @@ function nextHand() {
 }
 
 function startHand() {
-  clearTimeout(pendingTimer);
   if (!scene) { scene = new Renderer($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
-  // 拉庄 is a BLIND double-down decided before any tile is dealt: resolve who challenges
-  // the 庄, then build + deal the hand with that set baked in.
-  askLaZhuang(session.dealer, beginHand);
-}
-
-// Build the Game (which deals) with the resolved 拉庄 challengers, then run the deal + play.
-function beginHand(laZhuang) {
-  game = new Game({
-    dealer: session.dealer,
-    prevailingWind: session.prevailingWind,
-    scores: session.scores,
-    laZhuang,
-    seatBase: session.seatBase, // 座风 fixed for the 锅 (only the 庄 moves)
+  if (!backend) { backend = createBackend({ mode: 'local', rng: Math.random }); backend.onEvent(onBackendEvent); }
+  backend.thinkDelay = AI_DELAY; // bot "think" pacing — the online-latency stand-in
+  // Hand off to the backend: it resolves 拉庄 (emitting 'lazhuang' for the human to
+  // answer), deals (emits 'deal'), then drives the opponents — the UI reacts in
+  // onBackendEvent. The 锅/圈 progression + persistence stay UI-side (nextHand/session).
+  backend.startHand({
+    dealer: session.dealer, prevailingWind: session.prevailingWind,
+    scores: session.scores, seatBase: session.seatBase, level,
   });
-  lastLogLen = 0;
-  selIndex = 0; focusIndex = 0; drawnWildSelected = false;
-  saveSession();
-  // Deal the hand with a serving flourish (tiles fly from the wall), then play.
-  // Under ?fast=1 (tests) skip straight to play so the timing stays tight.
-  if (scene && !FAST) {
-    dealing = true;
-    renderHud();
-    $('action-bar').innerHTML = '';
-    $('ting-center').innerHTML = '';
-    $('hand-hint').textContent = '发牌中…';
-    scene.beginDeal(game, () => { dealing = false; tick(); }, () => sound.select());
-  } else {
-    tick();
-  }
 }
 
 // ---------------------------------------------------------------------------
-// 拉庄 (blind double-down) — decide which non-庄 seats challenge the 庄 this hand.
-// Decoupled from settlement (engine owns the math) and from the nameplates (the badge
-// is shared via seatBadgeHtml): bots route through shouldBotLaZhuang, so giving them a
-// real decision later is a one-function change.
+// 拉庄 (blind double-down) panel — the UI half only. The DECISION (which bots 拉庄, and
+// asking the human) lives in the backend (shouldBotLaZhuang); here we just show the panel
+// on a 'lazhuang' event and answer with backend.decideLaZhuang(). The ⚔️ badge is shared
+// via seatBadgeHtml, driven by the engine's laZhuang set.
 // ---------------------------------------------------------------------------
 let lzCallback = null, lzFocus = 1; // panel: 0 = 拉庄, 1 = 不拉 (default, no accidental double)
 let lzTestChoice = false;           // FAST/e2e override for the human's answer (no panel in tests)
-
-// Whether bot `seat` 拉庄s against `dealer`. AI hook — bots never 拉庄 yet, but the
-// decision flows through here so the future logic lands in one spot.
-function shouldBotLaZhuang(seat, dealer) { return false; }
-
-// Resolve the 拉庄 set for the hand, then call done(challengers:[seats]). Bots decide
-// synchronously; the human is asked via the panel (skipped when they're the 庄, or in
-// FAST tests where lzTestChoice stands in for the click).
-function askLaZhuang(dealer, done) {
-  const challengers = [];
-  for (let p = 0; p < 4; p++) if (p !== dealer && p !== HUMAN && shouldBotLaZhuang(p, dealer)) challengers.push(p);
-  const finish = (humanYes) => { if (humanYes) challengers.push(HUMAN); done(challengers.sort((a, b) => a - b)); };
-  if (dealer === HUMAN) { finish(false); return; }     // the 庄 can't 拉庄 itself
-  if (FAST) { finish(lzTestChoice); return; }           // tests skip the blocking panel
-  showLaZhuangPanel(dealer, finish);
-}
 
 function showLaZhuangPanel(dealer, cb) {
   lzCallback = cb; lzFocus = 1;
@@ -723,11 +696,11 @@ $('scene').addEventListener('pointermove', (e) => {
 });
 
 function newGame() {
-  // Drop the finished game first: saveSession() derives session.scores from the
-  // live game, so leaving the old one around would overwrite the reset scores.
+  // Drop the finished view; the next 'deal' installs the fresh one. (Starting a new hand
+  // bumps the backend's generation, so any in-flight opponent loop abandons quietly.)
   game = null;
   session = freshSession();
-  startHand(); // builds a fresh game from the zeroed session, then persists it
+  startHand(); // backend deals from the zeroed session; the 'deal' event persists it
 }
 
 // ---------------------------------------------------------------------------
@@ -853,6 +826,7 @@ function onAction(name) {
   }
 
   if (dealing || animating) return; // serving tiles / a discard fly is playing — hold input
+  if (!game) { if (name === 'menu') openMenu(); return; } // between hands (backend dealing)
 
   if (isClaimPhase()) {
     const btns = [...$('action-bar').children];
@@ -1077,7 +1051,7 @@ if (new URLSearchParams(location.search).get('fast')) {
       game.scores = session.rounds[3].scores.slice();
       showFinalBoard();
     },
-    // e2e: deal a real hand with the human 拉庄 vs 庄 = 下家(1) (exercises askLaZhuang).
+    // e2e: deal a real hand with the human 拉庄 vs 庄 = 下家(1) (exercises the backend 拉庄 flow).
     dealLz: () => { lzTestChoice = true; session.dealer = 1; startHand(); },
     // e2e: append the live game's scores to 历史战绩 (the 锅-completion record path).
     recordPot: () => recordPotHistory(),
