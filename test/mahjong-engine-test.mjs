@@ -3,7 +3,7 @@
 import {
   wildKindsFromIndicator, nextInCycle, tileName, isWinningHand, analyzeWin,
   Game, PHASE, freshTiles,
-} from '../games/mahjong/engine.js';
+} from '../games/mahjong-tianjin/engine.js';
 
 let passed = 0, failed = 0;
 function ok(cond, msg) {

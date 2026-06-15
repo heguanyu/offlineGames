@@ -54,6 +54,13 @@ const DISCARD_DEMO_MS = 900;  // 0.4s rise + ~0.5s halt at the center
 const DISCARD_SETTLE_MS = 220; // covers the ~0.18s fall into the pool
 let fastMode = localStorage.getItem('mahjong-fast') !== '0'; // checked (on) by default
 
+// Online mode: ?online=1 means this page is driven by the remote server (the lobby navigates
+// here once a table starts). EVERYTHING online is gated on ONLINE; with it unset the page is
+// the offline single-player game, byte-for-byte unchanged.
+const ONLINE = !!new URLSearchParams(location.search).get('online');
+const ONLINE_URL = new URLSearchParams(location.search).get('server') ||
+  ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? `ws://${location.hostname}:8090` : 'wss://mahjongonline.azurewebsites.net');
+
 // `game` is the READ-ONLY GameView handed back by the backend (see backend.js) — the UI
 // renders it but never mutates it; every move goes through `backend`. `backend` is the
 // calculation layer (local engine+AI today, a remote server tomorrow), created via the
@@ -139,8 +146,8 @@ function renderHud() {
   // ---- header ----
   // 圈 (prevailing wind) · 庄 (the 庄's fixed 座风 — only the 庄 moves within the 锅) · 难度
   $('round-info').innerHTML =
-    `<b>${WIND[session.prevailingWind]}圈</b> · <b>${WIND[game.seatWind(game.dealer)]}庄</b> · ` +
-    `难度 <b>${LEVEL_NAMES[level]}</b>`;
+    `<b>${WIND[game.prevailingWind]}圈</b> · <b>${WIND[game.seatWind(game.dealer)]}庄</b> · ` +
+    (ONLINE ? '联机' : `难度 <b>${LEVEL_NAMES[level]}</b>`);
   renderScores();
 
   // ---- the round's two 混儿 (e.g. 7万 + 8万), shown with their real faces ----
@@ -283,6 +290,7 @@ function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.claim 
 // Toasts for 碰 / 杠 / 自摸 / 荒
 // ---------------------------------------------------------------------------
 function flushLogToasts() {
+  if (!game || !game.log) return; // online views carry no engine log (toasts ride events instead)
   for (let i = lastLogLen; i < game.log.length; i++) {
     const line = game.log[i];
     // the claim log line starts with the seat's WIND (东/南/西/北) — map it back to the
@@ -316,7 +324,7 @@ async function onBackendEvent(ev) {
 
     case 'deal':
       selIndex = 0; focusIndex = 0; drawnWildSelected = false; lastLogLen = 0;
-      saveSession();
+      if (!ONLINE) saveSession(); // online: the server is the source of truth, nothing to persist
       if (scene && !FAST) { // serve the tiles from the wall, then play
         dealing = true;
         renderHud();
@@ -367,6 +375,18 @@ async function onBackendEvent(ev) {
     case 'over':
       render();      // flush the 自摸 / 荒牌 toast + win/lose sound from the log
       showResult();
+      return;
+
+    // ---- online only ----
+    case 'sync': // (re)joined a game in progress, or reconnected — render the current state
+      lastLogLen = game.log ? game.log.length : 0; // online views carry no log; suppress toasts
+      ensureSelection();
+      render();
+      return;
+
+    case 'potOver': // the server finished the 锅 → final standings (server-authoritative)
+      $('result-overlay').classList.add('hidden');
+      showFinalBoard({ scores: ev.scores, rounds: ev.rounds });
       return;
   }
 }
@@ -549,13 +569,14 @@ function showResult() {
       winEl.appendChild(faceTileEl(r.winningTile, { lg: true, wild: game.isWild(r.winningTile) }));
       winEl.classList.add('show');
     }
-    renderWinningHand(handEl, w, r);
+    if (r.decomp) renderWinningHand(handEl, w, r); // online: server omits decomp → skip the pattern
     payEl.innerHTML = breakdownHtml(r);
   }
   renderSeatHands(game, (id) => game.isWild(id)); // reveal every seat's hand on its border
-  saveSession();
-  // If this hand closes the 北圈, the 锅 is finished — 下一局 leads to the 最终成绩.
-  const endsPot = game.nextDealer() === 0 && game.dealer !== 0 && session.prevailingWind === 3;
+  if (!ONLINE) saveSession();
+  // If this hand closes the 北圈, the 锅 is finished — 下一局 leads to the 最终成绩. Online: the
+  // server decides and sends 'potOver', so the button is always 下一局.
+  const endsPot = !ONLINE && game.nextDealer() === 0 && game.dealer !== 0 && session.prevailingWind === 3;
   $('next-hand-btn').textContent = endsPot ? '查看总成绩 🏆' : '下一局';
   ov.classList.remove('hidden');
   resultFocus = 0; focusResultBtn(); // 下一局 focused by default
@@ -616,6 +637,7 @@ function breakdownHtml(r) {
 
 function nextHand() {
   $('result-overlay').classList.add('hidden');
+  if (ONLINE) { backend.next(); return; } // the server advances the match (or sends 'potOver')
   const nextDealer = game.nextDealer();
   // A 圈 ends when the 庄 button laps back to seat 0 (东). Four 圈 (东南西北) make a
   // 锅: when the 北圈 (prevailingWind 3) laps, the 锅 is over → final scoreboard.
@@ -647,6 +669,17 @@ function startHand() {
     dealer: session.dealer, prevailingWind: session.prevailingWind,
     scores: session.scores, seatBase: session.seatBase, level,
   });
+}
+
+// Online: connect to the server's table. The server is the ground truth — it deals, drives
+// the opponents, and PUSHES frames into onBackendEvent; there is NO local match logic, no
+// session, no 锅/圈 bookkeeping here (all of that lives server-side). On (re)connect the server
+// resyncs the game in progress.
+function connectOnline() {
+  if (!scene) { scene = new Renderer($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
+  backend = createBackend({ mode: 'remote', url: ONLINE_URL, uid: localStorage.getItem('mahjong-online-uid') || '', name: localStorage.getItem('mahjong-online-name') || '' });
+  backend.onEvent(onBackendEvent);
+  backend.connect();
 }
 
 // ---------------------------------------------------------------------------
@@ -696,6 +729,7 @@ $('scene').addEventListener('pointermove', (e) => {
 });
 
 function newGame() {
+  if (ONLINE) { returnHub(); return; } // online: 重开/再来一锅 go back to the lobby (server owns the match)
   // Drop the finished view; the next 'deal' installs the fresh one. (Starting a new hand
   // bumps the backend's generation, so any in-flight opponent loop abandons quietly.)
   game = null;
@@ -710,22 +744,23 @@ function newGame() {
 // The 每圈成绩 table: one row per completed 圈 (its net change per seat), a 进行中 row
 // for the 圈 still in play, and a 合计 footer (cumulative). `live` = the current running
 // scores (game.scores) while a 锅 is in progress, or null.
-function roundsTableHtml(live) {
+function roundsTableHtml(live, rounds = session.rounds) {
   const seats = [0, 1, 2, 3];
   const cell = (v) => `<td class="${v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero'}">${v > 0 ? '+' : ''}${v}</td>`;
   const row = (label, delta, cls = '') =>
     `<tr class="${cls}"><td class="rd-wind">${label}</td>${seats.map((p) => cell(delta[p])).join('')}</tr>`;
   let prev = [0, 0, 0, 0], body = '';
-  for (const r of session.rounds) {
+  for (const r of rounds) {
     body += row(`${WIND[r.wind]}圈`, r.scores.map((s, i) => s - prev[i]));
     prev = r.scores;
   }
-  // the 圈 currently being played is not snapshotted yet — show its partial delta
-  if (live && session.rounds.length < 4) {
+  // the 圈 currently being played is not snapshotted yet — show its partial delta (offline only;
+  // online passes the completed 4 圈 so this branch never fires)
+  if (live && rounds.length < 4) {
     body += row(`${WIND[session.prevailingWind]}圈 · 进行中`, live.map((s, i) => s - prev[i]), 'live');
   }
   if (!body) body = `<tr><td class="rd-empty" colspan="5">本锅还没有完成的圈</td></tr>`;
-  const total = live || (session.rounds.length ? session.rounds[session.rounds.length - 1].scores : [0, 0, 0, 0]);
+  const total = live || (rounds.length ? rounds[rounds.length - 1].scores : [0, 0, 0, 0]);
   const head = `<tr><th></th>${seats.map((p) => `<th class="${p === HUMAN ? 'me' : ''}">${SEAT_LABEL[p]}</th>`).join('')}</tr>`;
   const foot = `<tr><td class="rd-wind">合计</td>${seats.map((p) => cell(total[p])).join('')}</tr>`;
   return `<table class="rounds-table"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
@@ -765,8 +800,8 @@ function openHistory() {
 
 // The 锅 is over (four 圈 done): final standings, a 恭喜 line when the human placed
 // first, the 每圈成绩 breakdown, and a reset to deal a fresh 锅.
-function showFinalBoard() {
-  const scores = game.scores.slice();
+function showFinalBoard(data) {
+  const scores = (data ? data.scores : game.scores).slice(); // online: server-provided final scores
   const order = [0, 1, 2, 3].sort((a, b) => scores[b] - scores[a]); // display: high → low
   const top = Math.max(...scores);
   const MEDAL = ['🥇', '🥈', '🥉'];
@@ -782,7 +817,7 @@ function showFinalBoard() {
   $('final-congrats').textContent = scores[HUMAN] === top
     ? (tiedTop ? '🎉 恭喜并列第一！' : '🎉 恭喜你赢得这一锅！')
     : '本锅惜败，下一锅再战！';
-  $('final-rounds').innerHTML = roundsTableHtml(scores);
+  $('final-rounds').innerHTML = roundsTableHtml(scores, data ? data.rounds : session.rounds);
   $('final-overlay').classList.remove('hidden');
 }
 
@@ -951,8 +986,8 @@ function bindUI() {
   fillRules();
 }
 
-// Leave the game for the main hub (../../ from games/<mode>/).
-function returnHub() { location.href = '../../'; }
+// Leave the game: offline → the main hub; online → back to the lobby.
+function returnHub() { location.href = ONLINE ? '../mahjong-tianjin-online/' : '../../'; }
 
 // Keyboard/gamepad focus between the result panel's two buttons (下一局 / 返回).
 let resultFocus = 0;
@@ -963,6 +998,11 @@ function focusResultBtn() {
 }
 
 bindUI();
+
+// Online boot: no start overlay / difficulty — the lobby already started the table. Connect
+// and let the server drive. (Gated on ONLINE; the offline boot below the start overlay is
+// completely unchanged.)
+if (ONLINE) { $('start-overlay').classList.add('hidden'); gameStarted = true; connectOnline(); }
 
 // Debug hook (only under ?fast=1) for visual checks.
 if (new URLSearchParams(location.search).get('fast')) {

@@ -7,7 +7,7 @@ try {
   const page = await browser.newPage();
   await page.setViewport({ width: 844, height: 390, deviceScaleFactor: 2 });
   const errs=[]; page.on('pageerror',e=>errs.push(e.message));
-  await page.goto(`http://localhost:${PORT}/games/mahjong/?fast=1&flat=1`, { waitUntil: 'networkidle0' });
+  await page.goto(`http://localhost:${PORT}/games/mahjong-tianjin/?fast=1&flat=1`, { waitUntil: 'networkidle0' });
   await page.waitForSelector('#start-btn'); await page.click('#start-btn');
   await new Promise(r=>setTimeout(r,500));
   await page.evaluate(()=>window.__mj.debugWin());

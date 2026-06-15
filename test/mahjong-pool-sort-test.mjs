@@ -5,7 +5,7 @@ const server = await startServer(PORT);
 const browser = await launchBrowser();
 try {
   const page = await browser.newPage();
-  await page.goto(`http://localhost:${PORT}/games/mahjong/?fast=1`, { waitUntil: 'networkidle0' });
+  await page.goto(`http://localhost:${PORT}/games/mahjong-tianjin/?fast=1`, { waitUntil: 'networkidle0' });
   await page.waitForSelector('#start-btn'); await page.click('#start-btn');
   await page.waitForFunction(() => window.__mj, { timeout: 8000 });
   await page.evaluate(() => window.__mj.debugPool());

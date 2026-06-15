@@ -14,7 +14,7 @@ try {
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
-  await page.goto(`http://localhost:${PORT}/games/mahjong/?fast=1`, { waitUntil: 'networkidle0' });
+  await page.goto(`http://localhost:${PORT}/games/mahjong-tianjin/?fast=1`, { waitUntil: 'networkidle0' });
   await page.waitForSelector('#start-btn');
   await page.click('#start-btn');
   await new Promise((r) => setTimeout(r, 500));

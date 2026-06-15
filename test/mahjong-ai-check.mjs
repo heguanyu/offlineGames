@@ -1,8 +1,8 @@
 // Quick AI sanity check: drive complete games with the bots and confirm they
 // reach wins far more often than random discarding (17.5% baseline), terminate,
 // and stay zero-sum. Usage: node test/mahjong-ai-check.mjs
-import { Game, PHASE } from '../games/mahjong/engine.js';
-import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS } from '../games/mahjong/ai.js';
+import { Game, PHASE } from '../games/mahjong-tianjin/engine.js';
+import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS } from '../games/mahjong-tianjin/ai.js';
 
 function play(level, seed) {
   let s = seed >>> 0;

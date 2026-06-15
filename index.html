@@ -87,6 +87,7 @@
   }
   nav { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
   .card {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -103,6 +104,8 @@
   }
   .card:active { background: #0f3460; }
   .card .emoji { font-size: 2.4rem; margin-bottom: 10px; }
+  /* wifi badge on the online-mode card's logo (top-right corner) */
+  .card .wifi { position: absolute; top: 8px; right: 10px; font-size: 1.15rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55)); }
 </style>
 </head>
 <body>
@@ -146,9 +149,14 @@
   <section class="cat-section">
     <h2 class="cat-title" data-i18n="cat-mahjong">🀄 麻将</h2>
     <nav>
-      <a class="card" href="./games/mahjong/">
+      <a class="card" href="./games/mahjong-tianjin/">
         <span class="emoji">🀄</span>
         <span data-i18n="card-tianjin">天津麻将</span>
+      </a>
+      <a class="card" href="./games/mahjong-tianjin-online/">
+        <span class="wifi" aria-hidden="true">📶</span>
+        <span class="emoji">🀄</span>
+        <span data-i18n="card-tianjin-online">天津麻将联机版</span>
       </a>
       <a class="card" href="./games/guobiao/">
         <span class="emoji">🀅</span>
@@ -177,7 +185,8 @@
         title: '离线游戏',
         'cat-emulator': '🕹️ 模拟器游戏', 'cat-mahjong': '🀄 麻将', 'cat-tools': '🛠️ 工具',
         'card-gba-mgba': 'GBA · mGBA', 'card-gba-vbam': 'GBA · VBA-M', 'card-nds': '任天堂 DS',
-        'card-tianjin': '天津麻将', 'card-guobiao': '国标麻将', 'card-guobiao-free': '国标（无定番）',
+        'card-tianjin': '天津麻将', 'card-tianjin-online': '天津麻将联机版',
+        'card-guobiao': '国标麻将', 'card-guobiao-free': '国标（无定番）',
         'card-pad': '手柄测试',
         online: '在线', offline: '离线 · 使用缓存运行',
         btn_idle: '检查更新', btn_checking: '检查中…', btn_updating: '更新中…',
@@ -194,7 +203,8 @@
         title: 'Offline Games',
         'cat-emulator': '🕹️ Emulator Games', 'cat-mahjong': '🀄 Mahjong', 'cat-tools': '🛠️ Tools',
         'card-gba-mgba': 'GBA · mGBA', 'card-gba-vbam': 'GBA · VBA-M', 'card-nds': 'Nintendo DS',
-        'card-tianjin': 'Tianjin Mahjong', 'card-guobiao': 'Guobiao (MCR)', 'card-guobiao-free': 'Guobiao (no minimum)',
+        'card-tianjin': 'Tianjin Mahjong', 'card-tianjin-online': 'Tianjin Mahjong · Online',
+        'card-guobiao': 'Guobiao (MCR)', 'card-guobiao-free': 'Guobiao (no minimum)',
         'card-pad': 'Controller Test',
         online: 'online', offline: 'offline — running from cache',
         btn_idle: 'Check for updates', btn_checking: 'Checking…', btn_updating: 'Updating…',

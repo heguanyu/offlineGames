@@ -174,41 +174,105 @@ export class LocalBackend {
 }
 
 // ---------------------------------------------------------------------------
-// RemoteBackend — the online implementation, stubbed. It fulfils the SAME contract,
-// so the UI is unchanged; only the bodies below talk to the server. Sketch:
-//   - one WebSocket (or SSE) carries server → client events; feed each into _emit so the
-//     UI's awaited handler sequences them exactly like LocalBackend.
-//   - each action POSTs the move (or sends a socket frame) and resolves on the ack; the
-//     authoritative state then arrives as events, and getState() returns the last view
-//     the server sent (its own hand + the public table — opponents' tiles stay hidden).
+// RemoteBackend — the online implementation. Same contract as LocalBackend, so the UI is
+// unchanged. One WebSocket carries server → client { type:'game', ev, view } frames; each is
+// queued and fed through the awaited handler (sequencing like LocalBackend). getState() returns
+// a GameView ROTATED to the player's seat (display index 0 = you), so main.js's HUMAN=0
+// rendering puts you at the bottom with correct winds. Actions send the move; the server is the
+// ground truth and streams the result back. Drops auto-reconnect (the server resyncs by uid).
 // ---------------------------------------------------------------------------
 export class RemoteBackend {
   constructor(config = {}) {
-    this.baseUrl = config.url || '/api/mahjong';
+    this.url = config.url;
+    this.uid = config.uid;
+    this.name = config.name || '';
     this._handler = null;
-    this._state = null;   // last GameView pushed by the server
-    this._socket = null;  // WebSocket carrying server → client events
+    this._view = null;       // last GameView, rotated to our seat
+    this._ws = null;
+    this._seat = 0;          // our absolute seat at the table
+    this._closed = false;
+    this._reconnect = null;
+    this._queue = Promise.resolve();
   }
 
   onEvent(handler) { this._handler = handler; }
-  getState() { return this._state; }
-  dispose() { if (this._socket) this._socket.close(); this._socket = null; this._handler = null; }
+  getState() { return this._view; }
+  get yourSeat() { return this._seat; }
 
-  async _emit(ev) { if (this._handler) await this._handler(ev); }
+  connect() {
+    this._closed = false;
+    const ws = this._ws = new WebSocket(this.url);
+    ws.onopen = () => this._send({ type: 'hello', uid: this.uid, name: this.name });
+    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } if (m.type === 'game') this._queue = this._queue.then(() => this._process(m)).catch((err) => console.error('[remote] frame processing failed:', err)); };
+    ws.onclose = () => { if (!this._closed) { clearTimeout(this._reconnect); this._reconnect = setTimeout(() => this.connect(), 1500); } };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+  dispose() { this._closed = true; clearTimeout(this._reconnect); if (this._ws) try { this._ws.close(); } catch {} this._ws = null; this._handler = null; }
 
-  async startHand(/* cfg */) {
-    // TODO(online): open this._socket = new WebSocket(...); on each server frame, update
-    // this._state from frame.view and `await this._emit(frame.event)`. POST /hand to join
-    // the table and resolve once the server confirms the deal.
-    throw new Error('RemoteBackend.startHand: connect the socket + POST /hand here');
+  _send(m) { if (this._ws && this._ws.readyState === 1) this._ws.send(JSON.stringify(m)); }
+  _act(a) { this._send({ type: 'action', ...a }); }
+
+  async _process(frame) {
+    this._seat = frame.view.yourSeat;
+    this._view = buildRemoteView(frame.view, this._seat);
+    const ev = mapServerEvent(frame.ev, this._seat, this._view);
+    if (ev && this._handler) await this._handler(ev);
   }
 
-  // Each action sends the move and resolves on the server's ack; resulting state changes
-  // (incl. opponents' moves) stream back as events into _emit.
-  async discard(/* tile */) { throw new Error('RemoteBackend.discard: POST /move {type:"discard", tile}'); }
-  async claim(/* type */)   { throw new Error('RemoteBackend.claim: POST /move {type:"claim", claim}'); }
-  async pass()              { throw new Error('RemoteBackend.pass: POST /move {type:"pass"}'); }
-  async selfKong(/* kind */){ throw new Error('RemoteBackend.selfKong: POST /move {type:"selfKong", kind}'); }
-  async declareWin()        { throw new Error('RemoteBackend.declareWin: POST /move {type:"win"}'); }
-  decideLaZhuang(/* yes */) { throw new Error('RemoteBackend.decideLaZhuang: POST /move {type:"lazhuang", yes}'); }
+  // Actions — tiles/kinds aren't seat-relative, so they pass through; only seat indices rotate.
+  async discard(tile) { this._act({ do: 'discard', tile }); }
+  async claim(type) { this._act({ do: 'claim', claim: type }); }
+  async pass() { this._act({ do: 'pass' }); }
+  async selfKong(kind) { this._act({ do: 'selfKong', kind }); }
+  async declareWin() { this._act({ do: 'win' }); }
+  decideLaZhuang(yes) { this._act({ do: 'lazhuang', yes }); }
+  next() { this._act({ do: 'next' }); }
+}
+
+// Rotate a server view (absolute seats) to the player's perspective and rebuild a GameView
+// carrying the engine's helper methods (isWild/seatWind/selfKongOptions/settlementFactors/…),
+// so the UI renders it exactly like a local Game. `c` is the player's absolute seat.
+export function buildRemoteView(sv, c) {
+  const rot = (p) => (p - c + 4) % 4;                 // absolute seat → display index
+  const byD = (arr) => (arr ? [0, 1, 2, 3].map((d) => arr[(c + d) % 4]) : arr); // re-index a per-seat array
+  const result = sv.result ? {
+    ...sv.result, winner: rot(sv.result.winner),
+    payments: byD(sv.result.payments), kong: byD(sv.result.kong), kongPts: byD(sv.result.kongPts),
+  } : null;
+  const snap = {
+    prevailingWind: sv.prevailingWind ?? 0, seatBase: ((sv.seatBase ?? 0) - c + 4) % 4,
+    dealer: rot(sv.dealer ?? 0), turn: sv.turn != null ? rot(sv.turn) : 0,
+    phase: sv.phase, wilds: sv.wilds || [], indicator: sv.indicator,
+    scores: byD(sv.scores) || [0, 0, 0, 0], laZhuang: (sv.laZhuang || []).map(rot), dealerDouble: sv.dealerDouble ?? true,
+    hands: byD(sv.hands) || [[], [], [], []], melds: byD(sv.melds) || [[], [], [], []], discards: byD(sv.discards) || [[], [], [], []],
+    discardLog: (sv.discardLog || []).map((e) => ({ player: rot(e.player), kind: e.kind })),
+    lastDiscard: sv.lastDiscard ? { player: rot(sv.lastDiscard.player), kind: sv.lastDiscard.kind } : null,
+    drawnTile: sv.drawnTile != null ? sv.drawnTile : null,
+    claim: sv.claim ? { ...sv.claim, player: rot(sv.claim.player) } : null,
+    selfDrawWin: sv.canWin ? (sv.winInfo || { fans: ['胡'], score: 0 }) : null,
+    result,
+    wall: { length: sv.wallCount ?? 0 },
+    seatNames: byD(sv.seatNames), seatKinds: byD(sv.seatKinds), online: true,
+  };
+  const view = Object.assign(Object.create(Game.prototype), snap);
+  view.wildSet = new Set(snap.wilds);
+  return view;
+}
+
+// Map a server event (absolute) to the UI event main.js's onBackendEvent expects (rotated).
+export function mapServerEvent(ev, c, view) {
+  const rot = (p) => (p - c + 4) % 4;
+  const byD = (arr) => (arr ? [0, 1, 2, 3].map((d) => arr[(c + d) % 4]) : arr);
+  switch (ev.t) {
+    case 'deal': return { type: 'deal' };
+    case 'await': return { type: 'await', who: ev.who };
+    case 'discard': return { type: 'discard', player: rot(ev.player), tile: ev.tile, discardIndex: view.discardLog.length - 1 };
+    case 'claim': return { type: 'claim', player: rot(ev.player), claimType: ev.claim, kind: ev.kind };
+    case 'selfKong': return { type: 'selfKong', player: rot(ev.player), kind: ev.kind };
+    case 'over': return { type: 'over', result: view.result };
+    case 'lazhuang': return { type: 'lazhuang', dealer: rot(ev.dealer) };
+    case 'potOver': return { type: 'potOver', scores: byD(ev.scores), rounds: (ev.rounds || []).map((r) => ({ wind: r.wind, scores: byD(r.scores) })) };
+    case 'sync': return { type: 'sync' };
+    default: return null; // 'handEnd' → the result modal's 下一局 sends 'next'
+  }
 }

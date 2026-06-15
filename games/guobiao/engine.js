@@ -1,10 +1,10 @@
 // 国标麻将 (Chinese Official / MCR) rules engine. Pure logic, no DOM. Reuses the
-// shared tile model + decomposition from ../mahjong/engine.js and the fan scorer
+// shared tile model + decomposition from ../mahjong-tianjin/engine.js and the fan scorer
 // in ./score.js. Distinctive vs. the Tianjin game: 吃 (chow), win off a discard
 // (点炮) as well as self-draw, no wilds, and an 8-fan minimum to win (起和8番).
 import {
   KINDS, suitOf, rankOf, isNumberSuit, tileName, freshTiles, shuffle, toCounts, decompose,
-} from '../mahjong/engine.js';
+} from '../mahjong-tianjin/engine.js';
 import { scoreStandard, scoreSpecial } from './score.js';
 
 export { tileName };
