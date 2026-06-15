@@ -50,7 +50,7 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .chair:not(.playing):hover .seat-pad { box-shadow: 0 0 0 2px var(--gold), 0 3px 6px rgba(0,0,0,0.45); }
 .chair.me .seat-pad { box-shadow: 0 0 0 2px var(--gold), 0 0 12px rgba(232,196,102,0.5); }
 .chair .wind { color: #ffe6a6; font-weight: 800; font-size: 0.95rem; }
-.chair .who { font-weight: 700; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chair .who { font-weight: 700; max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chair.empty .who { color: rgba(255,246,232,0.6); font-weight: 500; }
 .chair .ready { font-size: 0.64rem; margin-top: 1px; }
 .chair .ready.yes { color: #9af7a6; } .chair .ready.no { color: #ffd27a; }
@@ -64,7 +64,7 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .lb-table tr.me { background: rgba(232,196,102,0.12); }
 .lb-table tr.me .lb-name { color: var(--gold); font-weight: 800; }
 .lb-rank { color: #9fd3bf; width: 1.4em; }
-.lb-name { color: #eaf6f0; font-weight: 600; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-name { color: #eaf6f0; font-weight: 600; max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-pts { font-weight: 800; text-align: right; } .lb-pts.pos { color: #7ddf8a; } .lb-pts.neg { color: #ef9a9a; } .lb-pts.zero { color: #cfe7db; }
 .lb-pots { color: #9fd3bf; text-align: right; }
 .lb-empty { color: #9fd3bf; font-size: 0.85rem; text-align: center; padding: 12px 4px; line-height: 1.5; }

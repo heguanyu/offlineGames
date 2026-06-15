@@ -74,7 +74,19 @@ const clients = new Map(); // clientId → { ws, id, uid, name }
 const uidWs = new Map();    // uid → the live socket for that player (for routing game frames)
 let nextId = 1;
 
-const sanitizeName = (n) => String(n || '').replace(/\s+/g, ' ').trim().slice(0, 16);
+// Names: only Chinese characters or English letters, capped at 6 中文 / 12 英文 (中文 = 2 width
+// units, 英文 = 1, max 12). Mirrors the lobby's cleanName so a hand-crafted client can't bypass it.
+const sanitizeName = (n) => {
+  let out = '', w = 0;
+  for (const ch of String(n || '')) {
+    const cjk = /[㐀-䶿一-鿿]/.test(ch);
+    if (!cjk && !/[a-zA-Z]/.test(ch)) continue;
+    const cw = cjk ? 2 : 1;
+    if (w + cw > 12) break;
+    w += cw; out += ch;
+  }
+  return out;
+};
 const send = (ws, msg) => { if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); };
 
 function seatOf(uid) {

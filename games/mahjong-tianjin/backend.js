@@ -88,21 +88,24 @@ export class LocalBackend {
   async startHand(cfg) {
     const gen = ++this._gen;
     if (cfg.level != null) this.level = cfg.level;
-    // 拉庄 is decided BEFORE the deal (blind). Bots decide here; the human is asked.
-    const challengers = [];
-    for (let p = 0; p < 4; p++) if (p !== cfg.dealer && p !== HUMAN && shouldBotLaZhuang(p, cfg.dealer)) challengers.push(p);
-    if (cfg.dealer !== HUMAN) {
-      const yes = await this._ask({ type: 'lazhuang', dealer: cfg.dealer });
-      if (gen !== this._gen) return; // abandoned (e.g. 重开) while the panel was open
-      if (yes) challengers.push(HUMAN);
-    }
+    // Deal FIRST (the UI refreshes to the new hand); 拉庄 is asked AFTER, still blind — the UI keeps
+    // the human's own hand face-down until they answer. Bots never 拉庄 yet (shouldBotLaZhuang).
     this._game = new Game({
       rng: this.rng,
       dealer: cfg.dealer, prevailingWind: cfg.prevailingWind,
       scores: cfg.scores, seatBase: cfg.seatBase,
-      laZhuang: challengers.sort((a, b) => a - b),
+      laZhuang: [],
     });
     await this._emit({ type: 'deal' });
+    if (gen !== this._gen) return;
+    const challengers = [];
+    for (let p = 0; p < 4; p++) if (p !== cfg.dealer && p !== HUMAN && shouldBotLaZhuang(p, cfg.dealer)) challengers.push(p);
+    if (cfg.dealer !== HUMAN) {
+      const yes = await this._ask({ type: 'lazhuang', dealer: cfg.dealer, need: [HUMAN], answers: {} });
+      if (gen !== this._gen) return; // abandoned (e.g. 重开) while the panel was open
+      if (yes) challengers.push(HUMAN);
+    }
+    this._game.laZhuang = challengers.sort((a, b) => a - b);
     await this._advance(gen);
   }
 
@@ -276,8 +279,10 @@ export function mapServerEvent(ev, c, view) {
     case 'discard': return { type: 'discard', player: rot(ev.player), tile: ev.tile, discardIndex: view.discardLog.length - 1 };
     case 'claim': return { type: 'claim', player: rot(ev.player), claimType: ev.claim, kind: ev.kind };
     case 'selfKong': return { type: 'selfKong', player: rot(ev.player), kind: ev.kind };
-    case 'over': return { type: 'over', result: view.result, readied: ev.readied }; // readied: re-shown on refresh after we already clicked 我准备好了
-    case 'lazhuang': return { type: 'lazhuang', dealer: rot(ev.dealer) }; // halts for everyone — no countdown
+    case 'over': return { type: 'over', result: view.result, readied: ev.readied, potEnd: ev.potEnd }; // potEnd: this hand closes the 锅
+    case 'lazhuang': return { type: 'lazhuang', dealer: rot(ev.dealer), // halts for everyone — no countdown
+      need: (ev.need || []).map(rot), // seats still to choose (rotated to display)
+      answers: Object.fromEntries(Object.entries(ev.answers || {}).map(([s, v]) => [rot(+s), v])) };
     case 'potOver': return { type: 'potOver', scores: byD(ev.scores), rounds: (ev.rounds || []).map((r) => ({ wind: r.wind, scores: byD(r.scores) })) };
     case 'sync': return { type: 'sync' };
     default: return null; // 'handEnd' is server-internal (the result modal's 我准备好了 sends 'next')

@@ -213,15 +213,18 @@ export class MahjongScene2D {
     const th = Math.round(tw * 1.35);
     // renderedHand already sorts the drawn tile into place; flank that slot with a gap.
     const drawnIdx = ui.drawnTile != null ? hand.lastIndexOf(ui.drawnTile) : -1;
+    const ownBacks = !!ui.ownBacks; // blind 拉庄: show your own hand face-down until you answer
+    const hideWilds = !!ui.hideWilds; // 拉庄: 混儿 undecided → don't mark wild tiles
     hand.forEach((id, i) => {
-      const wild = isWild(id);
-      const t = faceTileEl(id, { wild });
+      let t;
+      if (ownBacks) { t = document.createElement('div'); t.className = 'tile face-tile back'; }
+      else t = faceTileEl(id, { wild: !hideWilds && isWild(id) });
       t.classList.add('b2-htile');
       t.style.setProperty('--tw', tw + 'px');
       t.style.setProperty('--th', th + 'px');
       if (i === drawnIdx) { t.style.marginLeft = DRAW_GAP + 'px'; t.style.marginRight = DRAW_GAP + 'px'; }
       t.dataset.pick = i;
-      if (i === ui.selRendered) t.classList.add('sel'); // selRendered gated by render() (on-turn offline; also waiting online)
+      if (!ownBacks && i === ui.selRendered) t.classList.add('sel'); // selRendered gated by render() (on-turn offline; also waiting online)
       handEl.appendChild(t);
     });
     b.appendChild(handEl);

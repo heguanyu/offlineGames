@@ -132,14 +132,22 @@ try {
   await page.waitForFunction(() => document.getElementById('history-overlay').classList.contains('hidden'));
   console.log('历史战绩: record + menu modal OK');
 
-  // 拉庄: the blind double-down panel, the ⚔️ badge, and the doubled 庄 row in the modal.
-  await page.evaluate(() => window.__mj.debugLzPanel());
+  // 拉庄: the table-shaped cross panel (seats around + arrow → 庄), the ⚔️ badge, and the doubled 庄 row.
+  await page.evaluate(() => window.__mj.debugLzPanel()); // dealer = 下家 (display seat 1)
   await page.waitForFunction(() => !document.getElementById('lazhuang-overlay').classList.contains('hidden'), { timeout: 4000 });
   const lzText = await page.$eval('#lazhuang-text', (e) => e.textContent);
   if (!lzText.includes('坐庄') || !lzText.includes('拉庄')) throw new Error(`拉庄 panel text wrong: ${lzText}`);
+  const lzCross = await page.evaluate(() => ({
+    dealerChip: document.getElementById('lz-seat-1').textContent.includes('庄家'),
+    arrow: document.getElementById('lz-arrow').className.includes('lz-arrow-1'),
+    seats: [0, 1, 2, 3].every((p) => document.getElementById('lz-seat-' + p).textContent.length > 0),
+  }));
+  if (!lzCross.dealerChip || !lzCross.arrow || !lzCross.seats) throw new Error(`拉庄 cross layout wrong: ${JSON.stringify(lzCross)}`);
   await page.click('#lazhuang-yes');
-  await page.waitForFunction(() => document.getElementById('lazhuang-overlay').classList.contains('hidden'));
+  // new flow: the panel switches to a 'waiting' state (buttons hidden, choice captured), not hidden
+  await page.waitForFunction(() => document.getElementById('lz-btns').style.display === 'none');
   if (await page.evaluate(() => window.__lz) !== true) throw new Error('拉庄 panel did not capture the 拉庄 choice');
+  await page.evaluate(() => document.getElementById('lazhuang-overlay').classList.add('hidden')); // dismiss the standalone debug panel
 
   // a real 拉庄 hand (human challenges 庄 = 下家): the engine marks it and the badge shows.
   await page.evaluate(() => window.__mj.dealLz());

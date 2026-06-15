@@ -97,6 +97,58 @@ body.flat .long-run { width: calc(21px * 5 + 4px); }
 @keyframes tt-pulse { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.07); } }
 body.flat #turn-timer { top: 54px; width: 92px; height: 92px; }
 body.flat #turn-timer-num { font-size: 2.3rem; }
+
+/* 拉庄: a real table — the lobby's green felt in the centre (the decision sits ON it) ringed by the
+   lobby's wooden chairs. The seats are the chair asset (no bordered chips); positions mirror the table. */
+#lazhuang-overlay .lz-cross {
+  display: grid; grid-template-columns: 168px auto 168px; grid-template-rows: auto auto auto;
+  gap: 30px 26px; align-items: center; justify-items: center; width: fit-content; max-width: 96vw;
+}
+/* the felt = the table (a SQUARE surface); the confirmation lives at its centre */
+.lz-center { grid-row: 2; grid-column: 2; position: relative; align-self: center; justify-self: center;
+  aspect-ratio: 1; width: min(430px, 84vw, 62vh);
+  border-radius: 26px; background: radial-gradient(circle at 50% 42%, #1f7250, #0d4530 72%);
+  border: 17px solid #6b4727; outline: 1px solid #3c2614;
+  box-shadow: inset 0 0 50px rgba(0,0,0,0.5), 0 18px 44px rgba(0,0,0,0.62);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 26px 30px; text-align: center; }
+.lz-center h3 { margin: 0 0 10px; color: var(--gold); font-size: 1.92rem; text-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+#lazhuang-text { text-shadow: 0 1px 4px rgba(0,0,0,0.55); }
+.lz-btns { display: flex; gap: 19px; justify-content: center; margin-top: 16px; }
+.lz-btns .big-btn { flex: 1; margin-top: 0; font-size: 1.68rem; font-weight: 800; color: #3a2a00; white-space: nowrap;
+  background: linear-gradient(#f3d785,#e3b94f); border: none; border-radius: 21px; padding: 18px 16px; cursor: pointer; box-shadow: 0 6px 0 #b8902f; }
+.lz-btns .big-btn.hub { color: #eaf6f0; background: linear-gradient(#1b5e45,#134836); box-shadow: 0 6px 0 #0c3526; }
+.lz-btns .big-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
+.lz-btns .big-btn:active { transform: translateY(3px); box-shadow: 0 3px 0 #b8902f; }
+.lz-wait { color: var(--gold); font-size: 1.34rem; margin: 10px 0 0; text-shadow: 0 1px 4px rgba(0,0,0,0.55); }
+
+/* the wooden chairs (lobby asset) — no border, a brown seat pad with a plank on the outer side */
+.lz-seat { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; width: 152px; height: 134px; box-sizing: border-box; padding: 10px 14px; border: none; border-radius: 14px; text-align: center;
+  background: linear-gradient(#9a6a33, #6c4823); color: #fff6e8;
+  box-shadow: 0 4px 9px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.18); }
+.lz-seat.dealer { box-shadow: 0 0 0 2px var(--gold), 0 0 16px rgba(232,196,102,0.5), inset 0 1px 0 rgba(255,255,255,0.18); }
+.lz-seat.me { box-shadow: 0 0 0 2px var(--gold), 0 0 16px rgba(232,196,102,0.45), inset 0 1px 0 rgba(255,255,255,0.18); }
+.lz-seat::after { content: ''; position: absolute; background: linear-gradient(#7a4f26, #543619); border-radius: 7px; box-shadow: 0 3px 6px rgba(0,0,0,0.45); }
+.lz-pos-0 { grid-row: 3; grid-column: 2; } .lz-pos-0::after { left: 18%; right: 18%; bottom: -15px; height: 18px; }
+.lz-pos-1 { grid-row: 2; grid-column: 3; } .lz-pos-1::after { top: 18%; bottom: 18%; right: -15px; width: 18px; }
+.lz-pos-2 { grid-row: 1; grid-column: 2; } .lz-pos-2::after { left: 18%; right: 18%; top: -15px; height: 18px; }
+.lz-pos-3 { grid-row: 2; grid-column: 1; } .lz-pos-3::after { top: 18%; bottom: 18%; left: -15px; width: 18px; }
+.lz-seat .lz-nm { font-size: 1.4rem; font-weight: 800; color: #fff6e8; max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lz-seat .lz-rel { font-size: 1rem; color: #ffe6a6; }
+.lz-seat .lz-score { font-size: 1.12rem; font-weight: 800; margin-top: 1px; }
+/* decision indicator: a badge pinned to the chair's top-right corner (out of flow, so the name/score stay centred) */
+.lz-st { position: absolute; top: -11px; right: -9px; z-index: 2; font-size: 0.98rem; font-weight: 800;
+  border-radius: 999px; padding: 2px 11px; box-shadow: 0 2px 6px rgba(0,0,0,0.45); }
+.lz-st.dealer { color: #4a3500; background: linear-gradient(#f3d785,#e3b94f); }
+.lz-st.pend { color: #2a1c08; background: rgba(255,243,200,0.9); letter-spacing: 2px; }
+.lz-st.yes { color: #fff; background: linear-gradient(#ff7a52,#e23b1f); }
+.lz-st.no { color: #2a1c08; background: rgba(224,231,225,0.92); }
+/* arrow on the felt's edge, pointing at the 庄's chair */
+.lz-arrow { position: absolute; width: 0; height: 0; filter: drop-shadow(0 0 6px rgba(232,196,102,0.6)); }
+.lz-arrow-0 { left: 50%; bottom: -30px; transform: translateX(-50%); border-left: 16px solid transparent; border-right: 16px solid transparent; border-top: 21px solid var(--gold); }
+.lz-arrow-2 { left: 50%; top: -30px; transform: translateX(-50%); border-left: 16px solid transparent; border-right: 16px solid transparent; border-bottom: 21px solid var(--gold); }
+.lz-arrow-1 { top: 50%; right: -30px; transform: translateY(-50%); border-top: 16px solid transparent; border-bottom: 16px solid transparent; border-left: 21px solid var(--gold); }
+.lz-arrow-3 { top: 50%; left: -30px; transform: translateY(-50%); border-top: 16px solid transparent; border-bottom: 16px solid transparent; border-right: 21px solid var(--gold); }
 </style>
 </head>
 <body>
@@ -194,15 +246,22 @@ body.flat #turn-timer-num { font-size: 2.3rem; }
     </div>
   </div>
 
-  <!-- 拉庄 (blind double-down, shown before the deal) -->
+  <!-- 拉庄 (blind double-down) — a table-shaped cross: seats around, decision/tally in the middle, arrow → 庄 -->
   <div class="overlay hidden" id="lazhuang-overlay">
-    <div class="panel">
-      <h2>⚔️ 拉庄</h2>
-      <p id="lazhuang-text" class="sub"></p>
-      <p class="sub" style="font-size:0.78rem;opacity:0.85;">拉庄后，你与庄家之间的全部得分（底分 + 杠分）翻倍。牌未发，盲选。</p>
-      <div class="lz-btns">
-        <button class="big-btn" id="lazhuang-yes">⚔️ 拉庄</button>
-        <button class="big-btn hub" id="lazhuang-no">不拉</button>
+    <div class="lz-cross">
+      <div class="lz-seat lz-pos-2" id="lz-seat-2"></div>
+      <div class="lz-seat lz-pos-3" id="lz-seat-3"></div>
+      <div class="lz-seat lz-pos-1" id="lz-seat-1"></div>
+      <div class="lz-seat lz-pos-0" id="lz-seat-0"></div>
+      <div class="lz-center">
+        <div class="lz-arrow" id="lz-arrow"></div>
+        <h3>⚔️ 拉庄</h3>
+        <p id="lazhuang-text" class="sub"></p>
+        <div class="lz-btns" id="lz-btns">
+          <button class="big-btn" id="lazhuang-yes">⚔️ 拉庄</button>
+          <button class="big-btn hub" id="lazhuang-no">不拉</button>
+        </div>
+        <p class="lz-wait" id="lz-wait"></p>
       </div>
     </div>
   </div>

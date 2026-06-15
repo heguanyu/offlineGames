@@ -16,7 +16,10 @@ const toast = makeToast();
 const HUMAN = 0;
 // Relative seat names from the human's perspective (play order 0→1→2→3).
 const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
+const REL_LABEL = ['自己', '下家', '对家', '上家']; // online nameplate: HUMAN reads 自己, not 玩家
 const WIND = ['东', '南', '西', '北'];
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const backTileEl = () => { const d = document.createElement('div'); d.className = 'tile back'; return d; }; // a face-down tile
 
 // Pace between AI moves so the human can follow; `?fast=1` speeds it up for the
 // automated e2e test.
@@ -71,6 +74,9 @@ let scene = null;             // MahjongScene (3D table)
 let level = LEVELS.NORMAL;
 let session = loadSession();   // { scores, dealer, prevailingWind, hand }
 let selIndex = 0;              // cursor into the human's selectable (non-wild) tiles
+let noSel = false;            // nothing lifted (set right after you discard; any pick/hover/turn clears it)
+let lzBlind = false;          // blind 拉庄: my hand is dealt but shown face-down until I answer
+let lzActive = false;         // a 拉庄 modal is up (for me or others) → the 混儿 stays hidden ('new hand' hasn't begun)
 let drawnWildSelected = false; // a freshly-drawn 混儿 is the lifted tile (can't discard)
 let focusIndex = 0;           // cursor into action-bar buttons (claims)
 let lastLogLen = 0;
@@ -151,9 +157,11 @@ function renderHud() {
   renderScores();
 
   // ---- the round's two 混儿 (e.g. 7万 + 8万), shown with their real faces ----
+  // During 拉庄 the 混儿 isn't decided yet (the hand hasn't "started") → show two face-down backs.
   const wc = $('wild-indicator');
   wc.innerHTML = '';
-  for (const w of game.wilds) wc.appendChild(faceTileEl(w, { wild: true }));
+  if (lzBlind || lzActive) { wc.appendChild(backTileEl()); wc.appendChild(backTileEl()); }
+  else for (const w of game.wilds) wc.appendChild(faceTileEl(w, { wild: true }));
   $('wall-count').textContent = `余 ${game.wall.length} 张`;
 
   // ---- nameplates ----
@@ -212,10 +220,12 @@ function render() {
   if (scene) scene.sync(game, {
     renderedHand: handForSync,
     myTurn: mt,
-    selRendered: canLift && !revealing ? selRendered : null,
+    selRendered: canLift && !revealing && !noSel && !lzBlind ? selRendered : null,
     claimable: !animating && isClaimPhase(),
     drawnTile: (mt && game.drawnTile != null) ? game.drawnTile : null,
     reveal: game.phase === PHASE.OVER,
+    ownBacks: lzBlind, // hand dealt but face-down during a blind 拉庄 you haven't answered
+    hideWilds: lzBlind || lzActive, // 混儿 undecided during 拉庄 → don't mark wild tiles (e.g. the 庄's revealed hand)
   });
 
   // ---- action bar / hint + toasts ----
@@ -247,11 +257,20 @@ function renderPlate(p) {
   const seat = $('plate-' + p);
   const thinking = game.phase !== PHASE.OVER && game.turn === p && p !== HUMAN;
   const isDealer = p === game.dealer;
+  const active = game.turn === p && game.phase !== PHASE.OVER;
+  // Online: 东/南/西/北 · 玩家名 · 自己/对家/上家/下家. Offline: just 东 · 玩家/对家/…
+  let label;
+  if (ONLINE && game.seatNames) {
+    const name = game.seatNames[p] || (game.seatKinds && game.seatKinds[p] === 'bot' ? '机器人' : '');
+    label = (name ? `<span class="pname">${esc(name)}</span>` : '') + `<span class="prel">${REL_LABEL[p]}</span>`;
+  } else {
+    label = `<span>${SEAT_LABEL[p]}</span>`;
+  }
   seat.innerHTML =
     seatBadgeHtml(game, p) + // 👑 (庄) / ⚔️ (拉庄), above the nameplate
-    `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}${isDealer ? ' dealer' : ''}">` +
+    `<div class="nameplate${active ? ' active' : ''}${isDealer ? ' dealer' : ''}">` +
     `<span class="wind">${WIND[game.seatWind(p)]}</span>` +
-    `<span>${SEAT_LABEL[p]}</span>` +
+    label +
     (thinking ? '<span class="think">思考中…</span>' : '') +
     `</div>`;
 }
@@ -362,19 +381,25 @@ async function onBackendEvent(ev) {
   if (ONLINE) hideReconnecting();                                 // any real frame means we're connected again
   const st = backend.getState();
   if (st) game = st;
+  if (ev.type !== 'deal' && ev.type !== 'lazhuang') lzBlind = false; // play resumed → reveal my hand
+  if (ev.type !== 'lazhuang') hideLaZhuangPanel();                   // any other frame means 拉庄 is over
   if (ONLINE) syncTurnTimer(ev); // show the ring whenever a player is on the clock (no-op offline)
   switch (ev.type) {
-    case 'lazhuang': // the human's BLIND 拉庄 choice, before the deal
+    case 'lazhuang': // blind 拉庄 over the freshly-dealt (still hidden) hand
       $('result-overlay').classList.add('hidden'); // a new hand is starting → drop any lingering result panel
-      if (FAST) { backend.decideLaZhuang(lzTestChoice); return; } // tests skip the panel
-      showLaZhuangPanel(ev.dealer, (yes) => backend.decideLaZhuang(yes));
+      lzBlind = ev.need.includes(HUMAN); // still my turn to choose → keep my hand face-down
+      if (FAST) { if (ev.need.includes(HUMAN)) backend.decideLaZhuang(lzTestChoice); render(); return; } // tests skip the panel
+      showLaZhuangPanel(ev.dealer, ev.need, ev.answers, (yes) => backend.decideLaZhuang(yes));
+      render();
       return;
 
     case 'deal':
       $('result-overlay').classList.add('hidden'); // the next hand is dealing → auto-hide the result panel
-      selIndex = 0; focusIndex = 0; drawnWildSelected = false; lastLogLen = 0;
+      selIndex = 0; focusIndex = 0; drawnWildSelected = false; noSel = false; lastLogLen = 0;
+      lzBlind = game.dealer !== HUMAN; // a non-dealer is about to be asked 拉庄 (blind) → keep the hand face-down
       if (!ONLINE) saveSession(); // online: the server is the source of truth, nothing to persist
-      if (scene && !FAST) { // serve the tiles from the wall, then play
+      if (scene && !FAST && lzBlind) { if (scene._clearKongBounds) scene._clearKongBounds(); } // blind: no flourish, render shows backs
+      else if (scene && !FAST) { // serve the tiles from the wall, then play
         dealing = true;
         renderHud();
         $('action-bar').innerHTML = ''; $('ting-center').innerHTML = '';
@@ -405,7 +430,7 @@ async function onBackendEvent(ev) {
     }
 
     case 'claim':
-      if (ev.player === HUMAN) { selIndex = 0; drawnWildSelected = false; } // then they discard
+      if (ev.player === HUMAN) { selIndex = 0; drawnWildSelected = false; noSel = false; } // then they discard
       else if (scene) { // show the bot's 碰/杠 lifted, hold until it settles
         scene.beginClaimDemo(ev.player, CLAIM_DEMO_MS);
         render();
@@ -425,9 +450,14 @@ async function onBackendEvent(ev) {
 
     case 'over':
       render();      // flush the 自摸 / 荒牌 toast + win/lose sound from the log
+      onlineEndsPot = ONLINE && !!ev.potEnd; // set BEFORE showResult so it picks the right button label
       showResult();
-      // resync after a refresh: if we'd already readied, show the toggle in its readied state
-      if (ev.readied) { onlineReadied = true; const b = $('next-hand-btn'); b.textContent = '✓ 已准备 · 取消'; b.classList.add('readied'); }
+      // resync after a refresh: reflect a choice we'd already made
+      if (ev.readied) {
+        const b = $('next-hand-btn');
+        if (onlineEndsPot) { b.disabled = true; b.textContent = '结算中…'; }        // already chose to finish the 锅
+        else { onlineReadied = true; b.textContent = '✓ 已准备 · 取消'; b.classList.add('readied'); } // already readied
+      }
       return;
 
     // ---- online only ----
@@ -467,8 +497,8 @@ function onPickTile(renderedIdx) {
   drawnWildSelected = false;                  // picking a normal tile drops the drawn-混儿 selection
   const pos = selectableHandIndices().indexOf(renderedIdx);
   if (pos < 0) return;
-  if (pos === selIndex && !wasWildSel && mine) discardSelected(); // second tap confirms — only on your turn
-  else { selIndex = pos; sound.select(); render(); }             // otherwise just select (also while waiting online)
+  if (pos === selIndex && !wasWildSel && !noSel && mine) discardSelected(); // second tap confirms — only on your turn, and only if something was already lifted
+  else { noSel = false; selIndex = pos; sound.select(); render(); }         // otherwise just select (also while waiting online)
 }
 
 function discardSelected() {
@@ -479,6 +509,7 @@ function discardSelected() {
   const sel = selectableHandIndices();
   const id = hand[sel[selIndex]];
   if (id == null || game.isWild(id)) return;
+  noSel = true;        // drop the lifted-tile highlight the instant you discard (you can re-select off-turn)
   backend.discard(id); // the 'discard' event animates it, then the backend drives the bots
 }
 
@@ -491,6 +522,7 @@ function doDeclareWin() {
 // flagged so confirm/tap on it just complains; picking any normal tile clears it.
 function selectDrawnTile() {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || game.drawnTile == null) return;
+  noSel = false; // a fresh draw on your turn re-lifts a tile
   if (game.isWild(game.drawnTile)) {
     drawnWildSelected = true;
   } else {
@@ -627,11 +659,12 @@ function showResult() {
   }
   renderSeatHands(game, (id) => game.isWild(id)); // reveal every seat's hand on its border
   if (!ONLINE) saveSession();
-  // If this hand closes the 北圈, the 锅 is finished — 下一局 leads to the 最终成绩. Online: the
-  // server decides and sends 'potOver', so the button is always 下一局.
-  const endsPot = !ONLINE && game.nextDealer() === 0 && game.dealer !== 0 && session.prevailingWind === 3;
+  // If this hand closes the 北圈, the 锅 is finished — the button ENDS it and shows the 最终成绩.
+  // Offline we compute it from the session; online the server flags it (onlineEndsPot, set on 'over')
+  // because the rotated view can't tell which absolute seat is the 锅's first 庄.
+  const endsPot = ONLINE ? onlineEndsPot : (game.nextDealer() === 0 && game.dealer !== 0 && session.prevailingWind === 3);
   const nb = $('next-hand-btn'); nb.disabled = false; nb.classList.remove('readied'); onlineReadied = false; // fresh result → not ready
-  nb.textContent = endsPot ? '查看总成绩 🏆' : (ONLINE ? '我准备好了' : '下一局');
+  nb.textContent = endsPot ? '结束并查看总成绩 🏆' : (ONLINE ? '我准备好了' : '下一局');
   ov.classList.remove('hidden');
   resultFocus = 0; focusResultBtn(); // 下一局 focused by default
 }
@@ -693,9 +726,17 @@ function breakdownHtml(r) {
     grps.join('');
 }
 
-let onlineReadied = false; // result-modal ready toggle (online): 我准备好了 ⇄ ✓已准备
+let onlineReadied = false;  // result-modal ready toggle (online): 我准备好了 ⇄ ✓已准备
+let onlineEndsPot = false;  // this result closes the 锅 (server-flagged) → finish button, no toggle
 function nextHand() {
   if (ONLINE) {
+    if (onlineEndsPot) {
+      // Final hand of the 锅: this only ENDS it — the server replies with 'potOver' → 最终成绩. No
+      // un-ready toggle (you can't un-finish a 锅); just lock the button while the server settles.
+      backend.next();
+      const btn = $('next-hand-btn'); btn.disabled = true; btn.textContent = '结算中…';
+      return;
+    }
     // Toggle readiness. The server deals the next hand only once EVERY human is ready (no timeout),
     // so you can ready up and change your mind; the result panel auto-hides when the next hand deals.
     onlineReadied = !onlineReadied;
@@ -750,20 +791,46 @@ function connectOnline() {
 }
 
 // ---------------------------------------------------------------------------
-// 拉庄 (blind double-down) panel — the UI half only. The DECISION (which bots 拉庄, and
-// asking the human) lives in the backend (shouldBotLaZhuang); here we just show the panel
-// on a 'lazhuang' event and answer with backend.decideLaZhuang(). The ⚔️ badge is shared
-// via seatBadgeHtml, driven by the engine's laZhuang set.
+// 拉庄 (blind double-down) panel — a table-shaped cross: every seat shown around the centre
+// (名字 + 庄/拉庄 status), the question + ⚔️/不拉 buttons in the middle, and an arrow pointing at
+// the 庄. The hand is already dealt but kept face-down (lzBlind) so the choice stays blind. A
+// non-deciding viewer (the 庄, or a challenger who already chose) sees the live tally instead of
+// buttons. The DECISION wiring (who's asked) lives in the backend; we just render + answer.
 // ---------------------------------------------------------------------------
 let lzCallback = null, lzFocus = 1; // panel: 0 = 拉庄, 1 = 不拉 (default, no accidental double)
 let lzTestChoice = false;           // FAST/e2e override for the human's answer (no panel in tests)
 
-function showLaZhuangPanel(dealer, cb) {
-  lzCallback = cb; lzFocus = 1;
-  $('lazhuang-text').textContent = `本局${SEAT_LABEL[dealer]}坐庄，是否拉庄？`;
-  $('lazhuang-overlay').classList.remove('hidden');
-  focusLzBtn();
+function lzSeatName(p) {
+  if (ONLINE && game && game.seatNames) return game.seatNames[p] || (game.seatKinds && game.seatKinds[p] === 'bot' ? '机器人' : '');
+  return SEAT_LABEL[p];
 }
+function showLaZhuangPanel(dealer, need, answers, cb) {
+  const deciding = need.includes(HUMAN);
+  lzCallback = deciding ? cb : null; lzFocus = 1; // watchers (the 庄 / already-chosen) can't answer
+
+  for (let p = 0; p < 4; p++) {
+    const el = $('lz-seat-' + p);
+    let st = '';
+    if (p === dealer) st = '<span class="lz-st dealer">庄家</span>';
+    else if (need.includes(p)) st = '<span class="lz-st pend">…</span>';
+    else if (answers[p] !== undefined) st = answers[p] ? '<span class="lz-st yes">⚔️ 拉</span>' : '<span class="lz-st no">不拉</span>';
+    const pts = game && game.scores ? (game.scores[p] | 0) : 0; // current 锅 running total
+    const col = pts > 0 ? '#7ddf8a' : pts < 0 ? '#ef9a9a' : '#cfe7db';
+    el.className = 'lz-seat lz-pos-' + p + (p === HUMAN ? ' me' : '') + (p === dealer ? ' dealer' : '');
+    el.innerHTML = `<span class="lz-nm">${p === dealer ? '👑 ' : ''}${esc(lzSeatName(p))}</span>` +
+      `<span class="lz-rel">${(ONLINE ? REL_LABEL : SEAT_LABEL)[p]}</span>` +
+      `<span class="lz-score" style="color:${col}">${pts > 0 ? '+' : ''}${pts} 分</span>` + st;
+  }
+  $('lazhuang-text').textContent = deciding ? `${lzSeatName(dealer)}坐庄，是否拉庄？` : `${lzSeatName(dealer)}坐庄`;
+  $('lz-btns').style.display = deciding ? '' : 'none';
+  $('lz-wait').style.display = deciding ? 'none' : '';
+  $('lz-wait').textContent = '等待拉庄确认…';
+  $('lz-arrow').className = 'lz-arrow lz-arrow-' + dealer; // points at the 庄
+  lzActive = true; // the 混儿 stays hidden while the panel is up
+  $('lazhuang-overlay').classList.remove('hidden');
+  if (deciding) focusLzBtn();
+}
+function hideLaZhuangPanel() { lzCallback = null; lzActive = false; $('lazhuang-overlay').classList.add('hidden'); }
 function focusLzBtn() {
   const btns = [$('lazhuang-yes'), $('lazhuang-no')];
   btns.forEach((b, i) => b && b.classList.toggle('focus', i === lzFocus));
@@ -772,8 +839,11 @@ function focusLzBtn() {
 function resolveLz(yes) {
   if (!lzCallback) return;
   const cb = lzCallback; lzCallback = null;
-  $('lazhuang-overlay').classList.add('hidden');
-  cb(yes);
+  cb(yes); // send the answer; keep the panel up (now in 'waiting' state) until play resumes
+  $('lz-btns').style.display = 'none';
+  $('lazhuang-text').textContent = yes ? '你选择了 ⚔️ 拉庄' : '你选择了 不拉';
+  $('lz-wait').style.display = ''; $('lz-wait').textContent = '等待其他玩家…';
+  if (!ONLINE) { lzBlind = false; render(); } // offline: reveal the hand right away (online waits for the server)
 }
 
 // Touch / mouse on the 3D table → raycast → select the picked hand tile.
@@ -791,7 +861,7 @@ $('scene').addEventListener('pointermove', (e) => {
   const idx = scene.pick(e.clientX, e.clientY);
   if (idx == null) return;
   const pos = selectableHandIndices().indexOf(idx);
-  if (pos >= 0 && (pos !== selIndex || drawnWildSelected)) { drawnWildSelected = false; selIndex = pos; sound.select(); render(); }
+  if (pos >= 0 && (pos !== selIndex || drawnWildSelected || noSel)) { drawnWildSelected = false; noSel = false; selIndex = pos; sound.select(); render(); }
 });
 
 function newGame() {
@@ -884,6 +954,9 @@ function showFinalBoard(data) {
     ? (tiedTop ? '🎉 恭喜并列第一！' : '🎉 恭喜你赢得这一锅！')
     : '本锅惜败，下一锅再战！';
   $('final-rounds').innerHTML = roundsTableHtml(scores, data ? data.rounds : session.rounds);
+  // Online the server owns the match, so 再来一锅 just returns to the lobby — identical to 返回大厅.
+  // Drop the duplicate; offline it genuinely starts a fresh zeroed 锅, so keep it there.
+  $('final-reset-btn').style.display = ONLINE ? 'none' : '';
   $('final-overlay').classList.remove('hidden');
 }
 
@@ -944,8 +1017,8 @@ function onAction(name) {
   if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) {
     const n = selectableHandIndices().length;
     if (name === 'win') doDeclareWin();
-    else if (name === 'left') { drawnWildSelected = false; selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
-    else if (name === 'right') { drawnWildSelected = false; selIndex = (selIndex + 1) % n; sound.select(); render(); }
+    else if (name === 'left') { drawnWildSelected = false; noSel = false; selIndex = (selIndex - 1 + n) % n; sound.select(); render(); }
+    else if (name === 'right') { drawnWildSelected = false; noSel = false; selIndex = (selIndex + 1) % n; sound.select(); render(); }
     else if (name === 'confirm') discardSelected();
     else if (name === 'kong') { const o = game.selfKongOptions(HUMAN)[0]; if (o) doSelfKong(o.kind); }
     else if (name === 'menu') openMenu();
@@ -956,7 +1029,7 @@ function onAction(name) {
   // Keep the hand browsable while waiting for another player (no discard) so the table isn't frozen.
   if (name === 'left' || name === 'right') {
     const n = selectableHandIndices().length;
-    if (n) { drawnWildSelected = false; selIndex = (selIndex + (name === 'left' ? -1 : 1) + n) % n; sound.select(); render(); return; }
+    if (n) { drawnWildSelected = false; noSel = false; selIndex = (selIndex + (name === 'left' ? -1 : 1) + n) % n; sound.select(); render(); return; }
   }
 
   if (name === 'menu') openMenu();
@@ -1174,7 +1247,7 @@ if (new URLSearchParams(location.search).get('fast')) {
     // e2e: append the live game's scores to 历史战绩 (the 锅-completion record path).
     recordPot: () => recordPotHistory(),
     // e2e/visual: the 拉庄 confirmation panel (records the click on window.__lz).
-    debugLzPanel: () => showLaZhuangPanel(1, (yes) => { window.__lz = yes; }),
+    debugLzPanel: () => showLaZhuangPanel(1, [HUMAN], {}, (yes) => { window.__lz = yes; }),
     // visual/e2e: a 拉庄 win — human (0) 拉庄 vs 庄 = 下家(1); the 下家 row carries 庄x2 +
     // 拉庄x2 (12 = 2×4) and the human's plate/scoreboard show ⚔️.
     debugLzWin: () => {

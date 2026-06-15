@@ -24,6 +24,7 @@ await new Promise((res) => { srv.stdout.on('data', (d) => { if (/listening/.test
 let ws = null, setup = false, didReconnect = false, playedAfterReconnect = false, potDone = false;
 let overSeen = 0, awaitCount = 0;
 const events = [];
+const overPotEnds = []; // ev.potEnd on each 'over' — only the 锅's final hand should be true
 const deadline = Date.now() + 90000; // a full 锅 (4 圈) over a reconnect
 
 function done(code, msg) { console.log(msg); try { ws && ws.terminate(); } catch {} try { fs.unlinkSync(SCORES_FILE); } catch {} srv.kill(); process.exit(code); }
@@ -72,10 +73,18 @@ function onMsg(msg) {
   // Play the WHOLE 锅: each hand ends with 'over' (result) then 'handEnd' (→ 下一局); the 锅
   // ends with 'potOver'. Partway through we DROP and reconnect (same uid) and must resume.
   if (ev.t === 'deal') { act({ do: 'dealDone' }); return; }  // a real client acks when its deal animation ends → server drives the bots
-  if (ev.t === 'potOver') { potDone = true; return; } // wait for the lobby frame that records the score
-  if (ev.t === 'over') { overSeen++; return; }         // result pushed; the server follows with handEnd
+  if (ev.t === 'potOver') {
+    if (overPotEnds[overPotEnds.length - 1] !== true) return fail('the 锅\'s final hand was not flagged potEnd');
+    if (overPotEnds.slice(0, -1).some((x) => x)) return fail('a non-final hand was wrongly flagged potEnd');
+    potDone = true; return; // wait for the lobby frame that records the score
+  }
+  if (ev.t === 'over') { overSeen++; overPotEnds.push(!!ev.potEnd); return; } // result pushed; the server follows with handEnd
   if (ev.t === 'handEnd') { act({ do: 'next' }); return; }
-  if (ev.t === 'lazhuang') { act({ do: 'lazhuang', yes: false }); return; }
+  if (ev.t === 'lazhuang') {
+    // blind 拉庄: while WE'RE a pending challenger our own hand must be redacted (all -1)
+    if ((ev.need || []).includes(0) && !view.hands[0].every((t) => t < 0)) return fail('challenger hand leaked during 拉庄: ' + JSON.stringify(view.hands[0]));
+    act({ do: 'lazhuang', yes: false }); return;
+  }
   if (ev.t === 'sync') { if (didReconnect) playedAfterReconnect = true; actOnTurn(view); return; }
   if (ev.t === 'await' && ev.seat === 0) {
     awaitCount++;

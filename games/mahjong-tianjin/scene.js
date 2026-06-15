@@ -438,12 +438,14 @@ export class MahjongScene {
     // row reflows around the inserted tile.
     const hand = ui.renderedHand;
     const drawnIdx = ui.drawnTile != null ? hand.lastIndexOf(ui.drawnTile) : -1;
+    const ownBacks = !!ui.ownBacks; // blind 拉庄: your own hand is dealt but shown face-down until you decide
+    const hideWilds = !!ui.hideWilds; // 拉庄 in progress: the 混儿 isn't decided yet → don't mark wild tiles
     let settled = 0;
     const handItems = hand.map((id, i) => {
       const isDrawn = i === drawnIdx;
       return {
-        key: isDrawn ? 'hdraw' : 'h' + settled++, kind: id, wild: game.isWild(id), pick: i,
-        selected: i === ui.selRendered, // selRendered is gated by render() (on-turn offline; also while waiting online)
+        key: isDrawn ? 'hdraw' : 'h' + settled++, kind: ownBacks ? null : id, wild: !ownBacks && !hideWilds && game.isWild(id), pick: i,
+        selected: !ownBacks && i === ui.selRendered, // selRendered is gated by render() (on-turn offline; also while waiting online)
         // flank the drawn tile: a half-gap before it and before its right neighbour
         gapBefore: drawnIdx >= 0 && (i === drawnIdx || i === drawnIdx + 1) ? DRAW_MARGIN : 0,
         from: isDrawn ? this.deckPos : null,  // the drawn tile flies from the deck

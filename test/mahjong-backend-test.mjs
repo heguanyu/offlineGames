@@ -54,15 +54,17 @@ async function run() {
   await b.discard(0);
   ok(b.getState().result === before, 'an action after OVER is ignored');
 
-  // --- non-庄 hand: the 'lazhuang' prompt fires before the deal and is answerable ----
+  // --- non-庄 hand: deal first (table refreshes), THEN ask 'lazhuang' (still blind — the UI hides
+  // the hand). The prompt carries `need` so the cross-panel knows who must choose. ----
   console.log('LocalBackend 拉庄:');
   const ev2 = [];
   const b2 = createBackend({ mode: 'local', thinkDelay: 0, rng: rng(3) });
-  let asked = false;
-  b2.onEvent(async (ev) => { ev2.push(ev.type); if (ev.type === 'lazhuang') { asked = true; b2.decideLaZhuang(true); } });
+  let asked = false, lzNeed = null;
+  b2.onEvent(async (ev) => { ev2.push(ev.type); if (ev.type === 'lazhuang') { asked = true; lzNeed = ev.need; b2.decideLaZhuang(true); } });
   await b2.startHand({ dealer: 1, prevailingWind: 0, scores: [0, 0, 0, 0], seatBase: 0, level: 2 });
-  ok(asked && ev2[0] === 'lazhuang', "a non-庄 hand asks 'lazhuang' before dealing");
-  ok(ev2.indexOf('lazhuang') < ev2.indexOf('deal'), '拉庄 is decided before the deal (blind)');
+  ok(asked && ev2[0] === 'deal', "a non-庄 hand deals first, then asks 'lazhuang'");
+  ok(ev2.indexOf('deal') < ev2.indexOf('lazhuang'), '拉庄 is asked AFTER the deal (blind, hand kept face-down)');
+  ok(Array.isArray(lzNeed) && lzNeed.includes(HUMAN), "the 'lazhuang' event names the human as a pending challenger");
   ok(b2.getState().isLaZhuang(HUMAN), 'a yes answer puts the human in the 拉庄 set');
 
   // a new hand bumps the generation, so a stale opponent loop cannot touch the new game

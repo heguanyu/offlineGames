@@ -47,13 +47,30 @@ function setConn(s) {
 }
 
 // ---- name (top-right textbox + first-sit dialog) -------------------------
+// A name may only contain Chinese characters or English letters, capped at 6 中文 / 12 英文
+// (中文 counts as 2 width units, 英文 as 1; max 12). Anything else (digits, spaces, punctuation,
+// emoji…) is dropped. Enforced live in the inputs AND again on the server (sanitizeName).
+function cleanName(s) {
+  let out = '', w = 0;
+  for (const ch of String(s || '')) {
+    const cjk = /[㐀-䶿一-鿿]/.test(ch);
+    if (!cjk && !/[a-zA-Z]/.test(ch)) continue;
+    const cw = cjk ? 2 : 1;
+    if (w + cw > 12) break;
+    w += cw; out += ch;
+  }
+  return out;
+}
+const clampInput = (e) => { const c = cleanName(e.target.value); if (c !== e.target.value) e.target.value = c; };
 function setName(n) {
-  name = (n || '').replace(/\s+/g, ' ').trim().slice(0, 16);
+  name = cleanName(n);
   localStorage.setItem('mahjong-online-name', name);
   $('name-input').value = name;
   send({ type: 'setName', name });
 }
+name = cleanName(name); localStorage.setItem('mahjong-online-name', name); // clean a name stored before these rules
 $('name-input').value = name;
+$('name-input').addEventListener('input', clampInput);
 $('name-input').addEventListener('change', (e) => setName(e.target.value));
 
 function requireNameThenSit(table, seat) {
@@ -63,8 +80,9 @@ function requireNameThenSit(table, seat) {
   $('name-overlay').classList.remove('hidden');
   inp.focus();
 }
+$('name-dialog-input').addEventListener('input', clampInput);
 $('name-dialog-ok').addEventListener('click', () => {
-  const n = $('name-dialog-input').value.trim();
+  const n = cleanName($('name-dialog-input').value);
   if (!n) { $('name-dialog-input').focus(); return; }
   setName(n);
   $('name-overlay').classList.add('hidden');

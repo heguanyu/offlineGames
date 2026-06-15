@@ -90,6 +90,11 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 
 .nameplate .wind { color: var(--gold); font-weight: 800; }
 
+/* online plate: 东 · 玩家名 · 自己 — the name a touch smaller, the relation muted; · separators */
+.nameplate .pname { font-size: 0.62em; max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nameplate .prel { font-size: 0.6em; color: #9fd3bd; }
+.nameplate .pname::before, .nameplate .prel::before { content: '·'; color: #3f6b58; margin-right: 8px; font-weight: 700; }
+
 .nameplate .think { color: var(--gold); font-size: 0.55em; animation: blink 1s infinite; }
 
 @keyframes blink { 50% { opacity: 0.35; } }
@@ -109,6 +114,9 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 }
 
 .tile.lg { --tw: 30px; --th: 41px; border-radius: 5px; }
+
+/* face-down tile (blind 拉庄: your own hand on the 2D board) — a plain green back */
+.tile.back { background: linear-gradient(155deg,#1f7a55,#125c3e); box-shadow: inset 0 1px 1px rgba(255,255,255,0.22), 0 1px 0 #0c3f2b, 0 2px 0 #0a3424, 0 3px 4px rgba(0,0,0,0.4); }
 
 .tile .rk { font-size: calc(var(--th) * 0.44); font-weight: 800; }
 

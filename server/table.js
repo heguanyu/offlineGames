@@ -58,11 +58,17 @@ export class Table {
     this._lz = null;        // { need:Set, answers:{}, finish } — 拉庄 answers in flight
     this._next = null;      // { need:Set, finish } — 下一局 acks in flight
     this._dealAck = null;   // { need:Set, finish } — clients finishing the deal animation
+    this._lzPending = null; // Set of seats whose own hand stays hidden (blind 拉庄, dealt-but-undecided)
     this._run().catch(() => {});
   }
 
   isHuman(s) { return this.seats[s].kind === 'human'; }
   humans() { const a = []; for (let s = 0; s < 4; s++) if (this.isHuman(s)) a.push(s); return a; }
+
+  // Does the just-ended hand close the 锅? The 庄 button laps back to the 锅's first 庄 (seat 0) at
+  // the end of the 北圈 (prevailingWind 3) — same rule _run uses to fire 'potOver'. Lets the result
+  // modal show "结束并查看总成绩" (no ready-toggle) on the final hand.
+  _potEnd() { const g = this.game; return !!(g && g.phase === PHASE.OVER && g.nextDealer() === 0 && this.dealer !== 0 && this.prevailingWind === 3); }
 
   // The 锅 standings to resume from after a restart (the in-progress hand is intentionally dropped;
   // the next deal starts from this dealer/round/scores). Returns the last COMMITTED snapshot.
@@ -81,11 +87,15 @@ export class Table {
       seatKinds: this.seats.map((s) => s.kind),
     };
     if (!g) return base;
-    // own hand always; everyone's revealed at the showdown (OVER) for the result modal.
-    const hand = (p) => (p === seat || g.phase === PHASE.OVER ? g.hands[p].slice() : g.hands[p].map(() => -1));
+    // own hand always; everyone's revealed at the showdown (OVER) for the result modal. EXCEPT a
+    // seat still in _lzPending sees its own hand as backs too — blind 拉庄 over the dealt hand. The
+    // 混儿 (wilds + indicator) is part of the hand "starting", so it's withheld from that seat too.
+    const hideOwn = this._lzPending && this._lzPending.has(seat);
+    const hand = (p) => (((p === seat && !hideOwn) || g.phase === PHASE.OVER) ? g.hands[p].slice() : g.hands[p].map(() => -1));
     return {
       ...base,
-      phase: g.phase, turn: g.turn, dealer: g.dealer, wilds: g.wilds, indicator: g.indicator,
+      phase: g.phase, turn: g.turn, dealer: g.dealer,
+      wilds: hideOwn ? [] : g.wilds, indicator: hideOwn ? null : g.indicator,
       scores: g.scores, wallCount: g.wall.length, laZhuang: g.laZhuang, dealerDouble: g.dealerDouble,
       hands: [0, 1, 2, 3].map(hand),
       melds: g.melds, discards: g.discards, discardLog: g.discardLog,
@@ -105,18 +115,19 @@ export class Table {
   resync(seat) {
     if (!this.isHuman(seat)) return;
     let ev = { t: 'sync' };
-    if (this._lz && this._lz.need.has(seat)) ev = { t: 'lazhuang', dealer: this.dealer };
+    if (this._lz && this.isHuman(seat)) ev = { t: 'lazhuang', dealer: this.dealer, need: [...this._lz.need], answers: { ...this._lz.answers } }; // re-show the 拉庄 decision / 庄 tally
     else if (this._dealAck && this._dealAck.need.has(seat)) ev = { t: 'deal' }; // re-run the deal animation; its 'dealDone' releases the bots
     else if (this._waiting && this._waiting.seat === seat) ev = { t: 'await', who: this._waiting.kind, seat, timeout: Math.max(1000, this._waiting.deadline - Date.now()), total: TURN_TIMEOUT_MS };
-    else if (this._next) ev = { t: 'over', readied: !this._next.need.has(seat) }; // re-show the result on refresh — even for a player who already readied (then it's a 'waiting' state)
+    else if (this._next) ev = { t: 'over', readied: !this._next.need.has(seat), potEnd: this._potEnd() }; // re-show the result on refresh — even for a player who already readied (then it's a 'waiting' state)
     this.emit(seat, { type: 'game', ev, view: this.viewFor(seat) });
   }
 
   // ---- action routing (called from index.js for the seat's socket) ----------
   onAction(seat, msg) {
     if (this._lz && this._lz.need.has(seat) && msg.do === 'lazhuang') {
-      this._lz.answers[seat] = !!msg.yes; this._lz.need.delete(seat);
+      this._lz.answers[seat] = !!msg.yes; this._lz.need.delete(seat); // leaves _lzPending too → reveals this seat's hand
       if (this._lz.need.size === 0) this._lz.finish();
+      else this._emitLz(); // update everyone's tally; the answerer's next frame shows their revealed hand
     } else if (this._waiting && this._waiting.seat === seat && this._isMoveFor(this._waiting.kind, msg)) {
       this._waiting.finish(msg);
     } else if (this._next && this.isHuman(seat) && (msg.do === 'next' || msg.do === 'unready')) {
@@ -137,12 +148,16 @@ export class Table {
     const gen = ++this._gen;
     for (;;) {
       if (gen !== this._gen) return;
-      const laZhuang = await this._collectLaZhuang(gen);
-      if (gen !== this._gen) return;
-      this.game = new Game({ dealer: this.dealer, prevailingWind: this.prevailingWind, scores: this.scores, seatBase: this.seatBase, laZhuang });
+      // Deal FIRST so every client's table refreshes to the new hand; 拉庄 is asked AFTER (still
+      // blind — each challenger's own hand is redacted by viewFor while it sits in _lzPending).
+      this._lzPending = new Set(this.humans().filter((s) => s !== this.dealer));
+      this.game = new Game({ dealer: this.dealer, prevailingWind: this.prevailingWind, scores: this.scores, seatBase: this.seatBase, laZhuang: [] });
       this.pushEvent({ t: 'deal' });
-      await this._awaitDealDone(gen);        // hold the bots until every client's deal animation finishes
+      await this._awaitDealDone(gen);        // hold until every client's deal animation finishes
       if (gen !== this._gen) return;
+      this.game.laZhuang = await this._collectLaZhuang(gen); // blind 拉庄 over the dealt-but-hidden hands
+      if (gen !== this._gen) return;
+      this._lzPending = null;                // everyone answered → hands reveal, play begins
       await this._playHand(gen);
       if (gen !== this._gen) return;
       this.scores = this.game.scores.slice();
@@ -167,7 +182,7 @@ export class Table {
     const g = this.game;
     for (;;) {
       if (gen !== this._gen) return;
-      if (g.phase === PHASE.OVER) { this.pushEvent({ t: 'over', result: safeResult(g.result), winningTile: g.drawnTile }); return; }
+      if (g.phase === PHASE.OVER) { this.pushEvent({ t: 'over', result: safeResult(g.result), winningTile: g.drawnTile, potEnd: this._potEnd() }); return; }
 
       if (g.phase === PHASE.AWAIT_CLAIM) {
         const p = g.claim.player;
@@ -215,22 +230,32 @@ export class Table {
     });
   }
 
-  // 拉庄 (blind, pre-deal): ask each non-庄 human; bots decide via botLaZhuang.
+  // 拉庄 (blind, AFTER the deal): ask each non-庄 human; bots decide via botLaZhuang. `need` is the
+  // _lzPending set (the same one viewFor redacts), so answering a seat both records it AND reveals
+  // that seat's hand. Every human (challengers AND the 庄) gets the frame: challengers decide,
+  // the 庄 + already-answered seats watch the live tally.
   _collectLaZhuang(gen) {
-    const challengers = [];
-    for (let s = 0; s < 4; s++) if (s !== this.dealer && !this.isHuman(s) && botLaZhuang(s, this.dealer)) challengers.push(s);
-    const need = new Set(this.humans().filter((s) => s !== this.dealer));
-    if (need.size === 0) return Promise.resolve(challengers.sort((a, b) => a - b));
+    const botChallengers = [];
+    for (let s = 0; s < 4; s++) if (s !== this.dealer && !this.isHuman(s) && botLaZhuang(s, this.dealer)) botChallengers.push(s);
+    const need = this._lzPending || new Set();
+    if (need.size === 0) return Promise.resolve(botChallengers.sort((a, b) => a - b));
     return new Promise((resolve) => {
       const answers = {};
       const finish = () => {
         this._lz = null;
-        const all = challengers.concat(Object.keys(answers).filter((s) => answers[s]).map(Number));
+        const all = botChallengers.concat(Object.keys(answers).filter((s) => answers[s]).map(Number));
         resolve(all.sort((a, b) => a - b));
       };
-      this._lz = { need, answers, gen, finish }; // no timeout — the deal halts until EVERY human chooses 拉庄/不拉
-      for (const s of need) this.emit(s, { type: 'game', ev: { t: 'lazhuang', dealer: this.dealer }, view: this.viewFor(s) });
+      this._lz = { need, answers, gen, finish }; // no timeout — play halts until EVERY challenger chooses 拉庄/不拉
+      this._emitLz();
     });
+  }
+  // The 拉庄 frame, sent to every human (the view is redacted per-seat by viewFor). need/answers are
+  // ABSOLUTE seats; the client rotates them to its display.
+  _emitLz() {
+    if (!this._lz) return;
+    const ev = { t: 'lazhuang', dealer: this.dealer, need: [...this._lz.need], answers: { ...this._lz.answers } };
+    for (const s of this.humans()) this.emit(s, { type: 'game', ev, view: this.viewFor(s) });
   }
 
   // wait for every human to click 下一局 (bots/offline don't block; timeout auto-advances).
@@ -262,7 +287,7 @@ export class Table {
   dispose() {
     this._gen++; // any in-flight wait now resolves and _run bails on the gen check (no timeouts to rely on)
     const w = this._waiting, lz = this._lz, nx = this._next, da = this._dealAck;
-    this._waiting = this._lz = this._next = this._dealAck = null;
+    this._waiting = this._lz = this._next = this._dealAck = this._lzPending = null;
     if (w) w.finish(null);
     if (lz) lz.finish();
     if (nx) nx.finish();

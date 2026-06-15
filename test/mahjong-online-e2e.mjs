@@ -49,6 +49,11 @@ try {
   await A.click('.chair[data-table="0"][data-seat="0"]');
   await clickMenu(A, '坐这里');
   await A.waitForFunction(() => !document.getElementById('name-overlay').classList.contains('hidden'));
+  // name rules: only 中文/英文, capped at 6 中文 / 12 英文. A too-long, mixed-junk name is cleaned live.
+  await A.type('#name-dialog-input', '测试玩家一二三四 abc123!@#'); // 8 中文 + junk
+  const cleaned = await A.evaluate(() => document.getElementById('name-dialog-input').value);
+  if (cleaned !== '测试玩家一二') throw new Error(`name input not cleaned: got "${cleaned}" (want 测试玩家一二 — 6 中文 cap, junk stripped)`);
+  await A.evaluate(() => { document.getElementById('name-dialog-input').value = ''; });
   await A.type('#name-dialog-input', '阿强');
   await A.click('#name-dialog-ok');
   await A.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="0"]').classList.contains('me'), { timeout: 4000 });
