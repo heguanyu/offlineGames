@@ -22,14 +22,41 @@ const ALLOWED = (process.env.ALLOWED_ORIGINS ||
 const TABLES = 1, SEATS = 4;
 const WIND = ['东', '南', '西', '北'];
 
-// ---- persistent lifetime scores -------------------------------------------
-// Keyed by the player's uid; each finished 锅 adds its per-seat score. Persisted to a JSON
-// file (set SCORES_FILE on Azure to a path under /home so it survives restarts/redeploys).
-const SCORES_FILE = process.env.SCORES_FILE || fileURLToPath(new URL('./scores.json', import.meta.url));
-let scoreBook = {}; // uid → { name, total, pots }
-try { const raw = JSON.parse(fs.readFileSync(SCORES_FILE, 'utf8')); if (raw && typeof raw === 'object') scoreBook = raw; } catch {}
+// ---- persistence (lifetime scores + the live 锅 state) ---------------------
+// One JSON file holds the lifetime leaderboard (scoreBook: uid → {name,total,pots}) AND a snapshot
+// of each table — its seats + the current 锅's standings (scores / 圈 / 庄 / 每圈成绩). On Azure set
+// SCORES_FILE to a path under /home so it survives restarts & redeploys. A restart RESTORES the
+// seats + 锅 standings (the in-progress hand is dropped); players re-ready and the 锅 resumes from
+// the same round — it never resets to round 1.
+const STATE_FILE = process.env.SCORES_FILE || fileURLToPath(new URL('./scores.json', import.meta.url));
+let scoreBook = {}, savedTables = [];
+try {
+  const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+  if (raw && typeof raw === 'object') {
+    if (raw.scoreBook || raw.tables) { scoreBook = raw.scoreBook || {}; savedTables = raw.tables || []; }
+    else scoreBook = raw; // legacy file: the bare scoreBook
+  }
+} catch {}
+
+// ---- authoritative state --------------------------------------------------
+// seat: null | { kind:'human', uid, name, ready } | { kind:'bot' }
+// table: { id, status:'waiting'|'playing', seats:[4], game: Table|null, resume: 锅-snapshot|null }
+const tables = Array.from({ length: TABLES }, (_, id) => {
+  const sv = savedTables[id];
+  const seats = (sv && Array.isArray(sv.seats) ? sv.seats : []).map((s) => !s ? null
+    : s.kind === 'bot' ? { kind: 'bot' }
+    : (s.kind === 'human' && s.uid) ? { kind: 'human', uid: s.uid, name: s.name || '', ready: false } : null);
+  while (seats.length < SEATS) seats.push(null);
+  return { id, status: 'waiting', seats, game: null, resume: (sv && sv.pot) || null };
+});
+
+const dumpState = () => JSON.stringify({
+  scoreBook,
+  tables: tables.map((t) => ({ seats: t.seats, pot: t.game ? t.game.snapshot() : (t.resume || null) })),
+});
 let saveTimer = null;
-function saveScores() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(SCORES_FILE, JSON.stringify(scoreBook)); } catch {} }, 200); }
+function persist() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(STATE_FILE, dumpState()); } catch {} }, 200); }
+function flushState() { clearTimeout(saveTimer); try { fs.writeFileSync(STATE_FILE, dumpState()); } catch {} } // sync, for shutdown
 // Record one finished 锅: each human seat's final score is added to their lifetime total.
 function recordPot(seats, finalScores) {
   for (let s = 0; s < SEATS; s++) {
@@ -39,16 +66,10 @@ function recordPot(seats, finalScores) {
       rec.name = seat.name || rec.name; rec.total += finalScores[s] | 0; rec.pots += 1;
     }
   }
-  saveScores();
 }
 const leaderboard = (uid) => Object.entries(scoreBook)
   .sort((a, b) => b[1].total - a[1].total).slice(0, 50)
   .map(([k, r]) => ({ name: r.name, total: r.total, pots: r.pots, mine: k === uid }));
-
-// ---- authoritative state --------------------------------------------------
-// seat: null | { kind:'human', uid, name, ready } | { kind:'bot' }
-// table: { id, status:'waiting'|'playing', seats:[4], game: Table|null }
-const tables = Array.from({ length: TABLES }, (_, id) => ({ id, status: 'waiting', seats: new Array(SEATS).fill(null), game: null }));
 const clients = new Map(); // clientId → { ws, id, uid, name }
 const uidWs = new Map();    // uid → the live socket for that player (for routing game frames)
 let nextId = 1;
@@ -94,18 +115,22 @@ function maybeStart(t) {
   broadcastLobby();
   // route each seat's frames to that player's current socket (reconnection-safe)
   const emit = (seatIdx, msg) => { const gs = gameSeats[seatIdx]; if (gs.kind === 'human') send(uidWs.get(gs.uid), msg); };
-  t.game = new Table(t.id, gameSeats, emit, (finalScores) => onPotOver(t, gameSeats, finalScores));
+  // online bots play at the hardest level; t.resume carries the 锅 standings across a restart;
+  // persist after every hand so a crash resumes from the latest round.
+  t.game = new Table(t.id, gameSeats, emit, (finalScores) => onPotOver(t, gameSeats, finalScores), 3, t.resume, persist);
+  persist();
 }
 
 // 锅 finished → persist each player's lifetime score, then back to the lobby (same occupants,
-// humans un-readied for a rematch).
+// humans un-readied for a rematch). The 锅 is done, so its resume snapshot is cleared.
 function onPotOver(t, gameSeats, finalScores) {
   if (gameSeats && finalScores) recordPot(gameSeats, finalScores);
   if (t.game) t.game.dispose();
-  t.game = null;
+  t.game = null; t.resume = null;
   t.status = 'waiting';
   for (const seat of t.seats) if (seat && seat.kind === 'human') seat.ready = false;
   broadcastLobby();
+  persist();
 }
 
 // ---- per-connection messages ----------------------------------------------
@@ -125,10 +150,9 @@ function handle(client, msg) {
       client.name = sanitizeName(msg.name) || `玩家${client.id}`;
       uidWs.set(client.uid, client.ws);
       const at = seatOf(client.uid); // reconnection: reclaim a seat held while we were away
-      if (at) {
-        tables[at.table].seats[at.seat].name = client.name;
-        if (tables[at.table].status === 'playing' && tables[at.table].game) tables[at.table].game.resync(at.seat);
-      }
+      if (at) tables[at.table].seats[at.seat].name = client.name;
+      if (at && tables[at.table].status === 'playing' && tables[at.table].game) tables[at.table].game.resync(at.seat);
+      else send(client.ws, { type: 'noGame' }); // no live game on this socket → a game page returns to the lobby
       break;
     }
     case 'setName': {
@@ -162,6 +186,7 @@ function handle(client, msg) {
   }
   broadcastLobby();
   for (const t of tables) maybeStart(t); // any change (ready OR adding the last bot) can complete a table
+  persist(); // seat/ready/bot changes are part of the restored state
 }
 
 // ---- HTTP + WebSocket -----------------------------------------------------
@@ -195,6 +220,7 @@ wss.on('connection', (ws) => {
     // (the table auto-acts on that seat's turn until the player returns).
     if (at && tables[at.table].status === 'waiting') tables[at.table].seats[at.seat] = null;
     broadcastLobby();
+    persist();
   });
   ws.on('error', () => {});
 });
@@ -204,5 +230,9 @@ const heartbeat = setInterval(() => {
   for (const ws of wss.clients) { if (!ws.isAlive) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); }
 }, 30000);
 wss.on('close', () => clearInterval(heartbeat));
+
+// Flush the latest 锅 standings synchronously on a graceful shutdown (Azure sends SIGTERM on a
+// restart/redeploy) so the resumed game starts from the most recent round.
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { flushState(); process.exit(0); });
 
 server.listen(PORT, () => console.log(`mahjong-online lobby listening on :${PORT}`));

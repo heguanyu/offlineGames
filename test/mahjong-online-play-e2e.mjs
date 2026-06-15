@@ -4,10 +4,13 @@
 // Usage: node test/mahjong-online-play-e2e.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { startServer, launchBrowser, ROOT as root } from './harness.mjs';
 
 const PORT = 8193, SITE = 8148;
-const srv = spawn(process.execPath, [path.join(root, 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), BOT_THINK_MS: '20' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const SCORES_FILE = path.join(os.tmpdir(), `mj-play-e2e-${PORT}.json`); try { fs.unlinkSync(SCORES_FILE); } catch {} // isolate: no restored table state
+const srv = spawn(process.execPath, [path.join(root, 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), BOT_THINK_MS: '20', SCORES_FILE }, stdio: ['ignore', 'pipe', 'pipe'] });
 let srvErr = ''; srv.stderr.on('data', (d) => { srvErr += d; });
 await new Promise((res) => { srv.stdout.on('data', (d) => { if (/listening/.test(d)) res(); }); setTimeout(res, 2500); });
 const site = await startServer(SITE);

@@ -41,6 +41,15 @@
     </div>
   </div>
 
+  <!-- server offline / maintenance (shown whenever the WebSocket can't reach the server) -->
+  <div class="overlay hidden" id="maint-overlay">
+    <div class="panel">
+      <h2>🛠️ 服务器维护中</h2>
+      <p class="sub">服务器正在维护中，马上回来…</p>
+      <p class="sub" style="font-size:0.78rem;opacity:0.8;">连接恢复后会自动回到大厅，可继续上一锅。</p>
+    </div>
+  </div>
+
   <script type="module" src="./lobby.js"></script>
 </body>
 </html>

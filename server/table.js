@@ -32,14 +32,23 @@ export class Table {
   // seats: [4] of { kind:'human', uid, name } | { kind:'bot' }
   // emit(seat, msg): deliver to that seat's live human socket (no-op if bot/offline)
   // onPotOver(): the 锅 finished — caller returns the table to the lobby
-  constructor(id, seats, emit, onPotOver, level = 2) {
+  // resume: a snapshot() from a previous run — continue the 锅 from those standings (drop the hand).
+  // onState(): called after each hand so the caller can persist the 锅 progress.
+  constructor(id, seats, emit, onPotOver, level = 2, resume = null, onState = null) {
     this.id = id;
     this.seats = seats;
     this.emit = emit;
     this.onPotOver = onPotOver;
     this.level = level;
-    this.scores = [0, 0, 0, 0];
-    this.dealer = 0; this.prevailingWind = 0; this.seatBase = 0; this.rounds = [];
+    this.onState = onState;
+    this.scores = resume ? (resume.scores || [0, 0, 0, 0]).slice() : [0, 0, 0, 0];
+    this.dealer = resume ? (resume.dealer | 0) : 0;
+    this.prevailingWind = resume ? (resume.prevailingWind | 0) : 0;
+    this.seatBase = resume ? (resume.seatBase | 0) : 0;
+    this.rounds = resume && Array.isArray(resume.rounds) ? resume.rounds.slice() : [];
+    // the last CONSISTENT between-hands snapshot (what persist() saves). Updated only after a hand
+    // commits, so a crash mid-hand resumes from the prior completed hand — never a half-applied 圈.
+    this._committed = { scores: this.scores.slice(), dealer: this.dealer, prevailingWind: this.prevailingWind, seatBase: this.seatBase, rounds: this.rounds.slice() };
     this.game = null;
     this._gen = 0;
     this._waiting = null;   // { seat, kind, finish } — a single human move in flight
@@ -50,6 +59,13 @@ export class Table {
 
   isHuman(s) { return this.seats[s].kind === 'human'; }
   humans() { const a = []; for (let s = 0; s < 4; s++) if (this.isHuman(s)) a.push(s); return a; }
+
+  // The 锅 standings to resume from after a restart (the in-progress hand is intentionally dropped;
+  // the next deal starts from this dealer/round/scores). Returns the last COMMITTED snapshot.
+  snapshot() {
+    const c = this._committed;
+    return { scores: c.scores.slice(), dealer: c.dealer, prevailingWind: c.prevailingWind, seatBase: c.seatBase, rounds: c.rounds.slice() };
+  }
 
   // ---- redacted per-seat view ----------------------------------------------
   viewFor(seat) {
@@ -133,6 +149,8 @@ export class Table {
         this.prevailingWind = (this.prevailingWind + 1) % 4;
       }
       this.dealer = nd;
+      this._committed = { scores: this.scores.slice(), dealer: this.dealer, prevailingWind: this.prevailingWind, seatBase: this.seatBase, rounds: this.rounds.slice() };
+      if (this.onState) this.onState(); // persist the 锅 standings between hands (a restart resumes here)
     }
   }
 

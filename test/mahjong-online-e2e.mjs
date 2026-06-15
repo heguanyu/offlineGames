@@ -4,6 +4,8 @@
 // Usage: node test/mahjong-online-e2e.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { startServer, launchBrowser, ROOT as root } from './harness.mjs';
 
@@ -12,8 +14,9 @@ const LOBBY_PORT = 8190, SITE_PORT = 8147; // 8190 (not 8090) so a dev server on
 const errors = [];
 
 // start the lobby server (its own process, like in prod)
+const SCORES_FILE = path.join(os.tmpdir(), `mj-lobby-e2e-${LOBBY_PORT}.json`); try { fs.unlinkSync(SCORES_FILE); } catch {} // isolate: no restored table state
 const srv = spawn(process.execPath, [path.join(root, 'server', 'index.js')],
-  { env: { ...process.env, PORT: String(LOBBY_PORT) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  { env: { ...process.env, PORT: String(LOBBY_PORT), SCORES_FILE }, stdio: ['ignore', 'pipe', 'pipe'] });
 srv.stderr.on('data', (d) => errors.push('server: ' + d));
 await new Promise((res) => { srv.stdout.on('data', (d) => { if (/listening/.test(d)) res(); }); setTimeout(res, 2500); });
 

@@ -237,6 +237,14 @@ body.flat #turn-timer-num { font-size: 2.3rem; }
     </div>
   </div>
 
+  <!-- online: lost the server connection (then auto-returns to the lobby) -->
+  <div class="overlay hidden" id="reconnect-overlay">
+    <div class="panel">
+      <h2>🔌 连接已断开</h2>
+      <p class="sub">正在重新连接服务器… 若服务器正在维护，将返回大厅。</p>
+    </div>
+  </div>
+
   <div id="toast"></div>
 
   <script type="module" src="./main.js"></script>

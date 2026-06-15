@@ -4,6 +4,8 @@
 // Uses Node's global WebSocket. Usage: node test/mahjong-online-client-test.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { WebSocket } from 'ws';
 import { ROOT as root } from './harness.mjs';
 import { buildRemoteView, mapServerEvent, createBackend } from '../games/mahjong-tianjin/backend.js';
@@ -41,7 +43,8 @@ console.log('rotation:');
 // --- integration: RemoteBackend plays a hand vs the server, player at seat 2 ----------------
 console.log('RemoteBackend integration:');
 const PORT = 8192, UID = 'client-test-uid';
-const srv = spawn(process.execPath, [path.join(root, 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), BOT_THINK_MS: '20' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const SCORES_FILE = path.join(os.tmpdir(), `mj-client-test-${PORT}.json`); try { fs.unlinkSync(SCORES_FILE); } catch {} // isolate: no shared/restored table state
+const srv = spawn(process.execPath, [path.join(root, 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), BOT_THINK_MS: '20', SCORES_FILE }, stdio: ['ignore', 'pipe', 'pipe'] });
 let srvErr = ''; srv.stderr.on('data', (d) => { srvErr += d; });
 await new Promise((res) => { srv.stdout.on('data', (d) => { if (/listening/.test(d)) res(); }); setTimeout(res, 2500); });
 

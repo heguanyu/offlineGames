@@ -337,12 +337,29 @@ function flushLogToasts() {
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
+// ---- online: lost-connection banner ----------------------------------------
+// On a dropped socket the RemoteBackend keeps retrying; we show a banner and, if it can't get
+// back into the live game within a few seconds (e.g. the server restarted), return to the lobby —
+// which shows the server status and lets you re-ready to resume the same 锅.
+let reconnectTimer = null;
+function showReconnecting() {
+  const el = $('reconnect-overlay'); if (el) el.classList.remove('hidden');
+  if (!reconnectTimer) reconnectTimer = setTimeout(returnHub, 8000);
+}
+function hideReconnecting() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  const el = $('reconnect-overlay'); if (el) el.classList.add('hidden');
+}
+
 // The backend pushes one event per move; this async handler is the whole UI-side
 // orchestration that used to be the synchronous tick() loop. Each case renders + plays
 // the matching animation/sound and AWAITS it, so the backend (local sim or remote server)
 // is held until the table catches up before sending the next event. The 碰/杠/自摸/荒 toasts
 // + voices ride the engine log and flush inside render(), so most cases just call render().
 async function onBackendEvent(ev) {
+  if (ev.type === 'disconnected') { showReconnecting(); return; } // lost the server → reconnect banner (then bail to the lobby)
+  if (ev.type === 'gameGone') { returnHub(); return; }            // server has no game for us (e.g. it restarted) → lobby
+  if (ONLINE) hideReconnecting();                                 // any real frame means we're connected again
   const st = backend.getState();
   if (st) game = st;
   if (ONLINE) syncTurnTimer(ev); // show the ring whenever a player is on the clock (no-op offline)
@@ -1038,7 +1055,13 @@ function bindUI() {
 }
 
 // Leave the game: offline → the main hub; online → back to the lobby.
-function returnHub() { location.href = ONLINE ? '../mahjong-tianjin-online/' : '../../'; }
+function returnHub() {
+  if (!ONLINE) { location.href = '../../'; return; }
+  const params = new URLSearchParams(location.search); // carry ?server=/fast/flat back to the lobby
+  params.delete('online');
+  const qs = params.toString();
+  location.href = '../mahjong-tianjin-online/' + (qs ? '?' + qs : '');
+}
 
 // Keyboard/gamepad focus between the result panel's two buttons (下一局 / 返回).
 let resultFocus = 0;

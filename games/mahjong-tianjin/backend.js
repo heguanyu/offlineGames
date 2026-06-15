@@ -203,8 +203,12 @@ export class RemoteBackend {
     this._closed = false;
     const ws = this._ws = new WebSocket(this.url);
     ws.onopen = () => this._send({ type: 'hello', uid: this.uid, name: this.name });
-    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } if (m.type === 'game') this._queue = this._queue.then(() => this._process(m)).catch((err) => console.error('[remote] frame processing failed:', err)); };
-    ws.onclose = () => { if (!this._closed) { clearTimeout(this._reconnect); this._reconnect = setTimeout(() => this.connect(), 1500); } };
+    ws.onmessage = (e) => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.type === 'noGame') { if (this._handler) this._handler({ type: 'gameGone' }); return; } // no live game on this socket → the UI returns to the lobby
+      if (m.type === 'game') this._queue = this._queue.then(() => this._process(m)).catch((err) => console.error('[remote] frame processing failed:', err));
+    };
+    ws.onclose = () => { if (!this._closed) { clearTimeout(this._reconnect); this._reconnect = setTimeout(() => this.connect(), 1500); if (this._handler) this._handler({ type: 'disconnected' }); } };
     ws.onerror = () => { try { ws.close(); } catch {} };
   }
   dispose() { this._closed = true; clearTimeout(this._reconnect); if (this._ws) try { this._ws.close(); } catch {} this._ws = null; this._handler = null; }

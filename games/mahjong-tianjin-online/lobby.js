@@ -41,6 +41,9 @@ const send = (m) => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.s
 function setConn(s) {
   const el = $('conn'); el.className = 'conn ' + s;
   el.title = ({ on: '已连接', off: '未连接 · 重连中…', connecting: '连接中…' })[s];
+  // server offline → "维护中" overlay; hide once reconnected (leave it during 'connecting' retries)
+  const maint = $('maint-overlay');
+  if (maint) { if (s === 'on') maint.classList.add('hidden'); else if (s === 'off') maint.classList.remove('hidden'); }
 }
 
 // ---- name (top-right textbox + first-sit dialog) -------------------------
