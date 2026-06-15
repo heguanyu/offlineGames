@@ -1,7 +1,8 @@
 // Server-restart persistence: play a few hands, KILL the server (SIGTERM → it flushes the 锅
-// standings), restart it on the same state file, and just RECONNECT (no re-ready) — the 锅 must
-// auto-resume from the saved scores / 圈 / 庄 (NOT a reset to round 1), landing back on the table.
-// Also checks the seats were restored. Usage: node test/mahjong-online-persist-test.mjs
+// standings to the database), restart it on the same DB file, and just RECONNECT (no re-ready) — the
+// 锅 must auto-resume from the saved scores / 圈 / 庄 (NOT a reset to round 1), landing back on the
+// table. Standings are captured from the live frames (the DB file is now SQLite, not JSON).
+// Usage: node test/mahjong-online-persist-test.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -10,8 +11,9 @@ import { WebSocket } from 'ws';
 import { ROOT as root } from './harness.mjs';
 
 const PORT = 8192, UID = 'persist-uid';
-const STATE = path.join(os.tmpdir(), `mj-persist-${PORT}.json`);
-try { fs.unlinkSync(STATE); } catch {}
+const STATE = path.join(os.tmpdir(), `mj-persist-${PORT}.db`);
+const cleanDb = () => { for (const ext of ['', '-journal', '.tmp', '.legacy.bak']) { try { fs.unlinkSync(STATE + ext); } catch {} } };
+cleanDb();
 
 function startServer() {
   const s = spawn(process.execPath, [path.join(root, 'server', 'index.js')],
@@ -21,7 +23,7 @@ function startServer() {
 const firstDiscardable = (v) => v.hands[0].find((t) => t >= 0 && !(v.wilds || []).includes(t));
 
 let srv, ws, phase = 1, setup = false, deals = 0, savedPot = null;
-const done = (c, m) => { console.log(m); try { ws && ws.terminate(); } catch {} try { srv && srv.kill(); } catch {} try { fs.unlinkSync(STATE); } catch {} process.exit(c); };
+const done = (c, m) => { console.log(m); try { ws && ws.terminate(); } catch {} try { srv && srv.kill(); } catch {} cleanDb(); process.exit(c); };
 const fail = (m) => done(1, 'PERSIST TEST FAIL: ' + m);
 const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
 const act = (a) => send({ type: 'action', ...a });
@@ -40,7 +42,10 @@ function onMsg(m) {
     deals++;
     act({ do: 'dealDone' }); // ack the deal (as a real client does) so the server drives the bots without the 8s fallback
     if (phase === 2) return checkResume(view);
-    if (deals >= 4) return restart(); // hands 1-3 are committed by now → kill mid-hand-4
+    if (deals >= 4) { // hands 1-3 are committed by now → snapshot the standings, then kill mid-hand-4
+      savedPot = { scores: view.scores.slice(), prevailingWind: view.prevailingWind, dealer: view.dealer };
+      return restart();
+    }
     return;
   }
   if (ev.t === 'await' && ev.seat === 0) return onTurn(view);
@@ -49,17 +54,11 @@ function onMsg(m) {
 }
 
 async function restart() {
+  if (!savedPot || !Array.isArray(savedPot.scores)) return fail('no standings captured before restart');
   try { ws.close(); } catch {}
-  srv.kill('SIGTERM');                         // graceful → the server flushes the committed snapshot
+  srv.kill('SIGTERM');                         // graceful → the server flushes the committed snapshot to the DB
   await new Promise((r) => srv.on('exit', r));
-  let saved; try { saved = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (e) { return fail('state file unreadable: ' + e.message); }
-  const t0 = saved.tables && saved.tables[0];
-  savedPot = t0 && t0.pot;
-  if (!savedPot || !Array.isArray(savedPot.scores)) return fail('no 锅 snapshot persisted: ' + JSON.stringify(t0));
-  const seats = t0.seats || [];
-  if (!(seats[0] && seats[0].kind === 'human' && seats[0].uid === UID)) return fail('human seat not restored: ' + JSON.stringify(seats[0]));
-  if (!(seats[1] && seats[1].kind === 'bot' && seats[3] && seats[3].kind === 'bot')) return fail('bot seats not restored');
-  console.log(`  killed mid-锅; persisted standings: scores=${JSON.stringify(savedPot.scores)} 圈=${savedPot.prevailingWind} 庄=${savedPot.dealer} 每圈=${savedPot.rounds.length}`);
+  console.log(`  killed mid-锅; standings before restart: scores=${JSON.stringify(savedPot.scores)} 圈=${savedPot.prevailingWind} 庄=${savedPot.dealer}`);
   phase = 2; setup = false; deals = 0;
   srv = await startServer();
   openClient();
@@ -70,7 +69,9 @@ function checkResume(v) {
   if (!eq(v.scores, savedPot.scores)) return fail(`resumed scores ${JSON.stringify(v.scores)} ≠ saved ${JSON.stringify(savedPot.scores)} (the 锅 reset!)`);
   if (v.prevailingWind !== savedPot.prevailingWind) return fail(`resumed 圈 ${v.prevailingWind} ≠ saved ${savedPot.prevailingWind}`);
   if (v.dealer !== savedPot.dealer) return fail(`resumed 庄 ${v.dealer} ≠ saved ${savedPot.dealer}`);
-  done(0, `RESUMED the same 锅 after restart — scores=${JSON.stringify(v.scores)}, 圈=${v.prevailingWind}, 庄=${v.dealer}\nMAHJONG ONLINE PERSIST TEST PASS`);
+  const k = v.seatKinds || [];
+  if (!(k[0] === 'human' && k[1] === 'bot' && k[3] === 'bot')) return fail('seats not restored: ' + JSON.stringify(k));
+  done(0, `RESUMED the same 锅 after restart (from the DB) — scores=${JSON.stringify(v.scores)}, 圈=${v.prevailingWind}, 庄=${v.dealer}, seats restored\nMAHJONG ONLINE PERSIST TEST PASS`);
 }
 
 function openClient() {

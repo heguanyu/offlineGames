@@ -5,12 +5,15 @@
   "type": "module",
   "description": "Online 天津麻将 lobby + game server (deployed separately to Azure; never on Pages).",
   "main": "index.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js"
   },
   "dependencies": {
+    "better-sqlite3": "^11.10.0",
     "ws": "^8.18.0"
   }
 }

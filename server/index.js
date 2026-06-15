@@ -9,10 +9,9 @@
 //
 // Run locally:  PORT=8090 node index.js
 import http from 'node:http';
-import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Table } from './table.js';
+import db from './db.js';
 
 const PORT = process.env.PORT || 8090;
 const ALLOWED = (process.env.ALLOWED_ORIGINS ||
@@ -23,20 +22,14 @@ const TABLES = 1, SEATS = 4;
 const WIND = ['东', '南', '西', '北'];
 
 // ---- persistence (lifetime scores + the live 锅 state) ---------------------
-// One JSON file holds the lifetime leaderboard (scoreBook: uid → {name,total,pots}) AND a snapshot
-// of each table — its seats + the current 锅's standings (scores / 圈 / 庄 / 每圈成绩). On Azure set
-// SCORES_FILE to a path under /home so it survives restarts & redeploys. A restart RESTORES the
-// seats + 锅 standings (the in-progress hand is dropped); players re-ready and the 锅 resumes from
-// the same round — it never resets to round 1.
-const STATE_FILE = process.env.SCORES_FILE || fileURLToPath(new URL('./scores.json', import.meta.url));
-let scoreBook = {}, savedTables = [];
-try {
-  const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  if (raw && typeof raw === 'object') {
-    if (raw.scoreBook || raw.tables) { scoreBook = raw.scoreBook || {}; savedTables = raw.tables || []; }
-    else scoreBook = raw; // legacy file: the bare scoreBook
-  }
-} catch {}
+// All durable state lives in the SQLite database (server/db.js): the lifetime leaderboard
+// (scoreBook: uid → {name,total,pots}) and a per-table snapshot — its seats + the current 锅's
+// standings (scores / 圈 / 庄 / 每圈成绩). The scoreBook is loaded into memory once for fast
+// leaderboard reads and written through on every change; the table snapshot is written after each
+// hand. A restart RESTORES the seats + 锅 standings (the in-progress hand is dropped); the 锅 then
+// auto-resumes from the same round — it never resets to round 1.
+let scoreBook = db.loadScoreBook();
+const savedTables = db.loadTables();
 
 // ---- authoritative state --------------------------------------------------
 // seat: null | { kind:'human', uid, name, ready } | { kind:'bot' }
@@ -50,20 +43,18 @@ const tables = Array.from({ length: TABLES }, (_, id) => {
   return { id, status: 'waiting', seats, game: null, resume: (sv && sv.pot) || null };
 });
 
-const dumpState = () => JSON.stringify({
-  scoreBook,
-  tables: tables.map((t) => ({ seats: t.seats, pot: t.game ? t.game.snapshot() : (t.resume || null) })),
-});
-let saveTimer = null;
-function persist() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(STATE_FILE, dumpState()); } catch {} }, 200); }
-function flushState() { clearTimeout(saveTimer); try { fs.writeFileSync(STATE_FILE, dumpState()); } catch {} } // sync, for shutdown
-// Record one finished 锅: each human seat's final score is added to their lifetime total.
+// Write each table's current snapshot (seats + 锅 standings) to the DB. Cheap + synchronous, so it's
+// called directly on every change (seat edits, after each hand); a graceful shutdown adds a final flush.
+function persist() { for (const t of tables) db.saveTable(t.id, t.seats, t.game ? t.game.snapshot() : (t.resume || null)); }
+const flushState = persist;
+// Record one finished 锅: each human seat's final score is added to their lifetime total (and persisted).
 function recordPot(seats, finalScores) {
   for (let s = 0; s < SEATS; s++) {
     const seat = seats[s];
     if (seat && seat.kind === 'human' && seat.uid) {
       const rec = scoreBook[seat.uid] || (scoreBook[seat.uid] = { name: seat.name, total: 0, pots: 0 });
       rec.name = seat.name || rec.name; rec.total += finalScores[s] | 0; rec.pots += 1;
+      db.savePlayer(seat.uid, rec);
     }
   }
 }

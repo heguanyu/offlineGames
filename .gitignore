@@ -14,5 +14,9 @@ test/*.log
 test/_*.mjs
 test/_commitmsg.txt
 
-# online server runtime data (lifetime scores)
+# online server runtime data (lifetime scores + the SQLite database)
 server/scores.json
+server/data/
+server/*.db
+server/*.db-journal
+server/*.legacy.bak
