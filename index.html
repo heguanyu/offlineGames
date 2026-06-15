@@ -73,6 +73,30 @@
     padding: 11px; cursor: pointer; -webkit-tap-highlight-color: transparent;
   }
   #install-close:active { background: #14438a; }
+  /* WeChat (and other in-app webviews) sandbox the browser: PWAs can't be installed
+     and external pages are restricted. We can't escape programmatically, so we guide
+     the user out to the system browser — the standard Chinese-web "open in browser"
+     overlay, with an arrow pointing at WeChat's top-right ⋯ menu. */
+  #wechat-overlay {
+    position: fixed; inset: 0; z-index: 30; padding: 24px;
+    background: rgba(8, 8, 16, 0.93);
+    display: flex; flex-direction: column; align-items: center;
+  }
+  #wechat-overlay[hidden] { display: none; }
+  .wx-arrow {
+    position: absolute; top: max(6px, env(safe-area-inset-top)); right: 14px;
+    width: 64px; height: 64px; color: #e9c46a;
+  }
+  .wx-card { margin: auto; max-width: 340px; text-align: center; }
+  .wx-card h3 { font-size: 1.35rem; color: #fff; margin-bottom: 14px; }
+  #wechat-hint { font-size: 1.05rem; line-height: 1.5; color: #f1f1f8; margin-bottom: 12px; }
+  #wechat-hint .wx-dots { color: #e9c46a; font-weight: 700; }
+  .wx-card p.wx-sub { font-size: 0.88rem; line-height: 1.45; color: #9a9ab3; }
+  #wechat-dismiss {
+    margin-top: 22px; font: inherit; font-size: 0.82rem; color: #7a7a96;
+    background: none; border: none; text-decoration: underline;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
   /* language picker, pinned top-right */
   #lang-picker {
     position: fixed; top: max(12px, env(safe-area-inset-top)); right: 14px; z-index: 10;
@@ -128,6 +152,20 @@
       <button id="install-close" type="button" data-i18n="install_close">知道了</button>
     </div>
   </div>
+
+  <div id="wechat-overlay" hidden>
+    <svg class="wx-arrow" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M16 82 C 44 84, 78 70, 84 24"/>
+      <path d="M68 30 L85 19 L92 38"/>
+    </svg>
+    <div class="wx-card" role="dialog" aria-modal="true" aria-labelledby="wechat-title">
+      <h3 id="wechat-title" data-i18n="wechat_title">请在浏览器中打开</h3>
+      <p id="wechat-hint"></p>
+      <p class="wx-sub" data-i18n="wechat_sub">微信内置浏览器无法将本应用添加到主屏幕</p>
+      <button id="wechat-dismiss" type="button" data-i18n="wechat_dismiss">仍要继续浏览</button>
+    </div>
+  </div>
+
   <section class="cat-section">
     <h2 class="cat-title" data-i18n="cat-mahjong">🀄 麻将</h2>
     <nav>
@@ -204,6 +242,11 @@
         install_s3: '点按右上角「添加」即可',
         install_note: '请先用 Safari 浏览器打开本页面',
         install_close: '知道了',
+        wechat_title: '请在浏览器中打开',
+        wechat_ios: '点击右上角 <span class="wx-dots">···</span> ，选择「在Safari中打开」',
+        wechat_android: '点击右上角 <span class="wx-dots">···</span> ，选择「在浏览器打开」',
+        wechat_sub: '微信内置浏览器无法将本应用添加到主屏幕',
+        wechat_dismiss: '仍要继续浏览',
       },
       en: {
         title: 'Offline Games',
@@ -222,6 +265,11 @@
         install_s3: 'Tap “Add” in the top corner',
         install_note: 'Please open this page in Safari first',
         install_close: 'Got it',
+        wechat_title: 'Open in your browser',
+        wechat_ios: 'Tap <span class="wx-dots">···</span> (top-right), then “Open in Safari”',
+        wechat_android: 'Tap <span class="wx-dots">···</span> (top-right), then “Open in Browser”',
+        wechat_sub: 'WeChat’s built-in browser can’t add this app to your Home Screen',
+        wechat_dismiss: 'Continue here anyway',
       },
     };
     let lang = (() => { try { return localStorage.getItem('hub-lang'); } catch { return null; } })();
@@ -360,6 +408,29 @@
     }
     showVersion();
 
+    // ---- WeChat (in-app browser) escape hatch ----
+    // WeChat sandboxes its webview: no install API, and external links are restricted.
+    // We can't break out programmatically, so on load we show a full-screen overlay
+    // guiding the user to WeChat's ⋯ menu → "open in the system browser". From there
+    // the iOS install helper or Android's beforeinstallprompt can take over.
+    (function () {
+      const ua = navigator.userAgent;
+      if (!/MicroMessenger/i.test(ua)) return;             // only inside WeChat
+
+      const overlay = document.getElementById('wechat-overlay');
+      const hint = document.getElementById('wechat-hint');
+      // iPadOS 13+ reports as "MacIntel"; touch points reveal a real iPad.
+      const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      hint.innerHTML = t(isIOS ? 'wechat_ios' : 'wechat_android');
+
+      overlay.hidden = false;
+      // Escape hatch: let the user dismiss (e.g. they only want a quick look),
+      // but the menu guidance stays the prominent path.
+      document.getElementById('wechat-dismiss')
+        .addEventListener('click', () => { overlay.hidden = true; });
+    })();
+
     // ---- "Add to Home Screen" helper ----
     // iOS/iPadOS Safari exposes no install API (no beforeinstallprompt / prompt()),
     // so a true one-click install is impossible — the user must use Share → Add to
@@ -378,7 +449,7 @@
       const overlay = document.getElementById('install-overlay');
       // Add-to-Home-Screen lives only in Safari proper — absent in Chrome/Firefox iOS
       // and in-app webviews. If we're in one of those, the overlay says to open Safari.
-      const notSafari = /CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line\//i.test(ua);
+      const notSafari = /CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line\/|MicroMessenger|\bQQ\//i.test(ua);
       document.getElementById('install-note').hidden = !notSafari;
 
       iBtn.hidden = false;
