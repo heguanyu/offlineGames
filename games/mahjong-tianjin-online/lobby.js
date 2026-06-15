@@ -158,10 +158,14 @@ function render() {
   });
 }
 
-// ---- game start (placeholder until online play wires to the RemoteBackend) ----
+// ---- game start: hand off to the game page (it connects with the same uid → the server
+// resyncs the table in progress). Pass ?server= through so the game targets the same server.
 function showStart(m) {
-  $('start-text').textContent = `你坐在「${m.wind}」位，第 ${m.table + 1} 桌即将开始新的一锅。`;
+  $('start-text').textContent = `你坐在「${m.wind}」位，正在进入第 ${m.table + 1} 桌…`;
   $('start-overlay').classList.remove('hidden');
+  const params = new URLSearchParams(location.search); // carry server/fast/flat/d3 through
+  params.set('online', '1');
+  location.href = '../mahjong-tianjin/?' + params.toString();
 }
 $('start-back').addEventListener('click', () => { $('start-overlay').classList.add('hidden'); send({ type: 'leave' }); });
 

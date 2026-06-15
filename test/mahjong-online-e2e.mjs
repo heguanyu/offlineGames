@@ -64,13 +64,12 @@ try {
   console.log('A readied (table not full → no start)');
 
   // Then fill with bots. The table completes on the LAST bot, which must re-trigger the
-  // start check (regression: addBot used to skip it). → gameStart banner.
+  // start check (regression: addBot used to skip it). → gameStart hands A off to the game page.
   for (const s of [1, 2, 3]) { await A.click(`.chair[data-table="0"][data-seat="${s}"]`); await clickMenu(A, '加机器人'); await new Promise((r) => setTimeout(r, 150)); }
-  await A.waitForFunction(() => !document.getElementById('start-overlay').classList.contains('hidden'), { timeout: 4000 });
-  if (!(await A.$eval('#start-text', (e) => e.textContent)).includes('东')) throw new Error('gameStart missing the seat wind');
+  await A.waitForFunction(() => location.pathname.includes('/mahjong-tianjin/'), { timeout: 8000 }); // navigated to the game
   // B should now see table 0 as 游戏中 (playing)
   await B.waitForFunction(() => document.querySelector('.table-card').classList.contains('playing'), { timeout: 4000 });
-  console.log('all ready → gameStart fired; table marked 游戏中');
+  console.log('all ready → A entered the game; table marked 游戏中');
 
   // remove-bot path: a fresh table, add then remove a bot
   await B.click('.chair[data-table="1"][data-seat="2"]');
