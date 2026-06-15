@@ -269,10 +269,12 @@ export class MahjongScene {
     const c = document.createElement('canvas'); c.width = c.height = 256;
     this._tt = { canvas: c, ctx: c.getContext('2d'), tex: new THREE.CanvasTexture(c) };
     this._tt.tex.anisotropy = 4;
-    const mat = new THREE.MeshBasicMaterial({ map: this._tt.tex, transparent: true, depthWrite: false, depthTest: false });
-    this.timerMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 2.8), mat);
-    this.timerMesh.position.set(0, 2.1, 0);
-    this.timerMesh.renderOrder = 999;
+    // painted on the felt at the TABLE-TOP layer: depth-tested so tiles in front occlude it, but no
+    // depth write (like the turn ring), so it sits flush on the surface rather than floating above.
+    const mat = new THREE.MeshBasicMaterial({ map: this._tt.tex, transparent: true, depthWrite: false });
+    this.timerMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 3.0), mat);
+    this.timerMesh.rotation.x = -Math.PI / 2; // lie flat on the felt, facing up (reads upright from the player)
+    this.timerMesh.position.set(0, 0.03, 0);   // on the felt surface, table centre (same layer as the table top)
     this.timerMesh.visible = false;
     this.scene.add(this.timerMesh);
   }
@@ -517,6 +519,7 @@ export class MahjongScene {
       servedCount: [0, 0, 0, 0], served: 0, total: 52, // 13 × 4 seats
     };
     this.deal.reserve = this._buildDealReserve(this.deal.total); // the wall tiles dealt out
+    this._clearKongBounds(); // wipe the previous hand's 杠 boxes/labels NOW, not after the deal finishes
     this._dealFrame(); // initial frame: full wall, empty hands; clears the old hand
   }
 
@@ -675,7 +678,7 @@ export class MahjongScene {
     }
   }
 
-  // A coloured wireframe box + corner label (明杠 white / 暗杠 dark blue / 金杠 gold)
+  // A coloured wireframe box + corner label (明杠 yellow / 暗杠 red / 金杠 gold)
   // enclosing a 杠's four flat tiles. The row runs along the seat's c.dx / c.dz axis, so
   // the box is axis-aligned — no rotation needed.
   _kongBound(game, c, r, pos, span, MS, RIM_Y, kongSeen, p) {
@@ -690,8 +693,9 @@ export class MahjongScene {
     if (!kb) {
       const gold = game.isWild(r.m.kind), concealed = !!r.m.concealed;
       const kind = gold ? '金杠' : concealed ? '暗杠' : '明杠';
-      const col = gold ? 0xffce4d : concealed ? 0x3a59c0 : 0xffffff;
-      const txt = gold ? '#ffe08a' : concealed ? '#bccbff' : '#ffffff';
+      // 金杠 gold · 暗杠 red · 明杠 yellow — the same hue tints both the wireframe border box and its label.
+      const col = gold ? 0xffce4d : concealed ? 0xe23b1f : 0xffe23f;
+      const txt = gold ? '#ffe08a' : concealed ? '#ff9a8a' : '#fff36b';
       const box = new THREE.LineSegments(this.kongBoxGeo, new THREE.LineBasicMaterial({ color: col }));
       const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeKongLabel(kind, txt), transparent: true }));
       label.scale.set(0.6, 0.3, 1);
@@ -702,6 +706,13 @@ export class MahjongScene {
     kb.box.position.set(cx, RIM_Y, cz);
     kb.box.scale.set(c.dx ? rowLen : perp, up, c.dz ? rowLen : perp);
     kb.label.position.set(cx - c.dx * rowLen / 2, RIM_Y + up / 2 + 0.22, cz - c.dz * rowLen / 2);
+  }
+
+  // Remove every 杠 box + label from the scene (e.g. at the start of a new deal, so last
+  // hand's 杠 indicators don't hang on the table while the new hand is being dealt).
+  _clearKongBounds() {
+    for (const [, kb] of this.kongBounds) this.scene.remove(kb.box, kb.label);
+    this.kongBounds.clear();
   }
 
   // Lay items in a line along cfg's edge, centered, scaled uniformly so the row
@@ -989,7 +1000,6 @@ export class MahjongScene {
         this.turnRing.rotation.z += d * a;
         this.turnRing.material.opacity = 0.55 + 0.35 * Math.sin(performance.now() / 320);
       }
-      if (this.timerMesh && this.timerMesh.visible) this.timerMesh.quaternion.copy(this.camera.quaternion); // billboard
       this.renderer.render(this.scene, this.camera);
       requestAnimationFrame(tick);
     };

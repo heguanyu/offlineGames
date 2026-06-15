@@ -155,6 +155,15 @@ try {
   if (!pay.includes('庄x2') || !pay.includes('拉庄x2')) throw new Error(`breakdown missing 庄x2/拉庄x2 tags: ${pay}`);
   console.log('拉庄: panel + ⚔️ badge + 庄x2·拉庄x2 breakdown OK');
 
+  // 杠分 split: when my 杠 and the opponent's 杠 cancel in the net, the breakdown must still
+  // show BOTH the gain (金杠 +16) and the loss (下家金杠 −16) as separate signed lines.
+  await page.evaluate(() => window.__mj.debugKongSplit());
+  await page.waitForFunction(() => !document.getElementById('result-overlay').classList.contains('hidden'));
+  const split = await page.$eval('#result-payments', (e) => e.textContent);
+  if (!split.includes('金杠') || !split.includes('+16') || !split.includes('下家金杠') || !split.includes('-16'))
+    throw new Error(`杠分 split missing gain/loss lines (+16 金杠 / −16 下家金杠): ${split}`);
+  console.log('杠分 split: gain (+) and opponent-杠 loss (−) shown separately OK');
+
   if (errors.length) throw new Error('runtime errors:\n  ' + errors.join('\n  '));
 
   console.log(`resolved ${handsResolved} hand(s), no runtime errors`);

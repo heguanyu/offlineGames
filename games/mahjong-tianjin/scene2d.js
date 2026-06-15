@@ -304,7 +304,9 @@ export class MahjongScene2D {
     const g = document.createElement('div');
     g.className = 'b2-meld';
     const tag = document.createElement('span');
-    tag.className = 'b2-tag'; tag.textContent = meldLabel(m, isWild);
+    const lbl = meldLabel(m, isWild); // 明杠 yellow · 暗杠 red · 金杠 gold (match the 3D 杠 indicator)
+    tag.className = 'b2-tag' + (lbl === '明杠' ? ' open' : lbl === '暗杠' ? ' conc' : '');
+    tag.textContent = lbl;
     g.appendChild(tag);
     for (const id of m.tiles) g.appendChild(faceTileEl(id, { wild: isWild(id) }));
     return g;

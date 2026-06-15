@@ -673,9 +673,13 @@ function breakdownHtml(r) {
     const subs = [];
     const hu = winner === me ? score * f : winner === q ? -score * f : 0;
     if (hu) subs.push(['胡', hu]);
-    const open = (km.open - kq.open) * f; if (open) subs.push(['明杠', open]);
-    const conc = (km.conc - kq.conc) * f; if (conc) subs.push(['暗杠', conc]);
-    const gold = (km.gold - kq.gold) * f; if (gold) subs.push(['金杠', gold]);
+    // 杠分 settles pairwise: against this opponent I COLLECT my own 杠 points and PAY theirs.
+    // Show the two directions separately (a gain line +, a loss line −) so an opponent who
+    // also has a 杠 doesn't silently cancel mine into a smaller, confusing net.
+    for (const [label, mine, theirs] of [['明杠', km.open, kq.open], ['暗杠', km.conc, kq.conc], ['金杠', km.gold, kq.gold]]) {
+      if (mine) subs.push([label, mine * f]);                                  // my 杠 → this opponent pays me
+      if (theirs) subs.push([`${SEAT_LABEL[q]}${label}`, -theirs * f]);        // their 杠 → I pay them
+    }
     const net = subs.reduce((s, [, v]) => s + v, 0); total += net;
     const tag = factors.map((x) => ` <span class="dbl">${x.label}x${x.factor}</span>`).join('');
     const subHtml = (subs.length ? subs : [['—', 0]]).map(([w, v]) =>
@@ -1191,6 +1195,32 @@ if (new URLSearchParams(location.search).get('fast')) {
         ],
         meta: { su: false, hunDiao: true, shuangHun: false, winGroupIdx: 4 },
         payments: [12, -8, -2, -2], kong: [0, 0, 0, 0], kongPts: [0, 0, 0, 0],
+      };
+      showResult();
+    },
+    // e2e/visual: a 拉庄 win where BOTH the human and the 庄(下家) hold a 金杠 of the same
+    // value. Against the 庄 the two 杠分 net to zero — the breakdown must still show the gain
+    // (金杠 +16) and the loss (下家金杠 −16) as separate lines, not a vanished net.
+    debugKongSplit: () => {
+      game.wilds = [0, 1]; game.wildSet = new Set([0, 1]);
+      game.laZhuang = [HUMAN]; game.dealer = 1;
+      game.hands[HUMAN] = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 26, 0];
+      game.melds[HUMAN] = [{ type: 'kong', kind: 0, tiles: [0, 0, 0, 0], concealed: true }]; // 金杠 (wild)
+      game.melds[1] = [{ type: 'kong', kind: 1, tiles: [1, 1, 1, 1], concealed: true }];      // 庄 also 金杠
+      game.melds[2] = []; game.melds[3] = [];
+      game.phase = PHASE.OVER;
+      const S = (...a) => new Set(a);
+      game.result = {
+        type: 'win', winner: HUMAN, score: 2, fans: ['混吊'], winningTile: 26,
+        decomp: [
+          { type: 'chow', kinds: [3, 4, 5], jokers: 0, natural: S(3, 4, 5) },
+          { type: 'chow', kinds: [6, 7, 8], jokers: 0, natural: S(6, 7, 8) },
+          { type: 'chow', kinds: [9, 10, 11], jokers: 0, natural: S(9, 10, 11) },
+          { type: 'chow', kinds: [12, 13, 14], jokers: 0, natural: S(12, 13, 14) },
+          { type: 'pair', kinds: [26], jokers: 1, natural: S(26) },
+        ],
+        meta: { su: false, hunDiao: true, shuangHun: false, winGroupIdx: 4 },
+        payments: [20, 8, -14, -14], kong: [8, 16, -12, -12], kongPts: [4, 4, 0, 0],
       };
       showResult();
     },

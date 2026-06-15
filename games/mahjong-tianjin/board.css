@@ -420,6 +420,8 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
 
 .b2-tag { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 1px;
   font-size: 9px; font-weight: 800; color: var(--gold); white-space: nowrap; -webkit-text-stroke: 0.5px rgba(0,0,0,0.9); }
+.b2-tag.open { color: #ffe23f; } /* 明杠 yellow */
+.b2-tag.conc { color: #ff6a52; } /* 暗杠 red */
 
 /* central discard pool: one wide block per suit, spread across the width;
    within a suit, 5 tiles per row, piling bottom→top */
