@@ -1,0 +1,16 @@
+{
+  "name": "mahjong-online-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Online 天津麻将 lobby + game server (deployed separately to Azure; never on Pages).",
+  "main": "index.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

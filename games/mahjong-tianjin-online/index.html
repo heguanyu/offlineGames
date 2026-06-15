@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>天津麻将联机版 · 大厅</title>
+<link rel="apple-touch-icon" href="../../icons/icon-180.png">
+<link rel="icon" href="../../icons/icon-180.png">
+<meta name="theme-color" content="#0c2a1e">
+<link rel="stylesheet" href="./lobby.css">
+</head>
+<body>
+  <header>
+    <a class="back" href="../../" title="返回大厅">&larr;</a>
+    <h1>🀄 天津麻将联机版 <span class="wifi">📶</span></h1>
+    <div class="spacer"></div>
+    <label class="name-field">昵称 <input id="name-input" type="text" maxlength="16" placeholder="未命名"></label>
+    <span id="conn" class="conn connecting" title="连接中…">●</span>
+  </header>
+
+  <main id="lobby"></main>
+
+  <!-- seat action popup (sit / add+remove bot / leave) -->
+  <div id="seat-menu" class="hidden"></div>
+
+  <!-- name dialog, shown the first time you sit (then saved to localStorage) -->
+  <div class="overlay hidden" id="name-overlay">
+    <div class="panel">
+      <h2>请输入昵称</h2>
+      <input id="name-dialog-input" type="text" maxlength="16" placeholder="你的名字">
+      <button class="big-btn" id="name-dialog-ok">坐下</button>
+    </div>
+  </div>
+
+  <!-- game-start banner (placeholder until online play is wired to the RemoteBackend) -->
+  <div class="overlay hidden" id="start-overlay">
+    <div class="panel">
+      <h2>开局！</h2>
+      <p id="start-text" class="sub"></p>
+      <button class="big-btn" id="start-back">返回大厅</button>
+    </div>
+  </div>
+
+  <script type="module" src="./lobby.js"></script>
+</body>
+</html>
