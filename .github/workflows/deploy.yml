@@ -25,11 +25,18 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Stage publishable site (omit server + dev-only dirs)
+        # Publish an app-only copy so the game backend (/server) and dev-only files
+        # (/test, /.github) never land on the public Pages site. ROMs are git-ignored.
+        run: |
+          rsync -a \
+            --exclude='/.git/' --exclude='/.github/' \
+            --exclude='/server/' --exclude='/test/' \
+            --exclude='/_site/' \
+            ./ ./_site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          # Whole repo root. ROMs are git-ignored so they're never published;
-          # the test/ scripts are harmless static files.
-          path: '.'
+          path: './_site'
       - id: deployment
         uses: actions/deploy-pages@v4
