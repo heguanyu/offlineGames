@@ -102,9 +102,7 @@ function handle(client, msg) {
       const at = seatOf(client.id);
       if (!at) return;
       tables[at.table].seats[at.seat].ready = !!msg.ready;
-      broadcastLobby();
-      maybeStart(tables[at.table]);
-      return;
+      break;
     }
     case 'addBot': {
       const ti = msg.table | 0, si = msg.seat | 0;
@@ -121,6 +119,7 @@ function handle(client, msg) {
     default: return;
   }
   broadcastLobby();
+  for (const t of tables) maybeStart(t); // any change (ready OR adding the last bot) can complete a table
 }
 
 // ---- HTTP + WebSocket -----------------------------------------------------

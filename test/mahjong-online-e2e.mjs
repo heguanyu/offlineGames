@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { startServer, launchBrowser, ROOT as root } from './harness.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOBBY_PORT = 8090, SITE_PORT = 8147;
+const LOBBY_PORT = 8190, SITE_PORT = 8147; // 8190 (not 8090) so a dev server on 8090 isn't disturbed
 const errors = [];
 
 // start the lobby server (its own process, like in prod)
@@ -22,7 +22,7 @@ const site = await startServer(SITE_PORT);
 // backgrounded page, and mirrors real multi-device play).
 const browserA = await launchBrowser();
 const browserB = await launchBrowser();
-const url = `http://localhost:${SITE_PORT}/games/mahjong-tianjin-online/`;
+const url = `http://localhost:${SITE_PORT}/games/mahjong-tianjin-online/?server=ws://localhost:${LOBBY_PORT}`;
 const vis = (p, id) => p.evaluate((i) => { const e = document.getElementById(i); return e && !e.classList.contains('hidden'); }, id);
 const seatText = (p, t, s) => p.$eval(`.chair[data-table="${t}"][data-seat="${s}"] .who`, (e) => e.textContent);
 const clickMenu = async (p, label) => p.evaluate((l) => {
@@ -57,13 +57,15 @@ try {
   if (!(await seatText(B, 0, 0)).includes('阿强')) throw new Error('cross-client sync failed');
   console.log('B sees A seated (cross-client push)');
 
-  // A fills the other three seats with bots
-  for (const s of [1, 2, 3]) { await A.click(`.chair[data-table="0"][data-seat="${s}"]`); await clickMenu(A, '加机器人'); await new Promise((r) => setTimeout(r, 120)); }
-  await A.waitForFunction(() => [1, 2, 3].every((s) => document.querySelector(`.chair[data-table="0"][data-seat="${s}"]`).classList.contains('bot')), { timeout: 4000 });
-  console.log('A added 3 bots');
-
-  // A readies → all four seats ready/bot → server starts the hand → gameStart banner
+  // A readies FIRST while seats are still empty — must NOT start yet.
   await A.evaluate(() => [...document.querySelectorAll('.btn.ready')].find((b) => b.textContent.includes('准备')).click());
+  await A.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="0"] .ready.yes'), { timeout: 4000 });
+  if (await vis(A, 'start-overlay')) throw new Error('game started before the table was full');
+  console.log('A readied (table not full → no start)');
+
+  // Then fill with bots. The table completes on the LAST bot, which must re-trigger the
+  // start check (regression: addBot used to skip it). → gameStart banner.
+  for (const s of [1, 2, 3]) { await A.click(`.chair[data-table="0"][data-seat="${s}"]`); await clickMenu(A, '加机器人'); await new Promise((r) => setTimeout(r, 150)); }
   await A.waitForFunction(() => !document.getElementById('start-overlay').classList.contains('hidden'), { timeout: 4000 });
   if (!(await A.$eval('#start-text', (e) => e.textContent)).includes('东')) throw new Error('gameStart missing the seat wind');
   // B should now see table 0 as 游戏中 (playing)
