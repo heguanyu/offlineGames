@@ -63,10 +63,20 @@ const send = (m) => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.s
 function setConn(s) {
   const el = $('conn'); el.className = 'conn ' + s;
   el.title = ({ on: '已连接', off: '未连接 · 重连中…', connecting: '连接中…' })[s];
-  // server offline → "维护中" overlay; hide once reconnected (leave it during 'connecting' retries)
+  // connection-lost overlay; hide once reconnected (leave it during 'connecting' retries)
   const maint = $('maint-overlay');
-  if (maint) { if (s === 'on') maint.classList.add('hidden'); else if (s === 'off') maint.classList.remove('hidden'); }
+  if (maint) { if (s === 'on') maint.classList.add('hidden'); else if (s === 'off') { refreshMaintMessage(); maint.classList.remove('hidden'); } }
 }
+// The overlay covers two distinct cases — tell them apart by the device's own connectivity: offline →
+// no network at all; online but the socket failed → the server is down / in maintenance.
+function refreshMaintMessage() {
+  const offline = !navigator.onLine;
+  $('maint-title').textContent = offline ? '📵 无网络连接' : '🛠️ 服务器维护中';
+  $('maint-msg').textContent = offline ? '请检查你的网络连接，恢复后会自动重连…' : '服务器正在维护中，马上回来…';
+}
+$('maint-hub').addEventListener('click', () => { location.href = '../../'; });
+// if connectivity flips while the overlay is showing, swap the message to match
+for (const ev of ['online', 'offline']) addEventListener(ev, () => { if (!$('maint-overlay').classList.contains('hidden')) refreshMaintMessage(); });
 
 // ---- name (top-right textbox + first-sit dialog) -------------------------
 // A name may only contain Chinese characters or English letters, capped at 6 中文 / 12 英文
@@ -165,9 +175,10 @@ function render() {
   const tbl = document.createElement('div'); tbl.className = 'mj-table' + (t.status === 'playing' ? ' playing' : '') + (atTable ? ' mine' : '');
   const waiting = t.status === 'waiting';
   const felt = document.createElement('div'); felt.className = 'felt';
-  // Keep the felt clean — only surface a status while a hand is in progress (for spectators); the
-  // waiting state is conveyed by the seats + the ready button, so no centred "等待开局" clutter.
+  // Felt centre: 游戏中 while a hand is live; otherwise, if you're not seated, the call to sit (the
+  // ready ring/button take this spot once you ARE seated, so only show it when you're not).
   if (t.status === 'playing') felt.innerHTML = `<span class="felt-status">游戏中</span>`;
+  else if (!atTable && t.seats.some((s) => !s)) felt.innerHTML = `<span class="felt-status felt-sit">点击空位坐下</span>`;
   tbl.appendChild(felt);
   t.seats.forEach((seat, si) => {
     const isMe = atTable && mine.seat === si;
@@ -195,7 +206,7 @@ function render() {
       const botBtn = document.createElement('button');
       botBtn.className = 'seat-bot' + (seat ? ' remove' : '');
       botBtn.title = seat ? '移除机器人' : '添加机器人';
-      botBtn.innerHTML = `<span class="bot-icon">🤖</span>` + (seat ? `<span class="bot-ban">🚫</span>` : '');
+      botBtn.innerHTML = `<span class="bot-icon">🤖</span>` + (seat ? `<span class="bot-ban">🚫</span>` : `<span class="bot-plus">+</span>`);
       botBtn.onclick = (ev) => { ev.stopPropagation(); send({ type: seat ? 'removeBot' : 'addBot', table: activeTable, seat: si }); };
       pad.appendChild(botBtn);
     }
@@ -246,10 +257,11 @@ function render() {
     const hint = document.createElement('div'); hint.className = 'table-hint';
     hint.textContent = '你正在这局牌中 — 点击返回继续';
     col.appendChild(hint);
-  } else if (!atTable) {
-    // Leaving (离开座位) now lives on my own chair; while seated + waiting there's nothing to show below.
+  } else if (!atTable && t.status === 'playing') {
+    // Waiting + not seated: the call to sit is on the felt now, so nothing extra below. Only the
+    // mid-game note remains. (离开座位 lives on my own chair when I'm seated.)
     const hint = document.createElement('div'); hint.className = 'table-hint';
-    hint.textContent = t.status === 'playing' ? '本桌正在游戏中…' : '点击空位坐下，或添加机器人';
+    hint.textContent = '本桌正在游戏中…';
     col.appendChild(hint);
   }
   root.appendChild(col);

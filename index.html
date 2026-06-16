@@ -130,6 +130,9 @@
   .card .emoji { font-size: 2.4rem; margin-bottom: 10px; }
   /* wifi badge on the online-mode card's logo (top-right corner) */
   .card .wifi { position: absolute; top: 8px; right: 10px; font-size: 1.15rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55)); }
+  /* online section disabled while offline — its cards can't reach the server */
+  .cat-section.section-disabled .cat-title { opacity: 0.55; }
+  .cat-section.section-disabled nav .card { pointer-events: none; opacity: 0.4; filter: grayscale(0.7); }
 </style>
 </head>
 <body>
@@ -184,7 +187,7 @@
     </nav>
   </section>
 
-  <section class="cat-section">
+  <section class="cat-section" id="online-section">
     <h2 class="cat-title" data-i18n="cat-mahjong-online">📶 麻将联机</h2>
     <nav>
       <a class="card" href="./games/mahjong-tianjin-online/?game=tianjin">
@@ -243,7 +246,7 @@
         'card-guobiao': '国标麻将', 'card-guobiao-free': '国标（无定番）',
         'card-guobiao-online': '国标麻将联机版', 'card-guobiao-free-online': '国标（无定番）联机版',
         'card-pad': '手柄测试',
-        online: '在线', offline: '离线 · 使用缓存运行',
+        online: '在线', offline: '离线 · 使用缓存运行', online_unavailable: '（离线无法使用）',
         btn_idle: '检查更新', btn_checking: '检查中…', btn_updating: '更新中…',
         btn_current: '✓ 已是最新', btn_error: '⚠ 重试',
         install_btn: '📲 添加到主屏幕',
@@ -267,7 +270,7 @@
         'card-guobiao': 'Guobiao (MCR)', 'card-guobiao-free': 'Guobiao (no minimum)',
         'card-guobiao-online': 'Guobiao (MCR) · Online', 'card-guobiao-free-online': 'Guobiao (no min) · Online',
         'card-pad': 'Controller Test',
-        online: 'online', offline: 'offline — running from cache',
+        online: 'online', offline: 'offline — running from cache', online_unavailable: ' (unavailable offline)',
         btn_idle: 'Check for updates', btn_checking: 'Checking…', btn_updating: 'Updating…',
         btn_current: '✓ Up to date', btn_error: '⚠ Retry',
         install_btn: '📲 Add to Home Screen',
@@ -300,6 +303,11 @@
     let btnState = 'idle';  // current update-button phase, so a language switch can re-label it
 
     const reloadOnce = () => { if (!reloaded) { reloaded = true; location.reload(); } };
+    // Did a worker already control this page at load? If so, a later controllerchange means a NEW
+    // version took over — whether from the update button OR a background auto-update — so reload to
+    // show the fresh hub (new cards/icons). The first-ever claim (no prior controller) isn't an
+    // update, so it must NOT reload (that would loop on first visit).
+    const hadController = swSupported && !!navigator.serviceWorker.controller;
 
     if (swSupported) {
       btn.hidden = false;
@@ -308,12 +316,12 @@
       navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
         .then((r) => { swReg = r; })
         .catch(() => {});
-      // sw.js skipWaiting()s + claims, so a new worker activates immediately.
-      // When it takes control after a user-initiated update, reload to run the
-      // fresh assets. (Gated on `updating` so the first visit's claim won't reload.)
+      // sw.js skipWaiting()s + claims, so a new worker activates immediately. Reload whenever a new
+      // worker takes control of an already-controlled page — this fixes the hub not refreshing when an
+      // update is picked up in the background (the page would otherwise keep showing stale content).
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (updating) reloadOnce();
-        else showVersion(); // a worker took control without us reloading → refresh the tag
+        if (updating || hadController) reloadOnce();
+        else showVersion(); // first-ever claim (no prior controller) → just refresh the version tag
       });
     }
 
@@ -334,11 +342,21 @@
       btn.disabled = disabled;
     }
 
+    // The 麻将联机 section needs the server, so it's dead weight offline: grey out its cards and
+    // postfix its title with (离线无法使用). Re-run on connectivity changes and on language switch.
+    function updateOnlineSection() {
+      const sec = document.getElementById('online-section'); if (!sec) return;
+      const offline = !navigator.onLine;
+      sec.classList.toggle('section-disabled', offline);
+      const title = sec.querySelector('.cat-title');
+      if (title) title.textContent = t('cat-mahjong-online') + (offline ? t('online_unavailable') : '');
+    }
     function updateNetStatus() {
       const online = navigator.onLine;
       statusEl.textContent = online ? t('online') : t('offline');
       statusEl.classList.toggle('offline', !online);
       if (swSupported && !busy && !updating) setBtn(online ? 'idle' : 'offline');
+      updateOnlineSection();
     }
     addEventListener('online', updateNetStatus);
     addEventListener('offline', updateNetStatus);
@@ -354,6 +372,7 @@
       picker.value = lang;
       setBtn(btnState);                                              // re-label without changing phase
       statusEl.textContent = navigator.onLine ? t('online') : t('offline');
+      updateOnlineSection();                                         // re-apply the offline title/disable in the new language
       try { localStorage.setItem('hub-lang', lang); } catch {}
     }
     picker.addEventListener('change', () => applyLang(picker.value));

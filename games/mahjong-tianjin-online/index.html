@@ -15,7 +15,7 @@
 </head>
 <body>
   <header>
-    <a class="back" href="../../" title="返回大厅">&larr;</a>
+    <a class="back" href="../../">← 返回大厅</a>
     <h1>🀄 麻将联机版 <span class="wifi">📶</span></h1>
     <div class="spacer"></div>
     <label class="name-field">昵称 <input id="name-input" type="text" maxlength="12" placeholder="未命名"></label>
@@ -42,12 +42,14 @@
     </div>
   </div>
 
-  <!-- server offline / maintenance (shown whenever the WebSocket can't reach the server) -->
+  <!-- connection lost: either the device is offline (no network) or the server is unreachable
+       (maintenance). The message is chosen at show time; a button bails back to the main hub. -->
   <div class="overlay hidden" id="maint-overlay">
     <div class="panel">
-      <h2>🛠️ 服务器维护中</h2>
-      <p class="sub">服务器正在维护中，马上回来…</p>
+      <h2 id="maint-title">🛠️ 服务器维护中</h2>
+      <p class="sub" id="maint-msg">服务器正在维护中，马上回来…</p>
       <p class="sub" style="font-size:0.78rem;opacity:0.8;">连接恢复后会自动回到大厅，可继续上一锅。</p>
+      <button class="big-btn" id="maint-hub">← 返回首页</button>
     </div>
   </div>
 

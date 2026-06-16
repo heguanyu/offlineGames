@@ -23,6 +23,9 @@ await new Promise((r) => server.listen(PORT, r));
 const browser = await puppeteer.launch({ executablePath: EDGE, headless: 'new' });
 try {
   const page = await browser.newPage();
+  // The expected labels below are the English set (Nintendo DS / Controller Test), so pin the hub to
+  // English before it boots (the mahjong cards have no en override, so they stay Chinese — as listed).
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('hub-lang', 'en'); } catch {} });
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'networkidle0' });
 
   const version = await page.$eval('#app-version', (el) => el.textContent);
@@ -31,7 +34,7 @@ try {
 
   const cards = await page.$$eval('.card', (els) => els.map((e) => e.textContent.trim()));
   console.log('cards:', cards.join(' | '));
-  for (const expected of ['GBA · mGBA', 'GBA · VBA-M', 'Nintendo DS', '天津麻将', '国标麻将', '国标（无定番）', 'Controller Test']) {
+  for (const expected of ['GBA · mGBA', 'GBA · VBA-M', 'Nintendo DS', 'Tianjin Mahjong', 'Guobiao (MCR)', 'Guobiao (no minimum)', 'Controller Test']) {
     if (!cards.some((c) => c.includes(expected))) throw new Error(`missing card: ${expected}`);
   }
 

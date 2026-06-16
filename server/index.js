@@ -77,10 +77,10 @@ const tables = Array.from({ length: TABLES }, (_, id) => {
 
 // Backfill on restart: a human seat restored from the DB carries no readyBy (it's not persisted, and
 // may predate the ready timer entirely), so the sweep would never free it — leaving a player parked
-// idle at a lobby table forever. Give each a fresh 1-minute window. SKIP tables with a 锅 to resume:
-// those seats are held for their players to reconnect (resumeTable), not subject to the ready timeout.
+// idle forever. Give EVERY restored human seat a fresh 1-minute window. This includes a 锅 awaiting
+// resume: if an occupant reconnects in time, resumeTable flips the table to 'playing' (and the sweep
+// then ignores it) well before the window elapses; if NOBODY returns, the sweep abandons the dead 锅.
 for (const t of tables) {
-  if (t.resume) continue;
   for (const seat of t.seats) if (seat && seat.kind === 'human' && !seat.ready && !seat.readyBy) seat.readyBy = Date.now() + READY_MS;
 }
 
@@ -417,11 +417,16 @@ const readySweep = setInterval(() => {
   const now = Date.now(); let changed = false, counting = false;
   for (const t of tables) {
     if (t.status !== 'waiting') continue;
+    let abandon = false;
     for (let s = 0; s < SEATS; s++) {
       const seat = t.seats[s];
       if (!seat || seat.kind !== 'human' || seat.ready || !seat.readyBy) continue;
-      if (now > seat.readyBy) { t.seats[s] = null; changed = true; } else counting = true;
+      if (now > seat.readyBy) {
+        if (t.resume) { abandon = true; break; } // a 锅 nobody came back to → drop the whole stale table
+        t.seats[s] = null; changed = true;
+      } else counting = true;
     }
+    if (abandon) { t.seats = [null, null, null, null]; t.resume = null; changed = true; }
   }
   if (changed) persist();
   if (changed || counting) broadcastLobby();

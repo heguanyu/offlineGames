@@ -7,8 +7,14 @@ body { background: radial-gradient(circle at 50% -10%, #14402f, #08160f); color:
 
 header { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
   background: rgba(4,18,12,0.6); border-bottom: 1px solid #1c5a44; position: sticky; top: 0; z-index: 10; }
-header .back { color: #eaf6f0; text-decoration: none; font-size: 1.4rem; padding: 2px 6px; line-height: 1; }
-header h1 { font-size: 1.05rem; margin: 0; color: var(--gold); white-space: nowrap; }
+/* ← 返回大厅 back button: green border, red fill */
+header .back { color: #f1cccc; text-decoration: none; font-size: 0.85rem; font-weight: 800; white-space: nowrap;
+  padding: 6px 12px; border-radius: 8px; border: 1px solid #3fae5a; background: linear-gradient(#6e2f2f, #532020);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
+header .back:active { background: #532020; }
+/* title centred in the top bar (absolute, so the back / name-field stay pinned to the edges) */
+header h1 { position: absolute; left: 50%; transform: translateX(-50%); font-size: 1.05rem; margin: 0;
+  color: var(--gold); white-space: nowrap; pointer-events: none; }
 header h1 .wifi { font-size: 0.85rem; }
 header .spacer { flex: 1 1 auto; }
 .name-field { font-size: 0.78rem; color: #9fd3bf; display: flex; align-items: center; gap: 6px; }
@@ -33,6 +39,8 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
 .felt-mark { font-size: 2.6rem; color: rgba(255,255,255,0.16); line-height: 1; }
 .felt-status { font-size: 0.72rem; color: rgba(232,196,102,0.75); font-weight: 700; }
+/* the call to sit, centred on the felt (replaces the old "点击空位坐下，或添加机器人" hint below) */
+.felt-sit { font-size: 1.05rem; color: #ffe6a6; font-weight: 800; text-shadow: 0 2px 6px rgba(0,0,0,0.55); }
 
 .chair { position: relative; display: flex; align-items: center; justify-content: center; }
 .chair.east  { grid-column: 2; grid-row: 3; }
@@ -67,14 +75,20 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .watch-eye:hover { background: #1b5e45; box-shadow: 0 0 0 2px var(--gold); }
 .chair .ready.yes { color: #9af7a6; } .chair .ready.no { color: #ffd27a; }
 
-/* per-seat bot button — 🤖 to add a bot to an empty seat, 🤖 with a 🚫 over it to remove one */
-.seat-bot { position: absolute; top: -10px; right: -10px; z-index: 5; width: 30px; height: 30px; padding: 0;
+/* per-seat bot button (2× size) — 🤖 with a green ➕ to add a bot to an empty seat, 🤖 with a 🚫 over
+   it to remove one */
+.seat-bot { position: absolute; top: -16px; right: -16px; z-index: 5; width: 58px; height: 58px; padding: 0;
   border-radius: 50%; border: 1px solid var(--gold); background: rgba(4,18,12,0.92); cursor: pointer;
   display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
 .seat-bot:hover { background: #1b5e45; box-shadow: 0 0 0 2px var(--gold); }
-.seat-bot .bot-icon { font-size: 0.95rem; line-height: 1; }
+.seat-bot .bot-icon { font-size: 1.9rem; line-height: 1; }
 .seat-bot .bot-ban { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  font-size: 1.15rem; line-height: 1; pointer-events: none; }
+  font-size: 2.3rem; line-height: 1; pointer-events: none; }
+/* small green plus stacked at the bot icon's bottom-right (the "add a bot" cue) */
+.seat-bot .bot-plus { position: absolute; right: 3px; bottom: 3px; width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  background: #3fae5a; color: #fff; font-size: 1rem; font-weight: 900; line-height: 1;
+  border: 2px solid #08160f; pointer-events: none; }
 .seat-bot.remove { border-color: #ef9a9a; }
 
 /* 离开座位 — pinned to my own chair: to the right for the top/bottom seats (西/东), below for the
