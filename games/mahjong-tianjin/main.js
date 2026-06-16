@@ -78,7 +78,9 @@ let scene = null;             // MahjongScene (3D table)
 let level = LEVELS.NORMAL;
 let session = loadSession();   // { scores, dealer, prevailingWind, hand }
 let selIndex = 0;              // cursor into the human's selectable (non-wild) tiles
-let noSel = false;            // nothing lifted (set right after you discard; any pick/hover/turn clears it)
+let noSel = VIEWER;          // nothing lifted (set right after you discard; any pick/hover/turn clears it). A
+                             // viewer starts with NOTHING lifted — the selection is local UI, not the watched
+                             // player's, so showing a default highlight would be misleading (they can still pick).
 let lzBlind = false;          // blind 拉庄: my hand is dealt but shown face-down until I answer
 let lzActive = false;         // a 拉庄 modal is up (for me or others) → the 混儿 stays hidden ('new hand' hasn't begun)
 let drawnWildSelected = false; // a freshly-drawn 混儿 is the lifted tile (can't discard)
@@ -400,7 +402,7 @@ async function onBackendEvent(ev) {
 
     case 'deal':
       $('result-overlay').classList.add('hidden'); // the next hand is dealing → auto-hide the result panel
-      selIndex = 0; focusIndex = 0; drawnWildSelected = false; noSel = false; lastLogLen = 0;
+      selIndex = 0; focusIndex = 0; drawnWildSelected = false; noSel = VIEWER; lastLogLen = 0; // viewer: no default lift
       lzBlind = game.dealer !== HUMAN; // a non-dealer is about to be asked 拉庄 (blind) → keep the hand face-down
       if (!ONLINE) saveSession(); // online: the server is the source of truth, nothing to persist
       if (scene && !FAST && lzBlind) { if (scene._clearKongBounds) scene._clearKongBounds(); } // blind: no flourish, render shows backs
@@ -435,7 +437,7 @@ async function onBackendEvent(ev) {
     }
 
     case 'claim':
-      if (ev.player === HUMAN) { selIndex = 0; drawnWildSelected = false; noSel = false; } // then they discard
+      if (ev.player === HUMAN) { selIndex = 0; drawnWildSelected = false; noSel = VIEWER; } // then they discard (viewer: no default lift)
       else if (scene) { // show the bot's 碰/杠 lifted, hold until it settles
         scene.beginClaimDemo(ev.player, CLAIM_DEMO_MS);
         render();
@@ -494,7 +496,7 @@ function onPickTile(renderedIdx) {
   if (!game || dealing || animating) return;
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   if (game.phase === PHASE.OVER || isClaimPhase()) return; // not while the result / a claim prompt is up
-  const mine = game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD; // you may browse off-turn; discard only on yours
+  const mine = !VIEWER && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD; // browse off-turn; discard only on yours (never as a viewer)
   const id = renderedHand()[renderedIdx];
   if (id == null) return;
   if (game.isWild(id)) { toast('混儿不能打出'); return; } // 混儿 (incl. the drawn one): complain, no action
@@ -526,6 +528,7 @@ function doDeclareWin() {
 // A drawn 混儿 is selected too (lifted/highlighted) but isn't discardable — it stays
 // flagged so confirm/tap on it just complains; picking any normal tile clears it.
 function selectDrawnTile() {
+  if (VIEWER) return; // a viewer's hand isn't theirs to play — don't auto-lift the drawn tile (manual pick still works)
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || game.drawnTile == null) return;
   noSel = false; // a fresh draw on your turn re-lifts a tile
   if (game.isWild(game.drawnTile)) {
@@ -823,9 +826,10 @@ function showLaZhuangPanel(dealer, need, answers, cb) {
     else if (answers[p] !== undefined) st = answers[p] ? '<span class="lz-st yes">⚔️ 拉</span>' : '<span class="lz-st no">不拉</span>';
     const pts = game && game.scores ? (game.scores[p] | 0) : 0; // current 锅 running total
     const col = pts > 0 ? '#7ddf8a' : pts < 0 ? '#ef9a9a' : '#cfe7db';
+    const wind = (game && game.seatWind) ? WIND[game.seatWind(p)] : WIND[p]; // the seat's 座风 (东西南北)
     el.className = 'lz-seat lz-pos-' + p + (p === HUMAN ? ' me' : '') + (p === dealer ? ' dealer' : '');
     el.innerHTML = `<span class="lz-nm">${p === dealer ? '👑 ' : ''}${esc(lzSeatName(p))}</span>` +
-      `<span class="lz-rel">${(ONLINE ? REL_LABEL : SEAT_LABEL)[p]}</span>` +
+      `<span class="lz-rel"><b class="lz-wind">${wind}</b> · ${(ONLINE ? REL_LABEL : SEAT_LABEL)[p]}</span>` +
       `<span class="lz-score" style="color:${col}">${pts > 0 ? '+' : ''}${pts} 分</span>` + st;
   }
   $('lazhuang-text').textContent = deciding ? `${lzSeatName(dealer)}坐庄，是否拉庄？` : `${lzSeatName(dealer)}坐庄`;
