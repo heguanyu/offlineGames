@@ -11,6 +11,10 @@
 <meta name="theme-color" content="#0c2a1e">
 <link rel="stylesheet" href="../mahjong-tianjin/board.css">
 <link rel="stylesheet" href="./guobiao.css">
+<!-- Online play is driven by the lobby/server (no local difficulty pick). Hide the difficulty
+     start screen BEFORE first paint so it never flashes while the deferred module boots. -->
+<script>if (new URLSearchParams(location.search).get('online')) document.documentElement.dataset.online = '1';</script>
+<style>html[data-online] #start-overlay { display: none !important; }</style>
 </head>
 <body>
   <header>

@@ -36,6 +36,7 @@ let uid = localStorage.getItem('mahjong-online-uid');
 if (!uid) { uid = (crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2)); localStorage.setItem('mahjong-online-uid', uid); }
 let pendingSit = null;          // a {table, seat} sit queued until a name is entered
 let reconnectTimer = null;
+let readyDeadline = null;       // local timestamp the ready countdown ticks toward (null = no countdown)
 
 // ---- connection (auto-reconnecting) --------------------------------------
 function connect() {
@@ -110,6 +111,13 @@ $('name-dialog-input').addEventListener('keydown', (e) => { if (e.key === 'Enter
 
 // ---- render --------------------------------------------------------------
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtCountdown = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// Tick the ready countdown between server frames (the lobby only pushes on changes, not every second).
+setInterval(() => {
+  if (readyDeadline == null) return;
+  const num = document.querySelector('#ready-timer .rt-num');
+  if (num) num.textContent = fmtCountdown(readyDeadline - Date.now());
+}, 500);
 
 function render() {
   // keep the name box in sync unless the player is actively editing it
@@ -130,7 +138,9 @@ function render() {
   const tbl = document.createElement('div'); tbl.className = 'mj-table' + (t.status === 'playing' ? ' playing' : '') + (atTable ? ' mine' : '');
   const waiting = t.status === 'waiting';
   const felt = document.createElement('div'); felt.className = 'felt';
-  felt.innerHTML = `<span class="felt-mark">🀄</span><span class="felt-status">${t.status === 'playing' ? '游戏中' : '等待开局'}</span>`;
+  // Keep the felt clean — only surface a status while a hand is in progress (for spectators); the
+  // waiting state is conveyed by the seats + the ready button, so no centred "等待开局" clutter.
+  if (t.status === 'playing') felt.innerHTML = `<span class="felt-status">游戏中</span>`;
   tbl.appendChild(felt);
   t.seats.forEach((seat, si) => {
     const isMe = atTable && mine.seat === si;
@@ -160,17 +170,32 @@ function render() {
       eye.onclick = (ev) => { ev.stopPropagation(); watchSeat(si); };
       chair.appendChild(eye);
     }
+    // My own seat while the table fills: a 离开座位 button pinned to my chair — below it for the side
+    // seats (北/南), to its right for the top/bottom seats (西/东). CSS positions it by POS class.
+    if (isMe && waiting) {
+      const leave = document.createElement('button');
+      leave.className = 'seat-leave'; leave.textContent = '离开座位';
+      leave.onclick = (ev) => { ev.stopPropagation(); send({ type: 'leave' }); };
+      chair.appendChild(leave);
+    }
     tbl.appendChild(chair);
   });
   // Readiness check: once you're seated and the table is still filling, a big toggle floats on the
-  // felt (centred, 60% down) so you can mark yourself ready without leaving the table view.
+  // felt (centred, 60% down). Above it, a 1-minute countdown — if you don't ready in time the server
+  // auto-frees your seat (it sends the remaining ms as you.readyIn; we tick it down locally).
   if (atTable && waiting) {
+    if (!state.you.ready && state.you.readyIn != null) {
+      readyDeadline = Date.now() + state.you.readyIn;
+      const timer = document.createElement('div'); timer.className = 'ready-timer'; timer.id = 'ready-timer';
+      timer.innerHTML = `<span class="rt-num">${fmtCountdown(state.you.readyIn)}</span><span class="rt-cap">未准备将自动离座</span>`;
+      tbl.appendChild(timer);
+    } else { readyDeadline = null; }
     const ready = document.createElement('button');
     ready.className = 'table-ready btn ready' + (state.you.ready ? ' on' : '');
     ready.textContent = state.you.ready ? '✓ 已准备' : '点击准备';
     ready.onclick = (ev) => { ev.stopPropagation(); send({ type: 'ready', ready: !state.you.ready }); };
     tbl.appendChild(ready);
-  }
+  } else { readyDeadline = null; }
   col.appendChild(tbl);
 
   if (atTable && t.status === 'playing') {
@@ -184,14 +209,8 @@ function render() {
     const hint = document.createElement('div'); hint.className = 'table-hint';
     hint.textContent = '你正在这局牌中 — 点击返回继续';
     col.appendChild(hint);
-  } else if (atTable && t.status === 'waiting') {
-    // Ready toggle now lives on the felt; here we only keep the way out.
-    const actions = document.createElement('div'); actions.className = 'table-actions';
-    const leave = document.createElement('button'); leave.className = 'btn leave'; leave.textContent = '离开桌子';
-    leave.onclick = () => send({ type: 'leave' });
-    actions.appendChild(leave);
-    col.appendChild(actions);
-  } else {
+  } else if (!atTable) {
+    // Leaving (离开座位) now lives on my own chair; while seated + waiting there's nothing to show below.
     const hint = document.createElement('div'); hint.className = 'table-hint';
     hint.textContent = t.status === 'playing' ? '本桌正在游戏中…' : '点击空位坐下，或添加机器人';
     col.appendChild(hint);

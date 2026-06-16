@@ -38,15 +38,19 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .chair.south { grid-column: 3; grid-row: 2; }
 .chair.west  { grid-column: 2; grid-row: 1; }
 .chair.north { grid-column: 1; grid-row: 2; }
+/* the seat (bigger rectangle) is 60% along the table-edge axis; the back (thin wood strip) is the
+   SAME width as the seat and centred behind it, so each chair reads as one piece. */
 .chair .seat-pad { display: flex; flex-direction: column; align-items: center; justify-content: center;
   width: 100%; height: 100%; min-height: 54px; padding: 4px; border-radius: 10px;
   background: linear-gradient(#9a6a33, #6c4823); color: #fff6e8; font-size: 0.76rem;
   box-shadow: 0 3px 6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.18); transition: box-shadow .1s; }
+.chair.east .seat-pad, .chair.west  .seat-pad { width: 60%; }   /* top/bottom seats: narrow horizontally */
+.chair.north .seat-pad, .chair.south .seat-pad { height: 60%; } /* side seats: narrow vertically */
 .chair::after { content: ''; position: absolute; background: linear-gradient(#7a4f26, #543619); border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.45); }
-.chair.east::after  { left: 16%; right: 16%; bottom: -10px; height: 12px; }
-.chair.west::after  { left: 16%; right: 16%; top: -10px; height: 12px; }
-.chair.north::after { top: 16%; bottom: 16%; left: -10px; width: 12px; }
-.chair.south::after { top: 16%; bottom: 16%; right: -10px; width: 12px; }
+.chair.east::after  { left: 20%; right: 20%; bottom: -10px; height: 12px; }
+.chair.west::after  { left: 20%; right: 20%; top: -10px; height: 12px; }
+.chair.north::after { top: 20%; bottom: 20%; left: -10px; width: 12px; }
+.chair.south::after { top: 20%; bottom: 20%; right: -10px; width: 12px; }
 /* only empty seats are clickable (click to sit) — show the affordance there */
 .chair.empty:not(.playing) { cursor: pointer; }
 .chair.empty:not(.playing):hover .seat-pad { box-shadow: 0 0 0 2px var(--gold), 0 3px 6px rgba(0,0,0,0.45); }
@@ -72,10 +76,25 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
   font-size: 1.15rem; line-height: 1; pointer-events: none; }
 .seat-bot.remove { border-color: #ef9a9a; }
 
+/* 离开座位 — pinned to my own chair: to the right for the top/bottom seats (西/东), below for the
+   side seats (北/南). It overflows into the empty table corner next to the seat. */
+.seat-leave { position: absolute; z-index: 6; white-space: nowrap; padding: 5px 10px; border-radius: 8px;
+  border: 1px solid #6e2f2f; background: linear-gradient(#6e2f2f, #532020); color: #f1cccc;
+  font-size: 0.72rem; font-weight: 800; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.45); }
+.seat-leave:hover { filter: brightness(1.15); }
+.chair.east .seat-leave, .chair.west  .seat-leave { left: 80%; top: 50%; transform: translateY(-50%); margin-left: 8px; }
+.chair.north .seat-leave, .chair.south .seat-leave { top: 80%; left: 50%; transform: translateX(-50%); margin-top: 8px; }
+
 /* readiness toggle floating on the felt (centred, 60% down) while you're seated and waiting */
 .table-ready { position: absolute; left: 50%; top: 60%; transform: translate(-50%, -50%); z-index: 6;
   white-space: nowrap; box-shadow: 0 3px 0 #b8902f, 0 4px 14px rgba(0,0,0,0.5); }
 .table-ready.on { box-shadow: 0 3px 0 #2c7a3e, 0 4px 14px rgba(0,0,0,0.5); }
+/* 1-minute ready countdown, centred on the felt just above the toggle */
+.ready-timer { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; text-align: center; }
+.ready-timer .rt-num { font-size: 1.5rem; font-weight: 800; color: #ffe6a6; line-height: 1;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.6); font-variant-numeric: tabular-nums; }
+.ready-timer .rt-cap { font-size: 0.62rem; font-weight: 700; color: rgba(255,230,166,0.85); }
 
 /* lifetime leaderboard (server-kept, keyed by uid) */
 #leaderboard { background: rgba(4,18,12,0.55); border: 1px solid #1c5a44; border-radius: 16px; padding: 14px 16px; min-width: 232px; max-width: 300px; }

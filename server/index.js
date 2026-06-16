@@ -45,6 +45,7 @@ const STATIC_ROOT = process.env.STATIC_ROOT || fileURLToPath(new URL('..', impor
 
 const TABLES = TABLE_GAMES.length, SEATS = 4;
 const WIND = ['东', '南', '西', '北'];
+const READY_MS = +process.env.READY_MS || 60_000; // a seated human must ready within this window or the server frees their seat (tests set it low)
 const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将', 'guobiao-free': '国标无定番' };
 const GAME_PAGE = { tianjin: 'mahjong-tianjin', guobiao: 'guobiao', 'guobiao-free': 'guobiao-free' }; // lobby navigates here
 
@@ -130,7 +131,10 @@ function lobbyFor(uid, game) {
     type: 'lobby',
     game, // the lobby is split per game; the client renders only its game's table + this board
     you: { name: (uid && [...clients.values()].find((c) => c.uid === uid)?.name) || '', seat: mine,
-      ready: mine ? !!tables[mine.table].seats[mine.seat].ready : false },
+      ready: mine ? !!tables[mine.table].seats[mine.seat].ready : false,
+      // ms left on the ready countdown (null once ready / not seated) — the client ticks it down
+      readyIn: (mine && !tables[mine.table].seats[mine.seat].ready && tables[mine.table].seats[mine.seat].readyBy)
+        ? Math.max(0, tables[mine.table].seats[mine.seat].readyBy - Date.now()) : null },
     tables: tables.map((t) => ({
       id: t.id, status: t.status, game: t.gameType, gameLabel: GAME_LABEL[t.gameType] || t.gameType,
       seats: t.seats.map((seat) => !seat ? null
@@ -252,7 +256,9 @@ function handle(client, msg) {
       client.spectate = null;
       const at = seatOf(client.uid); // reconnection: reclaim a seat held while we were away
       const t = at ? tables[at.table] : null;
-      if (t) t.seats[at.seat].name = client.name;
+      if (t) { const seat = t.seats[at.seat]; seat.name = client.name;
+        // a restored/reclaimed waiting seat that isn't ready gets a fresh ready window (so the sweep frees it)
+        if (t.status === 'waiting' && !seat.ready && !seat.readyBy) seat.readyBy = Date.now() + READY_MS; }
       // Live game → resync onto the table. A 锅 interrupted by a server restart (seat restored,
       // standings saved, but no game object) → resume it now so a refresh lands back on the table
       // instead of bouncing to the lobby. Otherwise → no live game, the game page returns to the lobby.
@@ -271,11 +277,12 @@ function handle(client, msg) {
       const ti = msg.table | 0, si = msg.seat | 0;
       if (!client.uid || !inRange(ti, si) || tables[ti].status !== 'waiting' || tables[ti].seats[si]) return;
       const cur = seatOf(client.uid); if (cur) tables[cur.table].seats[cur.seat] = null; // one seat per player
-      tables[ti].seats[si] = { kind: 'human', uid: client.uid, name: client.name, ready: false };
+      tables[ti].seats[si] = { kind: 'human', uid: client.uid, name: client.name, ready: false, readyBy: Date.now() + READY_MS };
       break;
     }
     case 'leave': { const at = seatOf(client.uid); if (at && tables[at.table].status === 'waiting') tables[at.table].seats[at.seat] = null; break; }
-    case 'ready': { const at = seatOf(client.uid); if (!at) return; tables[at.table].seats[at.seat].ready = !!msg.ready; break; }
+    case 'ready': { const at = seatOf(client.uid); if (!at) return; const seat = tables[at.table].seats[at.seat];
+      seat.ready = !!msg.ready; seat.readyBy = seat.ready ? null : Date.now() + READY_MS; break; } // un-ready restarts the window
     case 'addBot': {
       const ti = msg.table | 0, si = msg.seat | 0;
       if (!inRange(ti, si) || tables[ti].status !== 'waiting' || tables[ti].seats[si]) return;
@@ -386,6 +393,21 @@ const heartbeat = setInterval(() => {
   for (const ws of wss.clients) { if (!ws.isAlive) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); }
 }, 30000);
 wss.on('close', () => clearInterval(heartbeat));
+
+// Ready sweep: a seated human who hasn't readied within READY_MS is removed from the table, so an idle
+// player never blocks a seat indefinitely. Only waiting tables; bots and ready players are untouched.
+const readySweep = setInterval(() => {
+  const now = Date.now(); let changed = false;
+  for (const t of tables) {
+    if (t.status !== 'waiting') continue;
+    for (let s = 0; s < SEATS; s++) {
+      const seat = t.seats[s];
+      if (seat && seat.kind === 'human' && !seat.ready && seat.readyBy && now > seat.readyBy) { t.seats[s] = null; changed = true; }
+    }
+  }
+  if (changed) { broadcastLobby(); persist(); }
+}, 1000);
+wss.on('close', () => clearInterval(readySweep));
 
 // Flush the latest 锅 standings synchronously on a graceful shutdown (Azure sends SIGTERM on a
 // restart/redeploy) so the resumed game starts from the most recent round.
