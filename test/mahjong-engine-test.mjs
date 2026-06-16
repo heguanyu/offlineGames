@@ -200,6 +200,16 @@ ok(r && r.meta.benHunLong && !r.meta.shuangHun, '本混龙 only — the 混儿 i
 ok(r && r.fans.includes('本混龙') && !r.fans.includes('双混吊'), '本混龙 labelled, 双混吊 not');
 eq(r && r.score, 8, '本混龙(8), no 双混吊 (the dragon run is not an outside meld)');
 
+// 龙 + 混吊 IS still legal: 混吊 lives on the 将 (pair), which is never part of a 龙 (the
+// dragon is three CHOWS). Full 1-9万 + 123筒 + a 单吊将 of [混儿 + winning 9筒]. The standing
+// 混儿 in the pair is a genuine 混吊 wait, OUTSIDE the dragon → 龙(4) × 混吊(2) = 8. (Wilds
+// are winds, off-suit, so no 本混.) Guards that excluding dragon RUNS did not also kill 混吊.
+const longHunDiao = [M(1), M(2), M(3), M(4), M(5), M(6), M(7), M(8), M(9), P(1), P(2), P(3), 27];
+r = analyzeWin([...longHunDiao, P(9)], [], { wilds: [27, 28], winningKind: P(9) });
+ok(r && r.meta.long && r.meta.hunDiao && !r.meta.shuangHun, '龙 + 混吊 — the 将 carries the 混儿 wait (outside the 龙)');
+ok(r && r.fans.includes('龙') && r.fans.includes('混吊'), '龙 and 混吊 both labelled');
+eq(r && r.score, 8, '龙(4) × 混吊(2) = 8');
+
 // --- 杠分 (kong points) + 金杠 -------------------------------------------------
 console.log('kong points:');
 {
