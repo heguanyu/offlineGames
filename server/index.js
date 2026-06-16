@@ -7,16 +7,30 @@
 // client never polls. Players are identified by a persistent `uid` (their localStorage id),
 // so a dropped connection can reconnect to its seat and resync the game in progress.
 //
-// Run locally:  PORT=8090 node index.js
+// This same process ALSO serves the static PWA site (the whole repo, staged alongside) for
+// every non-WebSocket request, with native COOP/COEP/CORP headers so the threaded emulator
+// cores get crossOriginIsolated (SharedArrayBuffer) without the sw.js header hack that GitHub
+// Pages forced. GitHub Pages remains a fully working mirror; the client (lobby.js) connects to
+// whichever origin served it, so both hosts work.
+//
+// Run locally:  PORT=8090 node index.js   (serves the site at http://localhost:8090/)
 import http from 'node:http';
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Table } from './table.js';
 import db from './db.js';
 
 const PORT = process.env.PORT || 8090;
 const ALLOWED = (process.env.ALLOWED_ORIGINS ||
-  'https://heguanyu.github.io,http://localhost:8090,http://127.0.0.1:8090,http://localhost:8137')
+  'https://heguanyu.github.io,https://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net,http://localhost:8090,http://127.0.0.1:8090,http://localhost:8137')
   .split(',').map((s) => s.trim());
+
+// The static site root. The server lives at <root>/server/index.js, so the publishable site
+// (index.html, games/, emulatorjs/, icons/, shared/, sw.js …) sits one level up — true both for
+// a local checkout and for the staged Azure package. Override with STATIC_ROOT if needed.
+const STATIC_ROOT = process.env.STATIC_ROOT || fileURLToPath(new URL('..', import.meta.url));
 
 const TABLES = 1, SEATS = 4;
 const WIND = ['东', '南', '西', '北'];
@@ -214,10 +228,60 @@ function handle(client, msg) {
   persist(); // seat/ready/bot changes are part of the restored state
 }
 
+// ---- static site serving --------------------------------------------------
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webp': 'image/webp',
+  '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg',
+  '.wasm': 'application/wasm', '.data': 'application/octet-stream', '.bin': 'application/octet-stream',
+  '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8',
+};
+const ROOT = path.resolve(STATIC_ROOT);
+
+// Map a request URL to a file inside ROOT (no path traversal). A trailing '/' → that dir's
+// index.html. Returns null if the path escapes ROOT.
+function resolveStatic(reqUrl) {
+  let p;
+  try { p = decodeURIComponent(reqUrl.split('?')[0]); } catch { return null; }
+  if (p.endsWith('/')) p += 'index.html';
+  const full = path.resolve(ROOT, '.' + p);
+  if (full !== ROOT && !full.startsWith(ROOT + path.sep)) return null;
+  return full;
+}
+
+// COOP/COEP/CORP enable cross-origin isolation (crossOriginIsolated === true → SharedArrayBuffer →
+// threaded emulator cores). Served natively here so a fresh load is isolated immediately, before the
+// service worker (which sets the same headers for the GitHub Pages mirror) is even installed.
+function isolate(headers) {
+  headers['Cross-Origin-Opener-Policy'] = 'same-origin';
+  headers['Cross-Origin-Embedder-Policy'] = 'require-corp';
+  headers['Cross-Origin-Resource-Policy'] = 'same-origin';
+  return headers;
+}
+
+async function serveStatic(req, res) {
+  const file = resolveStatic(req.url);
+  if (!file) { res.writeHead(403); res.end(); return; }
+  try {
+    let target = file;
+    let st = await stat(target).catch(() => null);
+    if (st && st.isDirectory()) { target = path.join(target, 'index.html'); st = await stat(target).catch(() => null); }
+    if (!st || !st.isFile()) { res.writeHead(404, isolate({ 'content-type': 'text/plain; charset=utf-8' })); res.end('not found'); return; }
+    const type = MIME[path.extname(target).toLowerCase()] || 'application/octet-stream';
+    const body = req.method === 'HEAD' ? null : await readFile(target);
+    res.writeHead(200, isolate({ 'content-type': type, 'content-length': body ? body.length : st.size }));
+    res.end(body || undefined);
+  } catch { res.writeHead(500); res.end(); }
+}
+
 // ---- HTTP + WebSocket -----------------------------------------------------
 const server = http.createServer((req, res) => {
-  if (req.url === '/health' || req.url === '/') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('mahjong-online ok'); return; }
-  res.writeHead(404); res.end();
+  if (req.url === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('mahjong-online ok'); return; }
+  if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
+  serveStatic(req, res);
 });
 
 const localhostOrigin = (o) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o);
@@ -260,4 +324,4 @@ wss.on('close', () => clearInterval(heartbeat));
 // restart/redeploy) so the resumed game starts from the most recent round.
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { flushState(); process.exit(0); });
 
-server.listen(PORT, () => console.log(`mahjong-online lobby listening on :${PORT}`));
+server.listen(PORT, () => console.log(`mahjong-online lobby + site listening on :${PORT} (static root ${ROOT})`));

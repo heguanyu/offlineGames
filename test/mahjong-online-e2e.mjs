@@ -53,6 +53,17 @@ try {
   await A.type('#name-dialog-input', '测试玩家一二三四 abc123!@#'); // 8 中文 + junk
   const cleaned = await A.evaluate(() => document.getElementById('name-dialog-input').value);
   if (cleaned !== '测试玩家一二') throw new Error(`name input not cleaned: got "${cleaned}" (want 测试玩家一二 — 6 中文 cap, junk stripped)`);
+  // IME: clamping must NOT fire mid-composition (e.g. typing pinyin for 小帅) — only after compositionend.
+  await A.evaluate(() => { const el = document.getElementById('name-dialog-input'); el.value = ''; el.focus();
+    el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    el.value = '小帅同学一二三四五'; // 9 中文, over the limit, but still being composed
+    el.dispatchEvent(new InputEvent('input', { isComposing: true, bubbles: true })); });
+  const mid = await A.evaluate(() => document.getElementById('name-dialog-input').value);
+  if (mid !== '小帅同学一二三四五') throw new Error(`name clamped DURING IME composition: "${mid}" (should be left alone)`);
+  await A.evaluate(() => { const el = document.getElementById('name-dialog-input');
+    el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })); });
+  const after = await A.evaluate(() => document.getElementById('name-dialog-input').value);
+  if (after !== '小帅同学一二') throw new Error(`name not clamped after IME ended: "${after}" (want 小帅同学一二)`);
   await A.evaluate(() => { document.getElementById('name-dialog-input').value = ''; });
   await A.type('#name-dialog-input', '阿强');
   await A.click('#name-dialog-ok');

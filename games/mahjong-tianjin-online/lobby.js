@@ -5,12 +5,19 @@
 // ready players/bots the server sends 'gameStart'.
 const $ = (id) => document.getElementById(id);
 
-// ?server=wss://… overrides the target (handy for testing a deployed server from a local
-// page); otherwise localhost → the dev server, anything else → the Azure Web App.
-const SERVER_URL = new URLSearchParams(location.search).get('server')
-  || ((location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-    ? `ws://${location.hostname}:8090`
-    : 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net');
+// Pick the game server. The Azure App Service now serves this very page AND the WebSocket
+// backend, so when we're loaded from Azure (or any same-origin host) we just connect back to
+// ourselves. The GitHub Pages mirror can't host a WebSocket, so a page served from *.github.io
+// reaches across to the Azure backend. ?server=wss://… overrides everything (handy for testing
+// a deployed server from a local page).
+const AZURE_WS = 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net';
+function defaultServerUrl() {
+  const h = location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1') return `ws://${h}:8090`; // dev server (also serves this page)
+  if (h.endsWith('github.io')) return AZURE_WS;                        // Pages mirror → Azure backend
+  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`; // served from Azure → same origin
+}
+const SERVER_URL = new URLSearchParams(location.search).get('server') || defaultServerUrl();
 
 const WINDS = ['东', '南', '西', '北'];          // seat index → wind label
 const POS = ['east', 'south', 'west', 'north'];  // seat index → chair CSS position
@@ -61,7 +68,12 @@ function cleanName(s) {
   }
   return out;
 }
-const clampInput = (e) => { const c = cleanName(e.target.value); if (c !== e.target.value) e.target.value = c; };
+// Clean the field's value in place. Bound to 'input' (but SKIPPED while an IME is composing — e.g.
+// typing pinyin "xiaoshuai" for 小帅 — because rewriting the value mid-composition commits the raw
+// pinyin and cancels the input) and to 'compositionend' (so the limit is applied once the IME finishes).
+const clampValue = (el) => { const c = cleanName(el.value); if (c !== el.value) el.value = c; };
+const clampInput = (e) => { if (e.isComposing) return; clampValue(e.target); };
+const bindNameClamp = (el) => { el.addEventListener('input', clampInput); el.addEventListener('compositionend', () => clampValue(el)); };
 function setName(n) {
   name = cleanName(n);
   localStorage.setItem('mahjong-online-name', name);
@@ -70,7 +82,7 @@ function setName(n) {
 }
 name = cleanName(name); localStorage.setItem('mahjong-online-name', name); // clean a name stored before these rules
 $('name-input').value = name;
-$('name-input').addEventListener('input', clampInput);
+bindNameClamp($('name-input'));
 $('name-input').addEventListener('change', (e) => setName(e.target.value));
 
 function requireNameThenSit(table, seat) {
@@ -80,7 +92,7 @@ function requireNameThenSit(table, seat) {
   $('name-overlay').classList.remove('hidden');
   inp.focus();
 }
-$('name-dialog-input').addEventListener('input', clampInput);
+bindNameClamp($('name-dialog-input'));
 $('name-dialog-ok').addEventListener('click', () => {
   const n = cleanName($('name-dialog-input').value);
   if (!n) { $('name-dialog-input').focus(); return; }

@@ -57,9 +57,9 @@ try {
       legacy.tables.forEach((t, i) => { if (t) impl.saveTable(i, t.seats, t.pot); });
     });
     tx();
-    console.error(`[db] migrated ${Object.keys(legacy.scoreBook).length} player(s) + ${legacy.tables.filter(Boolean).length} table(s) from legacy JSON → ${DB_FILE}`);
+    console.log(`[db] migrated ${Object.keys(legacy.scoreBook).length} player(s) + ${legacy.tables.filter(Boolean).length} table(s) from legacy JSON → ${DB_FILE}`);
   }
-  console.error(`[db] SQLite ready at ${DB_FILE}`);
+  console.log(`[db] SQLite ready at ${DB_FILE}`); // informational → stdout (stderr is reserved for real warnings/errors)
 } catch (e) {
   console.warn('[db] better-sqlite3 unavailable — falling back to a JSON file:', e && e.message);
 }
@@ -81,7 +81,7 @@ if (!impl) {
     loadTables() { return state.tables; },
     saveTable(id, seats, pot) { state.tables[id] = { seats: seats ?? null, pot: pot ?? null }; flush(); },
   };
-  console.error(`[db] JSON file at ${DB_FILE}`);
+  console.log(`[db] JSON file at ${DB_FILE}`); // informational; the fallback itself was already warned above
 }
 
 export default impl;

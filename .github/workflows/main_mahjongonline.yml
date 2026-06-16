@@ -1,20 +1,20 @@
-# Deploy the online 天津麻将 server (server/) to the Azure Web App "mahjongonline".
+# Deploy the online 天津麻将 server AND the full static PWA site to the Azure Web App "mahjongonline".
 #
-# The server imports games/mahjong-tianjin/{engine,ai}.js (outside server/), so we STAGE a
-# self-contained package: server/{index,table,db}.js + those two engine files + a type:module
-# package.json whose start script runs `node server/index.js`. Deps: `ws` and `better-sqlite3`
-# (the score database — its data lives on the persistent /home mount, set via SCORES_FILE). Auth is
-# OIDC (azure/login) — the publish-profile path is dead (SCM Basic Auth disabled on the app).
+# The one process serves both: server/index.js answers WebSockets for the lobby/table game and
+# serves every other request as a static file (with native COOP/COEP/CORP headers). So we STAGE the
+# WHOLE publishable site (index.html, games/, emulatorjs/, icons/, shared/, sw.js + the server/ code
+# it imports engine.js/ai.js from) into _deploy, plus a type:module package.json whose start script
+# runs `node server/index.js`. Deps: `ws` and `better-sqlite3` (the score database — its data lives
+# on the persistent /home mount, set via SCORES_FILE). better-sqlite3 is compiled here on the Linux
+# runner so the native binary matches the Azure Linux host. Auth is OIDC (azure/login) — the
+# publish-profile path is dead (SCM Basic Auth disabled on the app).
+#
+# GitHub Pages (deploy.yml) stays a fully working mirror and is unchanged; both deploy on every push.
 name: Build and deploy Node.js app to Azure Web App - mahjongonline
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'server/**'
-      - 'games/mahjong-tianjin/engine.js'
-      - 'games/mahjong-tianjin/ai.js'
-      - '.github/workflows/main_mahjongonline.yml'
   workflow_dispatch:
 
 permissions:
@@ -36,11 +36,19 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Stage a self-contained server package
+      - name: Stage the full site + server package
+        # Copy the whole publishable site (the server serves it statically), omitting the .git/CI
+        # metadata, dev-only test/, the server's local node_modules + data, and ROMs (git-ignored).
+        # The deploy package.json at the root (type:module + start + runtime deps) overrides nothing
+        # — the repo has no root package.json — and is what `npm install` below builds from.
         run: |
-          mkdir -p _deploy/server _deploy/games/mahjong-tianjin
-          cp server/index.js server/table.js server/db.js _deploy/server/
-          cp games/mahjong-tianjin/engine.js games/mahjong-tianjin/ai.js _deploy/games/mahjong-tianjin/
+          mkdir -p _deploy
+          rsync -a \
+            --exclude='/.git/' --exclude='/.github/' \
+            --exclude='/test/' \
+            --exclude='/server/node_modules/' --exclude='/server/data/' \
+            --exclude='/roms/' --exclude='/_deploy/' \
+            ./ ./_deploy/
           echo '{"name":"mahjong-online-deploy","private":true,"type":"module","engines":{"node":">=20"},"scripts":{"start":"node server/index.js"},"dependencies":{"ws":"^8.18.0","better-sqlite3":"^11.10.0"}}' > _deploy/package.json
 
       - name: Install production dependencies
