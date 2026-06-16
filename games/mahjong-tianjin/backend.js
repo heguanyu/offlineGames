@@ -37,6 +37,7 @@
 
 import { Game, PHASE } from './engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong } from './ai.js';
+import { RemoteBackendBase } from '../mahjong-common/remote-backend.js';
 
 export const HUMAN = 0;
 
@@ -180,69 +181,15 @@ export class LocalBackend {
 
 // ---------------------------------------------------------------------------
 // RemoteBackend — the online implementation. Same contract as LocalBackend, so the UI is
-// unchanged. One WebSocket carries server → client { type:'game', ev, view } frames; each is
-// queued and fed through the awaited handler (sequencing like LocalBackend). getState() returns
-// a GameView ROTATED to the player's seat (display index 0 = you), so main.js's HUMAN=0
-// rendering puts you at the bottom with correct winds. Actions send the move; the server is the
-// ground truth and streams the result back. Drops auto-reconnect (the server resyncs by uid).
+// unchanged. The transport/reconnect/action layer is the shared RemoteBackendBase; the only
+// 天津-specific parts are buildRemoteView (rebuild the GameView rotated to the player's seat, so
+// main.js's HUMAN=0 rendering puts you at the bottom with correct winds) and mapServerEvent
+// (server event → UI event). 国标 reuses the same base with its own mappers.
 // ---------------------------------------------------------------------------
-export class RemoteBackend {
+export class RemoteBackend extends RemoteBackendBase {
   constructor(config = {}) {
-    this.url = config.url;
-    this.uid = config.uid;
-    this.name = config.name || '';
-    // Spectator (viewer mode): { table, seat } of the human seat to watch. When set, hello asks the
-    // server to spectate that seat and EVERY action is suppressed — a pure, read-only viewer.
-    this.spectate = config.spectate || null;
-    this._handler = null;
-    this._view = null;       // last GameView, rotated to our seat
-    this._ws = null;
-    this._seat = 0;          // our absolute seat at the table
-    this._closed = false;
-    this._reconnect = null;
-    this._queue = Promise.resolve();
+    super(config, { buildView: buildRemoteView, mapEvent: mapServerEvent });
   }
-
-  onEvent(handler) { this._handler = handler; }
-  getState() { return this._view; }
-  get yourSeat() { return this._seat; }
-
-  connect() {
-    this._closed = false;
-    const ws = this._ws = new WebSocket(this.url);
-    ws.onopen = () => this._send({ type: 'hello', uid: this.uid, name: this.name, ...(this.spectate ? { spectate: this.spectate } : {}) });
-    ws.onmessage = (e) => {
-      let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.type === 'noGame') { if (this._handler) this._handler({ type: 'gameGone' }); return; } // no live game on this socket → the UI returns to the lobby
-      if (m.type === 'game') this._queue = this._queue.then(() => this._process(m)).catch((err) => console.error('[remote] frame processing failed:', err));
-    };
-    ws.onclose = () => { if (!this._closed) { clearTimeout(this._reconnect); this._reconnect = setTimeout(() => this.connect(), 1500); if (this._handler) this._handler({ type: 'disconnected' }); } };
-    ws.onerror = () => { try { ws.close(); } catch {} };
-  }
-  dispose() { this._closed = true; clearTimeout(this._reconnect); if (this._ws) try { this._ws.close(); } catch {} this._ws = null; this._handler = null; }
-
-  _send(m) { if (this._ws && this._ws.readyState === 1) this._ws.send(JSON.stringify(m)); }
-  // A spectator never acts — gating here makes every action method (discard/claim/…/decideLaZhuang/
-  // next/dealDone) a no-op, so the viewer can click the live UI without ever affecting the game.
-  _act(a) { if (this.spectate) return; this._send({ type: 'action', ...a }); }
-
-  async _process(frame) {
-    this._seat = frame.view.yourSeat;
-    this._view = buildRemoteView(frame.view, this._seat);
-    const ev = mapServerEvent(frame.ev, this._seat, this._view);
-    if (ev && this._handler) await this._handler(ev);
-  }
-
-  // Actions — tiles/kinds aren't seat-relative, so they pass through; only seat indices rotate.
-  async discard(tile) { this._act({ do: 'discard', tile }); }
-  async claim(type) { this._act({ do: 'claim', claim: type }); }
-  async pass() { this._act({ do: 'pass' }); }
-  async selfKong(kind) { this._act({ do: 'selfKong', kind }); }
-  async declareWin() { this._act({ do: 'win' }); }
-  decideLaZhuang(yes) { this._act({ do: 'lazhuang', yes }); }
-  next() { this._act({ do: 'next' }); }
-  unready() { this._act({ do: 'unready' }); } // cancel "我准备好了" before the next hand deals
-  dealDone() { this._act({ do: 'dealDone' }); } // my deal animation finished — the server may now drive the bots
 }
 
 // Rotate a server view (absolute seats) to the player's perspective and rebuild a GameView

@@ -1,8 +1,9 @@
 // 国标麻将 — UI glue. Reuses the mahjong rendering (scene.js), audio (sound.js)
 // and hand-order (handorder.js) layers; brings its own rules engine + AI and the
 // claim-queue orchestration (胡 > 碰/杠 > 吃 priority, win off discards, 听).
-import { Game, PHASE, tileName, MIN_FAN } from './engine.js';
-import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS, LEVEL_NAMES } from './ai.js';
+import { PHASE, tileName, MIN_FAN } from './engine.js';
+import { LEVELS, LEVEL_NAMES } from './ai.js';
+import { createBackend } from './backend.js';
 import { MahjongScene } from '../mahjong-tianjin/scene.js';
 import { MahjongScene2D } from '../mahjong-tianjin/scene2d.js';
 import { Sound } from '../mahjong-tianjin/sound.js';
@@ -16,6 +17,10 @@ const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
 const WIND = ['东', '南', '西', '北'];
 const FAST = !!new URLSearchParams(location.search).get('fast');
 const AI_DELAY = FAST ? 35 : 650;
+// Online mode is gated on ONLINE everywhere (mirrors 天津). The backend (games/guobiao/backend.js)
+// already implements RemoteBackend over the shared transport; flipping this on + wiring the lobby
+// entry is the remaining step. Offline is the default, single-player game.
+const ONLINE = false;
 // A bot's 吃/碰/杠 is shown lifted for CLAIM_DEMO_MS; logic is held until it settles
 // (+ CLAIM_SETTLE_MS). Both collapse to ~0 under ?fast=1 for tests.
 const CLAIM_DEMO_MS = FAST ? 60 : 2000;
@@ -42,13 +47,17 @@ const FLAT = (() => {
 if (FLAT) document.body.classList.add('flat');
 const Renderer = FLAT ? MahjongScene2D : MahjongScene;
 
-let game = null, scene = null, level = LEVELS.NORMAL;
+// `game` is the READ-ONLY GameView the backend hands back (see backend.js) — the UI renders it but
+// never mutates it; every move goes through `backend` (local engine+AI today, the remote server when
+// online). `backend` is created via the factory and driven through events.
+let game = null, backend = null, scene = null, level = LEVELS.NORMAL;
 let session = loadSession();
-let selIndex = 0, focusIndex = 0, pendingTimer = null, lastLogLen = 0, gameStarted = false;
+let selIndex = 0, focusIndex = 0, lastLogLen = 0, gameStarted = false;
 let dealing = false;           // the initial-deal animation is running (input is held)
 let animating = false;         // a bot's discard fly is playing — tick + input are held
 let fastMode = localStorage.getItem(CFG.sessionKey + '-fast') !== '0'; // checked (on) by default
 let lockedTing = false, tingWaits = []; // once 听, the seat auto-plays (tsumogiri)
+let tsumogiriPending = false; // the next human discard event is a 听 auto-draw-discard → reveal deck→pool
 let tingRevealIdx = -1;        // discardLog index of a 听 tsumogiri to reveal deck→center→pool
 let isPortrait = false;        // device held portrait → page force-rotated to landscape
 
@@ -270,71 +279,110 @@ function flushLog() {
   lastLogLen = game.log.length;
 }
 
-// ---- orchestration ----
-function tick() {
-  // 听 (locked): a non-winning self-draw is tsumogiri'd BEFORE we render, so it flies
-  // deck→center→pool (the reveal) and is never shown in the hand. A winning draw falls
-  // through to the 胡 confirmation below (no auto-declare).
-  if (lockedTing && game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN
-      && game.drawnTile != null && !game.selfDrawWin) {
-    const dt = game.drawnTile;
-    game.discard(HUMAN, dt); sound.discard(); if (!fastMode) sound.say(tileName(dt), HUMAN);
-    tingRevealIdx = game.discardLog.length - 1;
-    render();
-    tingRevealIdx = -1;
-    schedule(() => tick(), AI_DELAY);
-    return;
-  }
-  render();
-  if (game.phase === PHASE.OVER) { showResult(); return; }
-  if (game.phase === PHASE.AWAIT_CLAIM) {
-    const c = game.currentClaim();
-    if (c.player === HUMAN) {
-      // Once 听, the human seat is on autopilot: take a 胡, pass everything else.
-      if (lockedTing) { schedule(() => { if (c.type === 'win') game.claimTake(); else game.claimPass(); tick(); }, AI_DELAY); return; }
-      focusIndex = 0; render(); return;
-    }
-    schedule(() => {
-      const dec = chooseClaim(game, c.player, c, level);
-      if (dec.take) {
-        game.claimTake(dec.option);
-        if (c.type !== 'win' && scene) { // show the bot's 吃/碰/杠 off, then HOLD logic until it settles
-          scene.beginClaimDemo(c.player, CLAIM_DEMO_MS);
-          render();                                        // lift the meld + play the voice now
-          schedule(tick, CLAIM_DEMO_MS + CLAIM_SETTLE_MS); // pause draws/turns until the animation ends
-          return;
-        }
-      } else game.claimPass();
-      tick();
-    }, AI_DELAY);
-    return;
-  }
-  if (game.phase === PHASE.AWAIT_DISCARD) {
-    if (game.turn === HUMAN) {
-      // 听 + winning draw: pause autopilot and show the pending 胡 confirmation
-      // (render reveals the drawn tile into the hand). A non-winning 听 draw was
-      // already auto-discarded at the top of tick. Otherwise: wait for the human.
-      return; // top render() drew the state; await the human's action / 胡 confirm
-    }
-    schedule(() => {
-      const p = game.turn;
-      if (game.selfDrawWin) { game.declareWin(); tick(); return; } // bots take their self-draw win
-      const kong = chooseSelfKong(game, p, level);
-      if (kong != null) { game.selfKong(p, kong); tick(); return; }
-      const dt = chooseDiscard(game, p, level);
-      game.discard(p, dt); sound.discard(); if (!fastMode) sound.say(tileName(dt), p); // speak the tile in the bot's voice (not in fast mode)
-      if (scene && !FAST && !fastMode) { // fly the discard to the center halt, hold, then drop to pool
-        animating = true;
-        scene.beginDiscardDemo(p, game.discardLog.length - 1, DISCARD_DEMO_MS);
-        render();                                              // place the flying tile; claim UI suppressed
-        schedule(() => { animating = false; tick(); }, DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
+// ---- orchestration (backend-driven) ----
+// The backend pushes one event per move; this async handler is the whole UI-side orchestration
+// (it replaced the old synchronous tick() loop). Each case renders + plays the matching
+// animation/sound and AWAITS it, so the backend (local sim or remote server) is held until the
+// table catches up before the next event. The 吃/碰/杠/和 toasts + voices ride the engine log and
+// flush inside render(), so most cases just call render().
+async function onBackendEvent(ev) {
+  if (ev.type === 'gameGone') { returnHub(); return; }
+  const st = backend.getState();
+  if (st) game = st;
+  switch (ev.type) {
+    case 'deal':
+      $('result-overlay').classList.add('hidden'); // the next hand is dealing → hide the result panel
+      selIndex = 0; focusIndex = 0; lockedTing = false; tingWaits = []; lastLogLen = 0;
+      sound.stopMusic();
+      if (!ONLINE) saveSession();
+      if (scene && !FAST) { // serve the tiles from the wall, then play
+        dealing = true;
+        renderHud();
+        $('action-bar').innerHTML = ''; $('ting-center').innerHTML = '';
+        $('hand-hint').textContent = '发牌中…';
+        await new Promise((res) => scene.beginDeal(game, res, () => sound.select()));
+        dealing = false;
+      }
+      render();
+      if (ONLINE && backend.dealDone) backend.dealDone(); // table's dealt → let the server start the opponents
+      return;
+
+    case 'discard': {
+      const human = ev.player === HUMAN;
+      sound.discard();
+      // 听 tsumogiri (an AUTO draw-discard, never shown in the hand) → reveal it deck→center→pool.
+      // The manually-declared 听 discard (报听) is a normal hand discard, so it animates below.
+      if (human && tsumogiriPending) {
+        tsumogiriPending = false;
+        if (!fastMode) sound.say(tileName(ev.tile), HUMAN);
+        tingRevealIdx = ev.discardIndex; render(); tingRevealIdx = -1;
         return;
       }
-      tick();
-    }, AI_DELAY);
+      if (human) selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
+      else if (!fastMode) sound.say(tileName(ev.tile), ev.player); // bot speaks its discard
+      if (scene && !FAST && !fastMode) { // fly to the center halt, hold, drop into the pool
+        if (human) sound.say(tileName(ev.tile), HUMAN);
+        animating = true;
+        try {
+          scene.beginDiscardDemo(ev.player, ev.discardIndex, DISCARD_DEMO_MS);
+          render();
+          await delay(DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
+        } finally { animating = false; }
+      }
+      render();
+      return;
+    }
+
+    case 'claim':
+      if (ev.player === HUMAN) { selIndex = 0; } // then they discard
+      else if (scene && !FAST) { // show the bot's 吃/碰/杠 lifted, hold until it settles
+        scene.beginClaimDemo(ev.player, CLAIM_DEMO_MS);
+        render();
+        await delay(CLAIM_DEMO_MS + CLAIM_SETTLE_MS);
+      }
+      render();
+      return;
+
+    case 'selfKong':
+      render(); // the 杠 toast + voice flush from the engine log
+      return;
+
+    case 'await': // the human must act: a claimable discard, or their own turn
+      if (ev.who === 'claim') {
+        // Once 听, the seat is on autopilot: take a 胡, pass everything else.
+        if (lockedTing) { const c = game.currentClaim(); if (c && c.type === 'win') backend.claim('win'); else backend.pass(); return; }
+        focusIndex = 0; render();
+        return;
+      }
+      // who === 'discard'. 听: a non-winning draw is tsumogiri'd automatically (never shown);
+      // a winning draw pauses for the centered 胡 confirmation.
+      if (lockedTing && !game.selfDrawWin) { tsumogiriPending = true; backend.discard(game.drawnTile); return; }
+      ensureSelection(); render();
+      return;
+
+    case 'over':
+      render(); // flush the 自摸 / 点炮 / 荒牌 toast + win/lose sound from the log
+      showResult();
+      return;
+
+    // ---- online only ----
+    case 'sync': // (re)joined a game in progress, or reconnected — render the current state
+      lastLogLen = game.log ? game.log.length : 0; // online views carry no log; suppress toasts
+      ensureSelection(); render();
+      return;
+    case 'potOver':
+      render();
+      return;
+    case 'disconnected':
+      return;
   }
 }
-function schedule(fn, delay) { clearTimeout(pendingTimer); pendingTimer = setTimeout(fn, delay); }
+
+function ensureSelection() {
+  const sel = selectableHandIndices();
+  if (selIndex >= sel.length) selIndex = sel.length - 1;
+  if (selIndex < 0) selIndex = 0;
+}
 
 // ---- human actions ----
 function onPickTile(idx) {
@@ -355,30 +403,16 @@ function discardSelected(declare) {
   if (scene && scene.handDrawRevealing) return; // wait until the drawn tile settles
   const id = renderedHand()[selectableHandIndices()[selIndex]];
   if (id == null) return;
-  let waits = null;
-  if (declare) {
+  if (declare) { // 报听: lock 听 + start music NOW (synchronously) before handing off to the backend
     const rest = game.hands[HUMAN].slice(); rest.splice(rest.indexOf(id), 1);
-    waits = game.handWaits(rest, HUMAN);
-    if (!waits.length) declare = false; // safety: not actually 听 → plain discard
+    const waits = game.handWaits(rest, HUMAN);
+    if (waits.length) { lockedTing = true; tingWaits = waits; toast('听！自动出牌', true); sound.startMusic(); } // else not actually 听 → plain discard
   }
-  game.discard(HUMAN, id); sound.discard();
-  selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
-  if (declare) { lockedTing = true; tingWaits = waits; toast('听！自动出牌', true); sound.startMusic(); }
-  // the player's discard flies + halts too (holds the tick before bots act), unless 听
-  // (autopilot has its own reveal) or fast mode.
-  if (scene && !FAST && !fastMode && !declare) {
-    sound.say(tileName(id), HUMAN);
-    animating = true;
-    scene.beginDiscardDemo(HUMAN, game.discardLog.length - 1, DISCARD_DEMO_MS);
-    render();
-    schedule(() => { animating = false; tick(); }, DISCARD_DEMO_MS + DISCARD_SETTLE_MS);
-    return;
-  }
-  if (!fastMode) sound.say(tileName(id), HUMAN);
-  tick();
+  selIndex = Math.min(selIndex, Math.max(0, selectableHandIndices().length - 1));
+  backend.discard(id); // the 'discard' event animates it, then the backend drives the bots
 }
-function doDeclareWin() { if (scene && scene.handDrawRevealing) return; if (game.declareWin()) tick(); }
-function doSelfKong(kind) { if (scene && scene.handDrawRevealing) return; if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) { game.selfKong(HUMAN, kind); tick(); } }
+function doDeclareWin() { if (scene && scene.handDrawRevealing) return; backend.declareWin(); }
+function doSelfKong(kind) { if (scene && scene.handDrawRevealing) return; if (game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD) backend.selfKong(kind); }
 // When the freshly-drawn tile finishes its reveal, auto-select it (ready to discard).
 function selectDrawnTile() {
   if (game.turn !== HUMAN || game.phase !== PHASE.AWAIT_DISCARD || lockedTing || game.drawnTile == null) return;
@@ -386,8 +420,9 @@ function selectDrawnTile() {
   if (si >= 0) selIndex = si;
   render();
 }
-function doClaimTake(opt) { if (isClaimPhase()) { game.claimTake(opt); selIndex = 0; tick(); } } // after 碰/吃/杠, select the first tile
-function doClaimPass() { if (isClaimPhase()) { game.claimPass(); tick(); } }
+// Take the head claim (碰/杠/吃, or a 点炮 win) — `opt` is the chosen 吃 run; 过 declines it.
+function doClaimTake(opt) { if (isClaimPhase()) { selIndex = 0; backend.claim(game.currentClaim().type, opt); } }
+function doClaimPass() { if (isClaimPhase()) backend.pass(); }
 
 // ---- result / new hand ----
 // 得分明细 for the result panel: every seat's net (本局得分) laid out as a 3×3 grid
@@ -477,24 +512,14 @@ function nextHand() {
   startHand();
 }
 function startHand() {
-  clearTimeout(pendingTimer);
   if (!scene) { scene = new Renderer($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
-  game = new Game({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan });
-  lastLogLen = 0; selIndex = 0; focusIndex = 0; lockedTing = false; tingWaits = [];
+  if (!backend) { backend = createBackend({ mode: 'local', rng: Math.random, thinkDelay: AI_DELAY }); backend.onEvent(onBackendEvent); }
+  selIndex = 0; focusIndex = 0; lockedTing = false; tingWaits = []; tsumogiriPending = false; lastLogLen = 0;
   sound.stopMusic();
   saveSession();
-  // Deal the hand with a serving flourish (tiles fly off the wall), then play.
-  // Under ?fast=1 (tests) skip straight to play so the timing stays tight.
-  if (scene && !FAST) {
-    dealing = true;
-    renderHud();
-    $('action-bar').innerHTML = '';
-    $('ting-center').innerHTML = '';
-    $('hand-hint').textContent = '发牌中…';
-    scene.beginDeal(game, () => { dealing = false; tick(); }, () => sound.select());
-  } else {
-    tick();
-  }
+  // Hand off to the backend: it deals (the 'deal' event plays the serving flourish), then drives
+  // the bots, pausing on an 'await' for the human. Under ?fast=1 (tests) the deal animation is skipped.
+  backend.startHand({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan, level });
 }
 function newGame() { game = null; session = { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 }; startHand(); }
 
@@ -634,7 +659,6 @@ if (new URLSearchParams(location.search).get('fast')) {
   window.__gb = {
     phase: () => game && game.phase,
     scene: () => scene,
-    tick: () => tick(),
     selInfo: () => ({ selIndex, drawn: game && game.drawnTile, selKind: renderedHand()[selectableHandIndices()[selIndex]], revealing: !!(scene && scene.handDrawRevealing) }),
     claim: () => game && game.currentClaim(),
     humanTurn: () => !!game && game.turn === HUMAN && game.phase === PHASE.AWAIT_DISCARD,

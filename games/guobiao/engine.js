@@ -269,6 +269,59 @@ export class Game {
 
   nextDealer() { return (this.dealer + 1) % 4; } // MCR: dealer passes every hand
 
+  // ---- online resume across a server restart -------------------------------------------
+  // Serialize the in-progress hand to plain JSON so the online server can restore it after a
+  // restart/redeploy and play on. No rng (a restored hand only pops from the saved wall) and no
+  // transient decision flags (selfDrawWin/claimQueue) — restore() recomputes those from the tiles.
+  serialize() {
+    const cloneMelds = (ms) => ms.map((m) => ({ ...m, tiles: m.tiles.slice() }));
+    return {
+      dealer: this.dealer, roundWind: this.roundWind, scores: this.scores.slice(), minFan: this.minFan,
+      hands: this.hands.map((h) => h.slice()), melds: this.melds.map(cloneMelds),
+      discards: this.discards.map((d) => d.slice()), discardLog: this.discardLog.map((e) => ({ ...e })),
+      wall: this.wall.slice(), turn: this.turn, phase: this.phase, drawnTile: this.drawnTile,
+      afterKong: !!this.afterKong, firstGoAround: !!this.firstGoAround,
+      lastDiscard: this.lastDiscard ? { ...this.lastDiscard } : null,
+      // The REMAINING claim offers (higher-priority claimants already passed are shifted off), so a
+      // resume re-offers exactly what's still open — not the full original queue. The win `result` is
+      // dropped (recomputed deterministically on restore) to keep this plain JSON.
+      claimQueue: this.phase === PHASE.AWAIT_CLAIM && this.claimQueue
+        ? this.claimQueue.map((c) => ({ player: c.player, type: c.type, kind: c.kind, options: c.options }))
+        : null,
+      result: this.result ? { ...this.result } : null,
+    };
+  }
+
+  // Rebuild a Game from serialize() output, recomputing the transient decision state the play
+  // loop reads: the pending self-draw 胡 (only after a fresh draw) and any claim queue on a live
+  // discard. Deterministic from the saved tiles, so it reproduces the exact moment.
+  static restore(s) {
+    const g = Object.create(Game.prototype);
+    g.rng = Math.random; g.log = [];
+    g.dealer = s.dealer; g.roundWind = s.roundWind; g.scores = s.scores.slice(); g.minFan = s.minFan ?? MIN_FAN;
+    g.hands = s.hands.map((h) => h.slice());
+    g.melds = s.melds.map((ms) => ms.map((m) => ({ ...m, tiles: m.tiles.slice() })));
+    g.discards = s.discards.map((d) => d.slice());
+    g.discardLog = s.discardLog.map((e) => ({ ...e }));
+    g.wall = s.wall.slice(); g.turn = s.turn; g.phase = s.phase; g.drawnTile = s.drawnTile;
+    g.afterKong = !!s.afterKong; g.firstGoAround = !!s.firstGoAround;
+    g.lastDiscard = s.lastDiscard ? { ...s.lastDiscard } : null;
+    g.result = s.result || null;
+    g.selfDrawWin = null;
+    if (g.phase === PHASE.AWAIT_DISCARD && g.drawnTile != null) {
+      const r = analyzeWin(g.hands[g.turn], g.melds[g.turn], g._winCtx(g.turn, g.drawnTile, false));
+      g.selfDrawWin = (r && r.fan >= g.minFan) ? r : null;
+    }
+    // Rebuild the saved REMAINING claim queue, recomputing each win offer's score from the tiles
+    // (deterministic) so a resumed claim window re-offers exactly what was still open.
+    g.claimQueue = null;
+    if (g.phase === PHASE.AWAIT_CLAIM && Array.isArray(s.claimQueue)) {
+      g.claimQueue = s.claimQueue.map((c) => c.type !== 'win' ? { ...c }
+        : { player: c.player, type: 'win', result: analyzeWin(g.hands[c.player].concat(g.lastDiscard.kind), g.melds[c.player], g._winCtx(c.player, g.lastDiscard.kind, true)) });
+    }
+    return g;
+  }
+
   // Tiles that complete a win of at least `minFan` for `player` from the given
   // 13-tile hand. Uses the self-draw context (the highest-scoring way to win on
   // a tile: it includes 自摸 / 不求人 / 暗刻), so a hand that's ready by self-draw

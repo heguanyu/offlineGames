@@ -20,7 +20,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Table } from './table.js';
+import { ruleset as tianjin } from './rulesets/tianjin.js';
+import { ruleset as guobiao } from './rulesets/guobiao.js';
 import db from './db.js';
+
+// The game each table hosts. Same lobby + Table + protocol for every entry; the ruleset is the only
+// difference (server/rulesets/*.js). GAME_TYPE sets the default for this process (prod = 天津); a
+// per-table gameType (set below) selects the matching ruleset.
+const RULESETS = { tianjin, guobiao };
+const GAME_TYPE = RULESETS[process.env.GAME_TYPE] ? process.env.GAME_TYPE : 'tianjin';
 
 const PORT = process.env.PORT || 8090;
 const ALLOWED = (process.env.ALLOWED_ORIGINS ||
@@ -54,7 +62,7 @@ const tables = Array.from({ length: TABLES }, (_, id) => {
     : s.kind === 'bot' ? { kind: 'bot' }
     : (s.kind === 'human' && s.uid) ? { kind: 'human', uid: s.uid, name: s.name || '', ready: false } : null);
   while (seats.length < SEATS) seats.push(null);
-  return { id, status: 'waiting', seats, game: null, resume: (sv && sv.pot) || null };
+  return { id, status: 'waiting', seats, game: null, resume: (sv && sv.pot) || null, gameType: GAME_TYPE };
 });
 
 // Write each table's current snapshot (seats + 锅 standings) to the DB. Cheap + synchronous, so it's
@@ -137,8 +145,9 @@ function startGame(t) {
     for (const c of clients.values()) if (c.spectate && c.spectate.table === t.id && c.spectate.seat === seatIdx) send(c.ws, msg);
   };
   // online bots play at the hardest level; t.resume carries the 锅 standings across a restart;
-  // persist after every hand so a crash resumes from the latest round.
-  t.game = new Table(t.id, gameSeats, emit, (finalScores) => onPotOver(t, gameSeats, finalScores), 3, t.resume, persist);
+  // persist after every hand so a crash resumes from the latest round. The ruleset picks the game.
+  const ruleset = RULESETS[t.gameType] || RULESETS[GAME_TYPE];
+  t.game = new Table(t.id, gameSeats, emit, (finalScores) => onPotOver(t, gameSeats, finalScores), 3, t.resume, persist, ruleset);
   persist();
 }
 
