@@ -108,41 +108,6 @@ $('name-dialog-ok').addEventListener('click', () => {
 });
 $('name-dialog-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('name-dialog-ok').click(); });
 
-// ---- seat action menu ----------------------------------------------------
-function openMenu(x, y, buttons) {
-  const menu = $('seat-menu');
-  menu.innerHTML = '';
-  for (const [label, fn] of buttons) {
-    const b = document.createElement('button'); b.textContent = label;
-    b.onclick = (ev) => { ev.stopPropagation(); closeMenu(); fn(); };
-    menu.appendChild(b);
-  }
-  menu.classList.remove('hidden');
-  menu.style.left = Math.min(x, window.innerWidth - menu.offsetWidth - 8) + 'px';
-  menu.style.top = (y + 6) + 'px';
-}
-const closeMenu = () => $('seat-menu').classList.add('hidden');
-document.addEventListener('click', (e) => { if (!e.target.closest('#seat-menu') && !e.target.closest('.chair')) closeMenu(); });
-
-function onChairClick(ev, ti, si) {
-  ev.stopPropagation();
-  const t = state.tables[ti];
-  if (!t || t.status !== 'waiting') return;
-  const seat = t.seats[si];
-  const mine = state.you.seat;
-  const x = ev.pageX, y = ev.pageY;
-  if (!seat) {
-    openMenu(x, y, [
-      ['坐这里', () => requireNameThenSit(ti, si)],
-      ['加机器人', () => send({ type: 'addBot', table: ti, seat: si })],
-    ]);
-  } else if (seat.kind === 'bot') {
-    openMenu(x, y, [['移除机器人', () => send({ type: 'removeBot', table: ti, seat: si })]]);
-  } else if (mine && mine.table === ti && mine.seat === si) {
-    openMenu(x, y, [['离开座位', () => send({ type: 'leave' })]]);
-  }
-}
-
 // ---- render --------------------------------------------------------------
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -163,6 +128,7 @@ function render() {
   // ---- the table: a felt surface with four chairs (东南西北) around it ----
   const col = document.createElement('div'); col.className = 'table-col';
   const tbl = document.createElement('div'); tbl.className = 'mj-table' + (t.status === 'playing' ? ' playing' : '') + (atTable ? ' mine' : '');
+  const waiting = t.status === 'waiting';
   const felt = document.createElement('div'); felt.className = 'felt';
   felt.innerHTML = `<span class="felt-mark">🀄</span><span class="felt-status">${t.status === 'playing' ? '游戏中' : '等待开局'}</span>`;
   tbl.appendChild(felt);
@@ -174,7 +140,18 @@ function render() {
     const who = !seat ? '空位' : seat.kind === 'bot' ? '🤖 机器人' : seat.name;
     chair.innerHTML = `<span class="seat-pad"><span class="wind">${WINDS[si]}</span><span class="who">${esc(who)}</span>` +
       (seat && seat.kind === 'human' ? `<span class="ready ${seat.ready ? 'yes' : 'no'}">${seat.ready ? '✓ 已准备' : '未准备'}</span>` : '') + `</span>`;
-    chair.onclick = (ev) => onChairClick(ev, activeTable, si);
+    // Clicking an empty seat sits you there directly (no menu); occupied seats aren't clickable.
+    if (waiting && !seat) chair.onclick = (ev) => { ev.stopPropagation(); requireNameThenSit(activeTable, si); };
+    // Per-seat bot toggle: a 🤖 button beside an empty seat adds a bot; a 🤖 with a 🚫 over it removes
+    // the bot sitting there. Only while the table is still filling up.
+    if (waiting && (!seat || seat.kind === 'bot')) {
+      const botBtn = document.createElement('button');
+      botBtn.className = 'seat-bot' + (seat ? ' remove' : '');
+      botBtn.title = seat ? '移除机器人' : '添加机器人';
+      botBtn.innerHTML = `<span class="bot-icon">🤖</span>` + (seat ? `<span class="bot-ban">🚫</span>` : '');
+      botBtn.onclick = (ev) => { ev.stopPropagation(); send({ type: seat ? 'removeBot' : 'addBot', table: activeTable, seat: si }); };
+      chair.appendChild(botBtn);
+    }
     // Spectate: when the table is mid-game and I'm not in it, an eye on each human seat jumps into a
     // read-only view of that player (same UI as them, but no actions).
     if (t.status === 'playing' && !atTable && seat && seat.kind === 'human') {
@@ -185,6 +162,15 @@ function render() {
     }
     tbl.appendChild(chair);
   });
+  // Readiness check: once you're seated and the table is still filling, a big toggle floats on the
+  // felt (centred, 60% down) so you can mark yourself ready without leaving the table view.
+  if (atTable && waiting) {
+    const ready = document.createElement('button');
+    ready.className = 'table-ready btn ready' + (state.you.ready ? ' on' : '');
+    ready.textContent = state.you.ready ? '✓ 已准备' : '点击准备';
+    ready.onclick = (ev) => { ev.stopPropagation(); send({ type: 'ready', ready: !state.you.ready }); };
+    tbl.appendChild(ready);
+  }
   col.appendChild(tbl);
 
   if (atTable && t.status === 'playing') {
@@ -199,14 +185,11 @@ function render() {
     hint.textContent = '你正在这局牌中 — 点击返回继续';
     col.appendChild(hint);
   } else if (atTable && t.status === 'waiting') {
+    // Ready toggle now lives on the felt; here we only keep the way out.
     const actions = document.createElement('div'); actions.className = 'table-actions';
     const leave = document.createElement('button'); leave.className = 'btn leave'; leave.textContent = '离开桌子';
     leave.onclick = () => send({ type: 'leave' });
-    const ready = document.createElement('button');
-    ready.className = 'btn ready' + (state.you.ready ? ' on' : '');
-    ready.textContent = state.you.ready ? '取消准备' : '我准备好了';
-    ready.onclick = () => send({ type: 'ready', ready: !state.you.ready });
-    actions.append(leave, ready);
+    actions.appendChild(leave);
     col.appendChild(actions);
   } else {
     const hint = document.createElement('div'); hint.className = 'table-hint';

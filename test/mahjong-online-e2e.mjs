@@ -28,9 +28,11 @@ const browserB = await launchBrowser();
 const url = `http://localhost:${SITE_PORT}/games/mahjong-tianjin-online/?server=ws://localhost:${LOBBY_PORT}`;
 const vis = (p, id) => p.evaluate((i) => { const e = document.getElementById(i); return e && !e.classList.contains('hidden'); }, id);
 const seatText = (p, t, s) => p.$eval(`.chair[data-table="${t}"][data-seat="${s}"] .who`, (e) => e.textContent);
-const clickMenu = async (p, label) => p.evaluate((l) => {
-  const b = [...document.querySelectorAll('#seat-menu button')].find((x) => x.textContent.includes(l)); if (b) b.click();
-}, label);
+// Seat interactions: clicking an empty chair sits directly; a 🤖 button on the chair adds a bot,
+// and the same button (with a 🚫, .remove) takes it away.
+const sit = (p, t, s) => p.click(`.chair[data-table="${t}"][data-seat="${s}"]`);
+const addBot = (p, t, s) => p.click(`.chair[data-table="${t}"][data-seat="${s}"] .seat-bot`);
+const removeBot = (p, t, s) => p.click(`.chair[data-table="${t}"][data-seat="${s}"] .seat-bot.remove`);
 
 try {
   const A = await browserA.newPage();
@@ -46,8 +48,7 @@ try {
   console.log('both clients connected (WebSocket)');
 
   // A sits at table 0 / 东 via the name dialog (first sit)
-  await A.click('.chair[data-table="0"][data-seat="0"]');
-  await clickMenu(A, '坐这里');
+  await sit(A, 0, 0);
   await A.waitForFunction(() => !document.getElementById('name-overlay').classList.contains('hidden'));
   // name rules: only 中文/英文, capped at 6 中文 / 12 英文. A too-long, mixed-junk name is cleaned live.
   await A.type('#name-dialog-input', '测试玩家一二三四 abc123!@#'); // 8 中文 + junk
@@ -77,11 +78,9 @@ try {
   console.log('B sees A seated (cross-client push)');
 
   // add/remove bot (the single table, while waiting): B adds a bot to seat 2 then removes it.
-  await B.click('.chair[data-table="0"][data-seat="2"]');
-  await clickMenu(B, '加机器人');
+  await addBot(B, 0, 2);
   await B.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="2"]').classList.contains('bot'), { timeout: 4000 });
-  await B.click('.chair[data-table="0"][data-seat="2"]');
-  await clickMenu(B, '移除机器人');
+  await removeBot(B, 0, 2);
   await B.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="2"]').classList.contains('empty'), { timeout: 4000 });
   console.log('add/remove bot OK');
 
@@ -94,7 +93,7 @@ try {
 
   // Then fill with bots. The table completes on the LAST bot, which must re-trigger the
   // start check (regression: addBot used to skip it). → A is handed off to the game page.
-  for (const s of [1, 2, 3]) { await A.click(`.chair[data-table="0"][data-seat="${s}"]`); await clickMenu(A, '加机器人'); await new Promise((r) => setTimeout(r, 150)); }
+  for (const s of [1, 2, 3]) { await addBot(A, 0, s); await new Promise((r) => setTimeout(r, 150)); }
   await A.waitForFunction(() => location.pathname.includes('/mahjong-tianjin/'), { timeout: 8000 }); // navigated to the game
   await B.waitForFunction(() => document.querySelector('.mj-table.playing'), { timeout: 4000 });
   console.log('all ready → A entered the game; table marked 游戏中');

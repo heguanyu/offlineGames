@@ -17,7 +17,9 @@ const waitListen = (s) => new Promise((res) => { s.stdout.on('data', (d) => { if
 let srv = spawnServer(); await waitListen(srv);
 const site = await startServer(SITE);
 const browser = await launchBrowser();
-const clickMenu = (p, label) => p.evaluate((l) => { const b = [...document.querySelectorAll('#seat-menu button')].find((x) => x.textContent.includes(l)); if (b) b.click(); }, label);
+// Seat interactions: click an empty chair to sit; a 🤖 button on the chair adds a bot.
+const sit = (p, t, s) => p.click(`.chair[data-table="${t}"][data-seat="${s}"]`);
+const addBot = (p, t, s) => p.click(`.chair[data-table="${t}"][data-seat="${s}"] .seat-bot`);
 
 try {
   const page = await browser.newPage();
@@ -26,9 +28,9 @@ try {
   await page.goto(`http://localhost:${SITE}/games/mahjong-tianjin-online/?server=ws://localhost:${PORT}&fast=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.getElementById('conn')?.className.includes('on'), { timeout: 6000 });
   await page.waitForSelector('.chair[data-table="0"][data-seat="0"]');
-  await page.click('.chair[data-table="0"][data-seat="0"]'); await clickMenu(page, '坐这里');
+  await sit(page, 0, 0);
   await page.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="0"]').classList.contains('me'), { timeout: 4000 });
-  for (const s of [1, 2, 3]) { await page.click(`.chair[data-table="0"][data-seat="${s}"]`); await clickMenu(page, '加机器人'); await new Promise((r) => setTimeout(r, 120)); }
+  for (const s of [1, 2, 3]) { await addBot(page, 0, s); await new Promise((r) => setTimeout(r, 120)); }
   await page.evaluate(() => [...document.querySelectorAll('.btn.ready')].find((b) => b.textContent.includes('准备')).click());
   await page.waitForFunction(() => location.pathname.includes('/mahjong-tianjin/'), { timeout: 8000 });
   await page.waitForFunction(() => window.__mj && window.__mj.game && window.__mj.game(), { timeout: 12000 });

@@ -21,7 +21,7 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .table-hint { margin-top: 14px; font-size: 0.82rem; color: #9fd3bf; }
 
 /* an authentic table: green felt with a wooden rim, four wooden chairs around it */
-.mj-table { display: grid; grid-template-columns: 92px 1fr 92px; grid-template-rows: 76px 1fr 76px;
+.mj-table { position: relative; display: grid; grid-template-columns: 92px 1fr 92px; grid-template-rows: 76px 1fr 76px;
   gap: 13px; width: min(84vw, 420px); aspect-ratio: 1; }
 .mj-table.mine { filter: drop-shadow(0 0 14px rgba(232,196,102,0.3)); }
 .mj-table.playing { opacity: 0.75; }
@@ -33,7 +33,7 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .felt-mark { font-size: 2.6rem; color: rgba(255,255,255,0.16); line-height: 1; }
 .felt-status { font-size: 0.72rem; color: rgba(232,196,102,0.75); font-weight: 700; }
 
-.chair { position: relative; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.chair { position: relative; display: flex; align-items: center; justify-content: center; }
 .chair.east  { grid-column: 2; grid-row: 3; }
 .chair.south { grid-column: 3; grid-row: 2; }
 .chair.west  { grid-column: 2; grid-row: 1; }
@@ -47,7 +47,9 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .chair.west::after  { left: 16%; right: 16%; top: -10px; height: 12px; }
 .chair.north::after { top: 16%; bottom: 16%; left: -10px; width: 12px; }
 .chair.south::after { top: 16%; bottom: 16%; right: -10px; width: 12px; }
-.chair:not(.playing):hover .seat-pad { box-shadow: 0 0 0 2px var(--gold), 0 3px 6px rgba(0,0,0,0.45); }
+/* only empty seats are clickable (click to sit) — show the affordance there */
+.chair.empty:not(.playing) { cursor: pointer; }
+.chair.empty:not(.playing):hover .seat-pad { box-shadow: 0 0 0 2px var(--gold), 0 3px 6px rgba(0,0,0,0.45); }
 .chair.me .seat-pad { box-shadow: 0 0 0 2px var(--gold), 0 0 12px rgba(232,196,102,0.5); }
 .chair .wind { color: #ffe6a6; font-weight: 800; font-size: 0.95rem; }
 .chair .who { font-weight: 700; max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -59,6 +61,21 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
   font-size: 0.8rem; line-height: 1; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
 .watch-eye:hover { background: #1b5e45; box-shadow: 0 0 0 2px var(--gold); }
 .chair .ready.yes { color: #9af7a6; } .chair .ready.no { color: #ffd27a; }
+
+/* per-seat bot button — 🤖 to add a bot to an empty seat, 🤖 with a 🚫 over it to remove one */
+.seat-bot { position: absolute; top: -10px; right: -10px; z-index: 5; width: 30px; height: 30px; padding: 0;
+  border-radius: 50%; border: 1px solid var(--gold); background: rgba(4,18,12,0.92); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+.seat-bot:hover { background: #1b5e45; box-shadow: 0 0 0 2px var(--gold); }
+.seat-bot .bot-icon { font-size: 0.95rem; line-height: 1; }
+.seat-bot .bot-ban { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 1.15rem; line-height: 1; pointer-events: none; }
+.seat-bot.remove { border-color: #ef9a9a; }
+
+/* readiness toggle floating on the felt (centred, 60% down) while you're seated and waiting */
+.table-ready { position: absolute; left: 50%; top: 60%; transform: translate(-50%, -50%); z-index: 6;
+  white-space: nowrap; box-shadow: 0 3px 0 #b8902f, 0 4px 14px rgba(0,0,0,0.5); }
+.table-ready.on { box-shadow: 0 3px 0 #2c7a3e, 0 4px 14px rgba(0,0,0,0.5); }
 
 /* lifetime leaderboard (server-kept, keyed by uid) */
 #leaderboard { background: rgba(4,18,12,0.55); border: 1px solid #1c5a44; border-radius: 16px; padding: 14px 16px; min-width: 232px; max-width: 300px; }
@@ -80,11 +97,6 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .btn.ready { background: linear-gradient(#f3d785,#e3b94f); color: #3a2a00; box-shadow: 0 3px 0 #b8902f; }
 .btn.ready.on { background: linear-gradient(#7ddf8a,#46b85c); color: #06250f; box-shadow: 0 3px 0 #2c7a3e; }
 
-#seat-menu { position: absolute; z-index: 30; background: #114030; border: 1px solid var(--gold); border-radius: 10px;
-  padding: 6px; display: flex; flex-direction: column; gap: 5px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
-#seat-menu button { font-size: 0.88rem; font-weight: 700; padding: 9px 16px; border-radius: 8px; border: none; cursor: pointer;
-  background: #1b5e45; color: #eaf6f0; white-space: nowrap; text-align: left; }
-#seat-menu button:hover { background: #2c8160; }
 .hidden { display: none !important; }
 
 .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(3,16,11,0.82); backdrop-filter: blur(3px);
