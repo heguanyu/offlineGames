@@ -22,7 +22,7 @@ function startServer() {
 }
 const firstDiscardable = (v) => v.hands[0].find((t) => t >= 0 && !(v.wilds || []).includes(t));
 
-let srv, ws, phase = 1, setup = false, deals = 0, savedPot = null;
+let srv, ws, phase = 1, setup = false, deals = 0, armed = false, savedPot = null, savedHand = null;
 const done = (c, m) => { console.log(m); try { ws && ws.terminate(); } catch {} try { srv && srv.kill(); } catch {} cleanDb(); process.exit(c); };
 const fail = (m) => done(1, 'PERSIST TEST FAIL: ' + m);
 const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
@@ -37,18 +37,23 @@ function onMsg(m) {
   }
   if (m.type !== 'game') return;
   const { ev, view } = m;
+  // phase 2: the FIRST frame after reconnect proves the 锅 resumed — whether the restart landed
+  // mid-hand (a 'sync'/'await' resync, the live hand restored) or in the pre-hand 拉庄 window (a
+  // fresh re-deal). Either way the standings must match what we saved.
+  if (phase === 2) { if (ev.t === 'deal') act({ do: 'dealDone' }); return checkResume(view); }
   if (ev.t === 'lazhuang') { act({ do: 'lazhuang', yes: false }); return; }
   if (ev.t === 'deal') {
     deals++;
     act({ do: 'dealDone' }); // ack the deal (as a real client does) so the server drives the bots without the 8s fallback
-    if (phase === 2) return checkResume(view);
-    if (deals >= 4) { // hands 1-3 are committed by now → snapshot the standings, then kill mid-hand-4
-      savedPot = { scores: view.scores.slice(), prevailingWind: view.prevailingWind, dealer: view.dealer };
-      return restart();
-    }
+    if (deals >= 4) { armed = true; savedPot = { scores: view.scores.slice(), prevailingWind: view.prevailingWind, dealer: view.dealer }; } // hands 1-3 committed; arm the kill
     return;
   }
-  if (ev.t === 'await' && ev.seat === 0) return onTurn(view);
+  if (ev.t === 'await' && ev.seat === 0) {
+    // armed → kill the server WHILE it's our turn, mid-hand (live state saved at this decision
+    // point). Capture our exact hand so the resume can be proven to RESTORE it (not re-deal).
+    if (armed) { savedHand = view.hands[0].slice(); return restart(); }
+    return onTurn(view);
+  }
   if (ev.t === 'handEnd') { act({ do: 'next' }); return; }
   if (ev.t === 'potOver') { if (phase === 1) fail('锅 finished before the restart (unlucky) — re-run'); return; }
 }
@@ -71,7 +76,9 @@ function checkResume(v) {
   if (v.dealer !== savedPot.dealer) return fail(`resumed 庄 ${v.dealer} ≠ saved ${savedPot.dealer}`);
   const k = v.seatKinds || [];
   if (!(k[0] === 'human' && k[1] === 'bot' && k[3] === 'bot')) return fail('seats not restored: ' + JSON.stringify(k));
-  done(0, `RESUMED the same 锅 after restart (from the DB) — scores=${JSON.stringify(v.scores)}, 圈=${v.prevailingWind}, 庄=${v.dealer}, seats restored\nMAHJONG ONLINE PERSIST TEST PASS`);
+  // the IN-PROGRESS hand itself must come back (Option B) — not a fresh re-deal of hand 4.
+  if (savedHand && !eq(v.hands[0], savedHand)) return fail(`live hand NOT restored: resumed ${JSON.stringify(v.hands[0])} ≠ saved ${JSON.stringify(savedHand)}`);
+  done(0, `RESUMED the same 锅 + mid-hand after restart — scores=${JSON.stringify(v.scores)}, 圈=${v.prevailingWind}, 庄=${v.dealer}, hand restored (${(v.hands[0] || []).length} tiles), seats restored\nMAHJONG ONLINE PERSIST TEST PASS`);
 }
 
 function openClient() {

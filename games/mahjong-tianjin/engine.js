@@ -446,6 +446,49 @@ export class Game {
   // How many tiles are concealed for a player (excludes called melds).
   concealedCount(player) { return this.hands[player].length; }
 
+  // ---- online resume across a server restart -------------------------------------------
+  // Serialize the entire in-progress hand to a plain JSON object so the online server can
+  // restore it after a restart/redeploy and play on. No rng (a restored hand only pops from the
+  // saved wall) and no transient decision flags (selfDrawWin/claim) — restore() recomputes those.
+  serialize() {
+    const cloneMelds = (ms) => ms.map((m) => ({ ...m, tiles: m.tiles.slice() }));
+    return {
+      dealer: this.dealer, prevailingWind: this.prevailingWind, scores: this.scores.slice(),
+      dealerDouble: this.dealerDouble, laZhuang: this.laZhuang.slice(), seatBase: this.seatBase,
+      hands: this.hands.map((h) => h.slice()), melds: this.melds.map(cloneMelds),
+      discards: this.discards.map((d) => d.slice()), discardLog: this.discardLog.map((e) => ({ ...e })),
+      wall: this.wall.slice(), indicator: this.indicator, wilds: this.wilds.slice(),
+      turn: this.turn, phase: this.phase, drawnTile: this.drawnTile,
+      afterKong: !!this.afterKong, firstGoAround: !!this.firstGoAround, lastTileDraw: !!this.lastTileDraw,
+      lastDiscard: this.lastDiscard ? { ...this.lastDiscard } : null,
+      result: this.result ? { ...this.result,
+        decomp: this.result.decomp ? this.result.decomp.map((d) => ({ ...d, natural: d.natural ? [...d.natural] : [] })) : null } : null,
+    };
+  }
+
+  // Rebuild a Game from serialize() output, recomputing the transient decision state the play
+  // loop reads: wildSet/wildSuit, the pending self-draw 胡 (only after a fresh draw), and any
+  // claimable discard. Deterministic from the saved tiles, so it reproduces the exact moment.
+  static restore(s) {
+    const g = Object.create(Game.prototype);
+    g.rng = Math.random; g.log = [];
+    g.dealer = s.dealer; g.prevailingWind = s.prevailingWind; g.scores = s.scores.slice();
+    g.dealerDouble = s.dealerDouble ?? true; g.laZhuang = (s.laZhuang || []).slice(); g.seatBase = s.seatBase;
+    g.hands = s.hands.map((h) => h.slice());
+    g.melds = s.melds.map((ms) => ms.map((m) => ({ ...m, tiles: m.tiles.slice() })));
+    g.discards = s.discards.map((d) => d.slice());
+    g.discardLog = s.discardLog.map((e) => ({ ...e }));
+    g.wall = s.wall.slice(); g.indicator = s.indicator; g.wilds = s.wilds.slice();
+    g.wildSet = new Set(g.wilds); g.wildSuit = isNumberSuit(g.wilds[0]) ? suitOf(g.wilds[0]) : null;
+    g.turn = s.turn; g.phase = s.phase; g.drawnTile = s.drawnTile;
+    g.afterKong = !!s.afterKong; g.firstGoAround = !!s.firstGoAround; g.lastTileDraw = !!s.lastTileDraw;
+    g.lastDiscard = s.lastDiscard ? { ...s.lastDiscard } : null;
+    g.result = s.result || null;
+    g.selfDrawWin = (g.phase === PHASE.AWAIT_DISCARD && g.drawnTile != null) ? (g._checkSelfDraw(g.turn) || null) : null;
+    g.claim = (g.phase === PHASE.AWAIT_CLAIM && g.lastDiscard) ? g._findClaim(g.lastDiscard.player, g.lastDiscard.kind) : null;
+    return g;
+  }
+
   // Draw a tile for `player`. `fromKong` marks a kong-replacement draw.
   _draw(player, fromKong) {
     if (this.wall.length === 0) { this._drawGame(); return; }

@@ -52,6 +52,12 @@ export class Table {
     // the last CONSISTENT between-hands snapshot (what persist() saves). Updated only after a hand
     // commits, so a crash mid-hand resumes from the prior completed hand — never a half-applied 圈.
     this._committed = { scores: this.scores.slice(), dealer: this.dealer, prevailingWind: this.prevailingWind, seatBase: this.seatBase, rounds: this.rounds.slice() };
+    // A live hand serialized by a previous run — restore it so play CONTINUES mid-hand after a
+    // restart/redeploy instead of re-dealing (and losing the hand). Falls back to a fresh deal if
+    // it can't be rebuilt. Restored in the constructor (synchronously) so this.game exists by the
+    // time index.js calls resync() on the reconnecting seat.
+    this._resumeLive = null;
+    if (resume && resume.live) { try { this._resumeLive = Game.restore(resume.live); } catch { this._resumeLive = null; } }
     this.game = null;
     this._gen = 0;
     this._waiting = null;   // { seat, kind, finish } — a single human move in flight
@@ -70,12 +76,22 @@ export class Table {
   // modal show "结束并查看总成绩" (no ready-toggle) on the final hand.
   _potEnd() { const g = this.game; return !!(g && g.phase === PHASE.OVER && g.nextDealer() === 0 && this.dealer !== 0 && this.prevailingWind === 3); }
 
-  // The 锅 standings to resume from after a restart (the in-progress hand is intentionally dropped;
-  // the next deal starts from this dealer/round/scores). Returns the last COMMITTED snapshot.
+  // What to persist so a restart resumes the 锅: the last COMMITTED between-hands standings PLUS,
+  // when a hand is actually in play, the serialized live hand (so the restart resumes mid-hand, not
+  // just between hands). The pre-hand 拉庄 window (_lzPending/_lz set) is skipped — nothing's been
+  // played there, so a fresh deal on resume loses nothing.
   snapshot() {
     const c = this._committed;
-    return { scores: c.scores.slice(), dealer: c.dealer, prevailingWind: c.prevailingWind, seatBase: c.seatBase, rounds: c.rounds.slice() };
+    const snap = { scores: c.scores.slice(), dealer: c.dealer, prevailingWind: c.prevailingWind, seatBase: c.seatBase, rounds: c.rounds.slice() };
+    const g = this.game;
+    if (g && !this._lzPending && !this._lz) snap.live = g.serialize();
+    return snap;
   }
+
+  // Persist the current state (between-hands standings + the live hand, via snapshot()). onState is
+  // index.js's persist(); a no-op offline / in tests that don't wire it. Called at every decision
+  // point during a hand AND between hands, so a restart never loses more than the move in flight.
+  _save() { if (this.onState) this.onState(); }
 
   // ---- redacted per-seat view ----------------------------------------------
   viewFor(seat) {
@@ -146,20 +162,33 @@ export class Table {
   // ---- the match loop (one 锅 = four 圈) ------------------------------------
   async _run() {
     const gen = ++this._gen;
+    let resumed = this._resumeLive; this._resumeLive = null; // a hand restored from a previous run
     for (;;) {
       if (gen !== this._gen) return;
-      // Deal FIRST so every client's table refreshes to the new hand; 拉庄 is asked AFTER (still
-      // blind — each challenger's own hand is redacted by viewFor while it sits in _lzPending).
-      this._lzPending = new Set(this.humans().filter((s) => s !== this.dealer));
-      this.game = new Game({ dealer: this.dealer, prevailingWind: this.prevailingWind, scores: this.scores, seatBase: this.seatBase, laZhuang: [] });
-      this.pushEvent({ t: 'deal' });
-      await this._awaitDealDone(gen);        // hold until every client's deal animation finishes
-      if (gen !== this._gen) return;
-      this.game.laZhuang = await this._collectLaZhuang(gen); // blind 拉庄 over the dealt-but-hidden hands
-      if (gen !== this._gen) return;
-      this._lzPending = null;                // everyone answered → hands reveal, play begins
-      await this._playHand(gen);
-      if (gen !== this._gen) return;
+      if (resumed) {
+        // Pick the restored hand up in place — skip the deal + 拉庄. Clients re-render it through
+        // their normal reconnect sync (index.js → resync), so nothing special is pushed; _playHand
+        // resumes from the saved phase/turn. An already-finished hand just re-shows its result.
+        this.game = resumed; resumed = null;
+      } else {
+        // Deal FIRST so every client's table refreshes to the new hand; 拉庄 is asked AFTER (still
+        // blind — each challenger's own hand is redacted by viewFor while it sits in _lzPending).
+        this._lzPending = new Set(this.humans().filter((s) => s !== this.dealer));
+        this.game = new Game({ dealer: this.dealer, prevailingWind: this.prevailingWind, scores: this.scores, seatBase: this.seatBase, laZhuang: [] });
+        this.pushEvent({ t: 'deal' });
+        await this._awaitDealDone(gen);        // hold until every client's deal animation finishes
+        if (gen !== this._gen) return;
+        this.game.laZhuang = await this._collectLaZhuang(gen); // blind 拉庄 over the dealt-but-hidden hands
+        if (gen !== this._gen) return;
+        this._lzPending = null;                // everyone answered → hands reveal, play begins
+      }
+      if (this.game.phase !== PHASE.OVER) {
+        await this._playHand(gen);
+        if (gen !== this._gen) return;
+      } else {
+        // resumed an already-finished hand → re-show the result, then wait for 下一局 as usual
+        this.pushEvent({ t: 'over', result: safeResult(this.game.result), winningTile: this.game.drawnTile, potEnd: this._potEnd() });
+      }
       this.scores = this.game.scores.slice();
       await this._awaitNext(gen);            // wait for 下一局 from every human (or time out)
       if (gen !== this._gen) return;
@@ -182,6 +211,7 @@ export class Table {
     const g = this.game;
     for (;;) {
       if (gen !== this._gen) return;
+      this._save(); // persist this decision point so a restart resumes exactly here (incl. the OVER showdown)
       if (g.phase === PHASE.OVER) { this.pushEvent({ t: 'over', result: safeResult(g.result), winningTile: g.drawnTile, potEnd: this._potEnd() }); return; }
 
       if (g.phase === PHASE.AWAIT_CLAIM) {
