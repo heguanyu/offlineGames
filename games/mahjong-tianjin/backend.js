@@ -42,11 +42,12 @@ export const HUMAN = 0;
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Whether bot `seat` 拉庄s against `dealer`. This is a SERVER-SIDE decision (the bots live
-// behind the backend), so it belongs here, not in the UI. Each bot takes a blind 50% gamble —
-// the same odds the online server uses (server/table.js). `rng` (defaulting to Math.random)
-// keeps a seeded backend deterministic.
-export function shouldBotLaZhuang(seat, dealer, rng = Math.random) { return rng() < 0.5; }
+// Whether bot `seat` 拉庄s against `dealer`. This is a SERVER-SIDE decision (the bots live behind
+// the backend), so it belongs here, not in the UI. Base gamble is 25%; but if the 庄 plays right
+// after this bot (its 下家 is the 庄 — e.g. bot 南, 庄 西), the bot feeds the 庄 directly, so it's
+// more cautious at 10%. `rng` (defaulting to Math.random) keeps a seeded backend deterministic.
+export function botLaZhuangChance(seat, dealer) { return dealer === (seat + 1) % 4 ? 0.10 : 0.25; }
+export function shouldBotLaZhuang(seat, dealer, rng = Math.random) { return rng() < botLaZhuangChance(seat, dealer); }
 
 // Pick a backend implementation. `config.mode`: 'local' (default) | 'remote'.
 export function createBackend(config = {}) {
