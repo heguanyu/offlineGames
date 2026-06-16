@@ -974,6 +974,11 @@ function showFinalBoard(data) {
 function onAction(name) {
   if (!gameStarted) return;
   sound.resume(); // a key/pad press is a user gesture — unlock audio
+  if (!$('leave-confirm-overlay').classList.contains('hidden')) {
+    if (name === 'confirm') returnHub();                                                  // 确定返回 → lobby
+    else if (name === 'cancel' || name === 'menu') $('leave-confirm-overlay').classList.add('hidden'); // 继续游戏
+    return;
+  }
   if (!$('menu-overlay').classList.contains('hidden') ||
       !$('rules-overlay').classList.contains('hidden') ||
       !$('start-overlay').classList.contains('hidden')) {
@@ -1002,7 +1007,7 @@ function onAction(name) {
   if (!$('result-overlay').classList.contains('hidden')) {
     if (name === 'left') { resultFocus = 1; focusResultBtn(); }      // 返回 (top-left)
     else if (name === 'right') { resultFocus = 0; focusResultBtn(); } // 下一局 (top-right)
-    else if (name === 'confirm') (resultFocus === 0 ? nextHand() : returnHub());
+    else if (name === 'confirm') (resultFocus === 0 ? nextHand() : leaveToLobby());
     else if (name === 'menu') nextHand();
     return;
   }
@@ -1106,6 +1111,7 @@ function bindUI() {
     startHand();
   });
   $('rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
+  $('start-hub-link').addEventListener('click', () => { location.href = '../../'; }); // difficulty screen → main hub
   $('menu-rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
   $('rules-close').addEventListener('click', () => $('rules-overlay').classList.add('hidden'));
   $('menu-btn').addEventListener('click', openMenu);
@@ -1121,7 +1127,9 @@ function bindUI() {
   $('resume-btn').addEventListener('click', closeOverlays);
   $('newgame-btn').addEventListener('click', () => { closeOverlays(); newGame(); });
   $('next-hand-btn').addEventListener('click', nextHand);
-  $('back-hub-btn').addEventListener('click', returnHub);
+  $('back-hub-btn').addEventListener('click', leaveToLobby);
+  $('leave-confirm-yes').addEventListener('click', returnHub);
+  $('leave-confirm-no').addEventListener('click', () => $('leave-confirm-overlay').classList.add('hidden'));
   $('rounds-btn').addEventListener('click', openRounds);
   $('rounds-close').addEventListener('click', () => $('rounds-overlay').classList.add('hidden'));
   $('lazhuang-yes').addEventListener('click', () => { sound.resume(); resolveLz(true); });
@@ -1135,8 +1143,19 @@ function bindUI() {
     localStorage.removeItem('mahjong-history'); histClearArm = false; $('history-clear').textContent = '清空历史';
     $('history-body').innerHTML = historyTableHtml();
   });
-  $('menu-hub-btn').addEventListener('click', returnHub);
+  $('menu-hub-btn').addEventListener('click', leaveToLobby);
+  // Online: no 重开 (the server owns the match) and no local 历史战绩 (scores live on the lobby
+  // leaderboard). Hidden rather than removed so the offline build is untouched.
+  if (ONLINE) { $('newgame-btn').style.display = 'none'; $('menu-history-btn').style.display = 'none'; }
   fillRules();
+}
+
+// User-initiated "返回大厅". Leaving a live online game (as a seated player) keeps your seat —
+// the server auto-plays it (random discards) until the hand ends — so confirm first. Spectators,
+// offline play, and the 锅-over final board leave straight away (no auto-play at stake).
+function leaveToLobby() {
+  if (ONLINE && game && !VIEWER) { $('menu-overlay').classList.add('hidden'); $('leave-confirm-overlay').classList.remove('hidden'); return; }
+  returnHub();
 }
 
 // Leave the game: offline → the main hub; online → back to the lobby.

@@ -598,6 +598,7 @@ function bindUI() {
   });
   [...$('level-row').children].forEach((c) => c.classList.toggle('sel', parseInt(c.dataset.level, 10) === level));
   $('start-btn').addEventListener('click', () => { $('start-overlay').classList.add('hidden'); gameStarted = true; sound.resume(); startHand(); });
+  $('start-hub-link').addEventListener('click', returnHub); // difficulty screen → main hub (../../)
   $('rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
   $('menu-rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
   $('rules-close').addEventListener('click', () => $('rules-overlay').classList.add('hidden'));
