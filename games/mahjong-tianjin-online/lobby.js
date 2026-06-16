@@ -21,9 +21,11 @@ const SERVER_URL = new URLSearchParams(location.search).get('server') || default
 
 const WINDS = ['东', '南', '西', '北'];          // seat index → wind label
 const POS = ['east', 'south', 'west', 'north'];  // seat index → chair CSS position
-const GAME_PAGE = { tianjin: '../mahjong-tianjin/', guobiao: '../guobiao/' }; // gameType → game page
-const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将' };
+const GAME_PAGE = { tianjin: '../mahjong-tianjin/', guobiao: '../guobiao/', 'guobiao-free': '../guobiao-free/' }; // gameType → game page
+const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将', 'guobiao-free': '国标无定番' };
+const INITIAL_TAB = new URLSearchParams(location.search).get('tab'); // hub deep-links here (?tab=guobiao-free)
 let activeTable = 0; // which game tab is shown (forced to your seat's table when you're seated)
+let tabApplied = false; // INITIAL_TAB is applied once, then the player can switch freely
 
 let ws = null;
 let state = { tables: [], you: { name: '', seat: null, ready: false } };
@@ -168,6 +170,11 @@ function render() {
   root.innerHTML = '';
   const mine = state.you.seat;
   if (mine) activeTable = mine.table;                       // seated → always show your game
+  else if (!tabApplied && INITIAL_TAB && state.tables.length) { // first populated render: honor the hub's ?tab= deep-link
+    const i = state.tables.findIndex((t) => t.game === INITIAL_TAB);
+    if (i >= 0) activeTable = i;
+    tabApplied = true;
+  }
   if (activeTable >= state.tables.length) activeTable = 0;
   renderTabs();
   const t = state.tables[activeTable];

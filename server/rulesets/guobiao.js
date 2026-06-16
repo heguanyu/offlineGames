@@ -2,7 +2,7 @@
 // server/rulesets/tianjin.js. Differences from 天津: a priority claim QUEUE (胡 > 碰/杠 > 吃)
 // with 吃 (chow) and wins off a discard (点炮); no 拉庄 (no pre-hand decision); no 混儿. The
 // generic Table drives the same deal / 下一局 / 锅-圈 loop around these hooks.
-import { Game, PHASE } from '../../games/guobiao/engine.js';
+import { Game, PHASE, MIN_FAN } from '../../games/guobiao/engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong } from '../../games/guobiao/ai.js';
 
 // 国标 results are already plain JSON (no Sets) — copy the fields the client renders.
@@ -15,10 +15,11 @@ function safeResult(r) {
 export const ruleset = {
   id: 'guobiao',
   PHASE,
+  minFan: MIN_FAN, // 8 for standard MCR; the 无定番 variant (freeRuleset below) overrides to 0
 
   // `prevailingWind` is the Table's generic round-wind counter → the 国标 engine's roundWind.
-  newGame({ dealer, prevailingWind, scores, minFan }) {
-    return new Game({ dealer, roundWind: prevailingWind, scores, minFan });
+  newGame({ dealer, prevailingWind, scores }) {
+    return new Game({ dealer, roundWind: prevailingWind, scores, minFan: this.minFan });
   },
   restore(s) { return Game.restore(s); },
   serialize(g) { return g.serialize(); },
@@ -83,3 +84,7 @@ export const ruleset = {
     };
   },
 };
+
+// 无定番 (no-minimum) MCR — identical rules, but any fan count (incl. 0) may win. Same methods; only
+// minFan differs (newGame reads this.minFan). The 国标 engine charges just the actual fan with no floor.
+export const freeRuleset = { ...ruleset, id: 'guobiao-free', minFan: 0 };

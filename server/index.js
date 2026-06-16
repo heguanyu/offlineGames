@@ -21,16 +21,16 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Table } from './table.js';
 import { ruleset as tianjin } from './rulesets/tianjin.js';
-import { ruleset as guobiao } from './rulesets/guobiao.js';
+import { ruleset as guobiao, freeRuleset as guobiaoFree } from './rulesets/guobiao.js';
 import db from './db.js';
 
 // The game each table hosts. Same lobby + Table + protocol for every entry; the ruleset is the only
 // difference (server/rulesets/*.js). One table per game type — the lobby's game tabs pick which.
 // TABLE_GAMES overrides the lineup; GAME_TYPE keeps the legacy single-type form (used by tests).
-const RULESETS = { tianjin, guobiao };
+const RULESETS = { tianjin, guobiao, 'guobiao-free': guobiaoFree };
 const TABLE_GAMES = (process.env.TABLE_GAMES ? process.env.TABLE_GAMES.split(',')
   : process.env.GAME_TYPE ? [process.env.GAME_TYPE]
-  : ['tianjin', 'guobiao']).map((g) => g.trim()).filter((g) => RULESETS[g]);
+  : ['tianjin', 'guobiao', 'guobiao-free']).map((g) => g.trim()).filter((g) => RULESETS[g]);
 if (!TABLE_GAMES.length) TABLE_GAMES.push('tianjin');
 
 const PORT = process.env.PORT || 8090;
@@ -45,8 +45,8 @@ const STATIC_ROOT = process.env.STATIC_ROOT || fileURLToPath(new URL('..', impor
 
 const TABLES = TABLE_GAMES.length, SEATS = 4;
 const WIND = ['东', '南', '西', '北'];
-const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将' };
-const GAME_PAGE = { tianjin: 'mahjong-tianjin', guobiao: 'guobiao' }; // lobby navigates here
+const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将', 'guobiao-free': '国标无定番' };
+const GAME_PAGE = { tianjin: 'mahjong-tianjin', guobiao: 'guobiao', 'guobiao-free': 'guobiao-free' }; // lobby navigates here
 
 // ---- persistence (lifetime scores + the live 锅 state) ---------------------
 // All durable state lives in the SQLite database (server/db.js): the lifetime leaderboard
