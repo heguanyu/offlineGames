@@ -92,6 +92,25 @@
     </div>
   </div>
 
+  <!-- 一锅结束 · 最终成绩 (online) -->
+  <div class="overlay hidden" id="final-overlay">
+    <div class="panel">
+      <h2 id="final-title">一锅结束 · 最终成绩</h2>
+      <div id="final-congrats"></div>
+      <div id="final-standings"></div>
+      <details id="final-rounds-wrap"><summary>每圈成绩</summary><div id="final-rounds"></div></details>
+      <button class="big-btn hub" id="final-hub-btn">← 返回大厅</button>
+    </div>
+  </div>
+
+  <!-- online: lost the server connection (then auto-returns to the lobby) -->
+  <div class="overlay hidden" id="reconnect-overlay">
+    <div class="panel">
+      <h2>🔌 连接已断开</h2>
+      <p class="sub">正在重新连接服务器… 若服务器正在维护，将返回大厅。</p>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script type="module" src="./main.js"></script>
 </body>

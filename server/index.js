@@ -25,10 +25,13 @@ import { ruleset as guobiao } from './rulesets/guobiao.js';
 import db from './db.js';
 
 // The game each table hosts. Same lobby + Table + protocol for every entry; the ruleset is the only
-// difference (server/rulesets/*.js). GAME_TYPE sets the default for this process (prod = 天津); a
-// per-table gameType (set below) selects the matching ruleset.
+// difference (server/rulesets/*.js). One table per game type — the lobby's game tabs pick which.
+// TABLE_GAMES overrides the lineup; GAME_TYPE keeps the legacy single-type form (used by tests).
 const RULESETS = { tianjin, guobiao };
-const GAME_TYPE = RULESETS[process.env.GAME_TYPE] ? process.env.GAME_TYPE : 'tianjin';
+const TABLE_GAMES = (process.env.TABLE_GAMES ? process.env.TABLE_GAMES.split(',')
+  : process.env.GAME_TYPE ? [process.env.GAME_TYPE]
+  : ['tianjin', 'guobiao']).map((g) => g.trim()).filter((g) => RULESETS[g]);
+if (!TABLE_GAMES.length) TABLE_GAMES.push('tianjin');
 
 const PORT = process.env.PORT || 8090;
 const ALLOWED = (process.env.ALLOWED_ORIGINS ||
@@ -40,8 +43,10 @@ const ALLOWED = (process.env.ALLOWED_ORIGINS ||
 // a local checkout and for the staged Azure package. Override with STATIC_ROOT if needed.
 const STATIC_ROOT = process.env.STATIC_ROOT || fileURLToPath(new URL('..', import.meta.url));
 
-const TABLES = 1, SEATS = 4;
+const TABLES = TABLE_GAMES.length, SEATS = 4;
 const WIND = ['东', '南', '西', '北'];
+const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将' };
+const GAME_PAGE = { tianjin: 'mahjong-tianjin', guobiao: 'guobiao' }; // lobby navigates here
 
 // ---- persistence (lifetime scores + the live 锅 state) ---------------------
 // All durable state lives in the SQLite database (server/db.js): the lifetime leaderboard
@@ -62,7 +67,7 @@ const tables = Array.from({ length: TABLES }, (_, id) => {
     : s.kind === 'bot' ? { kind: 'bot' }
     : (s.kind === 'human' && s.uid) ? { kind: 'human', uid: s.uid, name: s.name || '', ready: false } : null);
   while (seats.length < SEATS) seats.push(null);
-  return { id, status: 'waiting', seats, game: null, resume: (sv && sv.pot) || null, gameType: GAME_TYPE };
+  return { id, status: 'waiting', seats, game: null, resume: (sv && sv.pot) || null, gameType: TABLE_GAMES[id] };
 });
 
 // Write each table's current snapshot (seats + 锅 standings) to the DB. Cheap + synchronous, so it's
@@ -120,7 +125,7 @@ function lobbyFor(uid) {
     you: { name: (uid && [...clients.values()].find((c) => c.uid === uid)?.name) || '', seat: mine,
       ready: mine ? !!tables[mine.table].seats[mine.seat].ready : false },
     tables: tables.map((t) => ({
-      id: t.id, status: t.status,
+      id: t.id, status: t.status, game: t.gameType, gameLabel: GAME_LABEL[t.gameType] || t.gameType,
       seats: t.seats.map((seat) => !seat ? null
         : seat.kind === 'bot' ? { kind: 'bot' }
         : { kind: 'human', name: seat.name, ready: !!seat.ready }),
@@ -135,7 +140,7 @@ const broadcastLobby = () => { for (const c of clients.values()) send(c.ws, lobb
 function startGame(t) {
   t.status = 'playing';
   const gameSeats = t.seats.map((s) => s.kind === 'bot' ? { kind: 'bot' } : { kind: 'human', uid: s.uid, name: s.name });
-  for (let s = 0; s < SEATS; s++) if (gameSeats[s].kind === 'human') send(uidWs.get(gameSeats[s].uid), { type: 'gameStart', table: t.id, seat: s, wind: WIND[s] });
+  for (let s = 0; s < SEATS; s++) if (gameSeats[s].kind === 'human') send(uidWs.get(gameSeats[s].uid), { type: 'gameStart', table: t.id, seat: s, wind: WIND[s], game: t.gameType, page: GAME_PAGE[t.gameType] });
   broadcastLobby();
   // route each seat's frames to that player's current socket (reconnection-safe), AND fan them out
   // to any spectators watching that seat (viewer mode — they see exactly what the player sees).
@@ -146,7 +151,7 @@ function startGame(t) {
   };
   // online bots play at the hardest level; t.resume carries the 锅 standings across a restart;
   // persist after every hand so a crash resumes from the latest round. The ruleset picks the game.
-  const ruleset = RULESETS[t.gameType] || RULESETS[GAME_TYPE];
+  const ruleset = RULESETS[t.gameType] || tianjin;
   t.game = new Table(t.id, gameSeats, emit, (finalScores) => onPotOver(t, gameSeats, finalScores), 3, t.resume, persist, ruleset);
   persist();
 }

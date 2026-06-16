@@ -17,10 +17,17 @@ const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
 const WIND = ['东', '南', '西', '北'];
 const FAST = !!new URLSearchParams(location.search).get('fast');
 const AI_DELAY = FAST ? 35 : 650;
-// Online mode is gated on ONLINE everywhere (mirrors 天津). The backend (games/guobiao/backend.js)
-// already implements RemoteBackend over the shared transport; flipping this on + wiring the lobby
-// entry is the remaining step. Offline is the default, single-player game.
-const ONLINE = false;
+// Online mode (mirrors 天津). ?online=1 means the lobby started a 国标 table and this page is driven
+// by the remote server via the RemoteBackend (games/guobiao/backend.js); everything online is gated
+// on ONLINE, so with it unset the page is the offline single-player game, unchanged.
+const ONLINE = !!new URLSearchParams(location.search).get('online');
+// Viewer mode (online only): ?viewer=1&vseat=N&vtable=T → watch human seat N of table T, read-only.
+const VIEWER = ONLINE && !!new URLSearchParams(location.search).get('viewer');
+const VIEWER_SEAT = VIEWER ? (parseInt(new URLSearchParams(location.search).get('vseat'), 10) || 0) : 0;
+const VIEWER_TABLE = VIEWER ? (parseInt(new URLSearchParams(location.search).get('vtable'), 10) || 0) : 0;
+const ONLINE_URL = new URLSearchParams(location.search).get('server') ||
+  ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? `ws://${location.hostname}:8090` : 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net');
+let onlineReadied = false, onlineEndsPot = false;
 // A bot's 吃/碰/杠 is shown lifted for CLAIM_DEMO_MS; logic is held until it settles
 // (+ CLAIM_SETTLE_MS). Both collapse to ~0 under ?fast=1 for tests.
 const CLAIM_DEMO_MS = FAST ? 60 : 2000;
@@ -29,6 +36,7 @@ const CLAIM_SETTLE_MS = FAST ? 20 : 380;
 // the pool; the tick is locked for the duration. 快速模式 (fastMode) / ?fast=1 disables it.
 const DISCARD_DEMO_MS = 900;  // 0.4s rise + ~0.5s halt at the center
 const DISCARD_SETTLE_MS = 220; // covers the ~0.18s fall into the pool
+const delay = (ms) => new Promise((r) => setTimeout(r, ms)); // awaited by onBackendEvent to hold the backend during animations
 
 // Per-page config (set by each index.html before this module loads). The 无定番
 // variant uses minFan: 0 and its own storage key so the two games keep separate
@@ -84,7 +92,9 @@ function selectableHandIndices() { return renderedHand().map((_, i) => i); }
 // can show it without driving the 3D table.
 function renderHud() {
   const minTxt = CFG.minFan > 0 ? `起和 ${CFG.minFan}番` : '无定番';
-  $('round-info').innerHTML = `<b>${WIND[session.roundWind]}圈</b> · 第 ${session.hand} 局 · 难度 <b>${LEVEL_NAMES[level]}</b> · ${minTxt}`;
+  // Online the server owns the match (no local session) — read the 圈 from the view; offline use the session.
+  const roundWind = (ONLINE && game) ? (game.roundWind || 0) : session.roundWind;
+  $('round-info').innerHTML = `<b>${WIND[roundWind]}圈</b> · ${ONLINE ? '联机' : `第 ${session.hand} 局 · 难度 <b>${LEVEL_NAMES[level]}</b>`} · ${minTxt}`;
   renderScores();
   $('wall-count').textContent = `余 ${game.wall.length} 张`;
   for (let p = 0; p < 4; p++) renderPlate(p);
@@ -170,13 +180,19 @@ function positionTingBanner() {
   }
 }
 
+// Seat label: online shows the real player name (机器人 for a bot seat); offline the relation label.
+// Names are sanitized server-side to CJK/letters only, so they're safe to interpolate.
+function plateName(p) {
+  if (ONLINE && game.seatNames) return game.seatNames[p] || (game.seatKinds && game.seatKinds[p] === 'bot' ? '机器人' : SEAT_LABEL[p]);
+  return SEAT_LABEL[p];
+}
 function renderPlate(p) {
   const seat = $('plate-' + p);
   const thinking = game.phase !== PHASE.OVER && game.turn === p && p !== HUMAN;
   const listen = p === HUMAN && (lockedTing || game.tenpaiInfo(p).tenpai);
   seat.innerHTML =
     `<div class="nameplate${game.turn === p && game.phase !== PHASE.OVER ? ' active' : ''}">` +
-    `<span class="wind">${WIND[game.seatWind(p)]}</span><span>${SEAT_LABEL[p]}</span>` +
+    `<span class="wind">${WIND[game.seatWind(p)]}</span><span>${plateName(p)}</span>` +
     (p === game.dealer ? '<span class="dealer-dot" title="庄"></span>' : '') +
     (listen ? '<span class="listen">听</span>' : '') +
     (thinking ? '<span class="think">思考中…</span>' : '') + `</div>`;
@@ -286,7 +302,9 @@ function flushLog() {
 // table catches up before the next event. The 吃/碰/杠/和 toasts + voices ride the engine log and
 // flush inside render(), so most cases just call render().
 async function onBackendEvent(ev) {
-  if (ev.type === 'gameGone') { returnHub(); return; }
+  if (ev.type === 'disconnected') { showReconnecting(); return; } // lost the server → banner, then bail to lobby
+  if (ev.type === 'gameGone') { returnHub(); return; }            // server has no game for us → lobby
+  if (ONLINE) hideReconnecting();                                 // any real frame means we're connected again
   const st = backend.getState();
   if (st) game = st;
   switch (ev.type) {
@@ -362,7 +380,13 @@ async function onBackendEvent(ev) {
 
     case 'over':
       render(); // flush the 自摸 / 点炮 / 荒牌 toast + win/lose sound from the log
+      onlineEndsPot = ONLINE && !!ev.potEnd; // set BEFORE showResult so it picks the right button label
       showResult();
+      if (ev.readied) { // resync after a refresh: reflect a choice we'd already made
+        const b = $('next-hand-btn');
+        if (onlineEndsPot) { b.disabled = true; b.textContent = '结算中…'; }
+        else { onlineReadied = true; b.textContent = '✓ 已准备 · 取消'; b.classList.add('readied'); }
+      }
       return;
 
     // ---- online only ----
@@ -370,10 +394,9 @@ async function onBackendEvent(ev) {
       lastLogLen = game.log ? game.log.length : 0; // online views carry no log; suppress toasts
       ensureSelection(); render();
       return;
-    case 'potOver':
-      render();
-      return;
-    case 'disconnected':
+    case 'potOver': // server finished the 锅 → final standings
+      $('result-overlay').classList.add('hidden');
+      showFinalBoard({ scores: ev.scores, rounds: ev.rounds });
       return;
   }
 }
@@ -500,16 +523,80 @@ function showResult() {
   }
   renderSeatHands(game); // reveal every seat's hand on its border
   sound.stopMusic(); // 听 (if any) is over
-  saveSession(); ov.classList.remove('hidden');
+  if (!ONLINE) saveSession();
+  // Online: 下一局 becomes a readiness toggle (我准备好了); the final hand of a 锅 ENDS it.
+  const nb = $('next-hand-btn'); nb.disabled = false; nb.classList.remove('readied'); onlineReadied = false;
+  nb.textContent = onlineEndsPot ? '结束并查看总成绩 🏆' : (ONLINE ? '我准备好了' : '下一局');
+  ov.classList.remove('hidden');
   resultFocus = 0; focusResultBtn(); // 下一局 focused by default
 }
 function nextHand() {
+  if (VIEWER) return; // a spectator can't ready up — the next hand deals when the real players are ready
+  if (ONLINE) {
+    if (onlineEndsPot) { backend.next(); const b = $('next-hand-btn'); b.disabled = true; b.textContent = '结算中…'; return; }
+    onlineReadied = !onlineReadied; // toggle readiness; the server deals once EVERY human is ready
+    const b = $('next-hand-btn');
+    if (onlineReadied) { backend.next(); b.textContent = '✓ 已准备 · 取消'; b.classList.add('readied'); }
+    else { backend.unready(); b.textContent = '我准备好了'; b.classList.remove('readied'); }
+    return;
+  }
   $('result-overlay').classList.add('hidden');
   const nd = game.nextDealer();
   session.hand += 1;
   if (nd === 0 && game.dealer !== 0) session.roundWind = (session.roundWind + 1) % 4;
   session.dealer = nd;
   startHand();
+}
+// Online: connect to the server's table (or spectate a seat). The server is the ground truth — it
+// deals, drives opponents, and PUSHES frames into onBackendEvent; no local session/锅 bookkeeping.
+function connectOnline() {
+  if (!scene) { scene = new Renderer($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
+  backend = createBackend({ mode: 'remote', url: ONLINE_URL, uid: localStorage.getItem('mahjong-online-uid') || '', name: localStorage.getItem('mahjong-online-name') || '',
+    spectate: VIEWER ? { table: VIEWER_TABLE, seat: VIEWER_SEAT } : null });
+  backend.onEvent(onBackendEvent);
+  backend.connect();
+}
+
+// ---- online: lost-connection banner (auto-returns to the lobby if it can't get back) ----
+let reconnectTimer = null;
+function showReconnecting() {
+  const el = $('reconnect-overlay'); if (el) el.classList.remove('hidden');
+  if (!reconnectTimer) reconnectTimer = setTimeout(returnHub, 8000);
+}
+function hideReconnecting() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  const el = $('reconnect-overlay'); if (el) el.classList.add('hidden');
+}
+
+// 一锅结束 · 最终成绩 (online only — the server owns the 锅). data: { scores, rounds }.
+function showFinalBoard(data) {
+  const scores = data.scores.slice();
+  const order = [0, 1, 2, 3].sort((a, b) => scores[b] - scores[a]);
+  const top = Math.max(...scores);
+  const MEDAL = ['🥇', '🥈', '🥉'];
+  const rankOf = (p) => scores.filter((s) => s > scores[p]).length;
+  $('final-standings').innerHTML = order.map((p) => {
+    const r = rankOf(p), v = scores[p];
+    return `<div class="standing${p === HUMAN ? ' me' : ''}"><span class="rank">${MEDAL[r] || (r + 1)}</span>` +
+      `<span class="who">${SEAT_LABEL[p]}${p === HUMAN ? '（你）' : ''}</span>` +
+      `<span class="pts ${v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero'}">${v > 0 ? '+' : ''}${v}</span></div>`;
+  }).join('');
+  const tiedTop = scores.filter((s) => s === top).length > 1;
+  $('final-congrats').textContent = scores[HUMAN] === top ? (tiedTop ? '🎉 恭喜并列第一！' : '🎉 恭喜你赢得这一锅！') : '本锅惜败，下一锅再战！';
+  $('final-rounds').innerHTML = roundsTableHtml(data.rounds || []);
+  $('final-overlay').classList.remove('hidden');
+}
+// 每圈成绩 table from the 锅's completed-圈 snapshots (cumulative scores per 圈).
+function roundsTableHtml(rounds) {
+  const seats = [0, 1, 2, 3];
+  const cell = (v) => `<td class="${v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero'}">${v > 0 ? '+' : ''}${v}</td>`;
+  let prev = [0, 0, 0, 0], body = '';
+  for (const r of rounds) { body += `<tr><td class="rd-wind">${WIND[r.wind]}圈</td>${seats.map((p) => cell(r.scores[p] - prev[p])).join('')}</tr>`; prev = r.scores; }
+  if (!body) body = `<tr><td class="rd-empty" colspan="5">本锅还没有完成的圈</td></tr>`;
+  const total = rounds.length ? rounds[rounds.length - 1].scores : [0, 0, 0, 0];
+  const head = `<tr><th></th>${seats.map((p) => `<th class="${p === HUMAN ? 'me' : ''}">${SEAT_LABEL[p]}</th>`).join('')}</tr>`;
+  const foot = `<tr><td class="rd-wind">合计</td>${seats.map((p) => cell(total[p])).join('')}</tr>`;
+  return `<table class="rounds-table"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
 }
 function startHand() {
   if (!scene) { scene = new Renderer($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
@@ -640,11 +727,20 @@ function bindUI() {
   $('next-hand-btn').addEventListener('click', nextHand);
   $('back-hub-btn').addEventListener('click', returnHub);
   $('menu-hub-btn').addEventListener('click', returnHub);
+  const fh = $('final-hub-btn'); if (fh) fh.addEventListener('click', returnHub);
+  $('menu-hub-btn').textContent = ONLINE ? '← 返回大厅' : '← 返回主页';
+  if (ONLINE) { const ng = $('newgame-btn'); if (ng) ng.style.display = 'none'; } // server owns the match online
   fillRules();
 }
 
-// Leave the game for the main hub (../../ from games/<mode>/).
-function returnHub() { location.href = '../../'; }
+// Leave the game: offline → the main hub; online → back to the 联机 lobby (carry ?server/fast/flat).
+function returnHub() {
+  if (!ONLINE) { location.href = '../../'; return; }
+  const params = new URLSearchParams(location.search);
+  for (const k of ['online', 'viewer', 'vseat', 'vtable']) params.delete(k);
+  const qs = params.toString();
+  location.href = '../mahjong-tianjin-online/' + (qs ? '?' + qs : '');
+}
 
 // Keyboard/gamepad focus between the result panel's two buttons (下一局 / 返回).
 let resultFocus = 0;
@@ -654,6 +750,10 @@ function focusResultBtn() {
   btns[resultFocus] && btns[resultFocus].focus();
 }
 bindUI();
+
+// Online boot: no start overlay / difficulty — the lobby already started the table. Connect and let
+// the server drive. (Gated on ONLINE; the offline boot via the start overlay is unchanged.)
+if (ONLINE) { $('start-overlay').classList.add('hidden'); gameStarted = true; connectOnline(); }
 
 if (new URLSearchParams(location.search).get('fast')) {
   window.__gb = {

@@ -21,6 +21,9 @@ const SERVER_URL = new URLSearchParams(location.search).get('server') || default
 
 const WINDS = ['东', '南', '西', '北'];          // seat index → wind label
 const POS = ['east', 'south', 'west', 'north'];  // seat index → chair CSS position
+const GAME_PAGE = { tianjin: '../mahjong-tianjin/', guobiao: '../guobiao/' }; // gameType → game page
+const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将' };
+let activeTable = 0; // which game tab is shown (forced to your seat's table when you're seated)
 
 let ws = null;
 let state = { tables: [], you: { name: '', seat: null, ready: false } };
@@ -140,15 +143,36 @@ function onChairClick(ev, ti, si) {
 // ---- render --------------------------------------------------------------
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// Game tabs (天津 / 国标). Hidden when the server hosts a single game. A seated player is locked to
+// their game's tab (you can only hold one seat); an idle player switches freely to browse a table.
+function renderTabs() {
+  const el = $('game-tabs');
+  if (!el) return;
+  if (!state.tables || state.tables.length < 2) { el.innerHTML = ''; return; }
+  const mine = state.you.seat;
+  el.innerHTML = '';
+  state.tables.forEach((t, i) => {
+    const b = document.createElement('button');
+    b.className = 'game-tab' + (i === activeTable ? ' active' : '');
+    const seated = mine && mine.table === i;
+    b.innerHTML = esc(t.gameLabel || GAME_LABEL[t.game] || ('桌 ' + (i + 1))) + (seated ? ' <span class="tab-dot" title="你在这桌">●</span>' : '');
+    if (!mine) b.onclick = () => { activeTable = i; render(); };
+    el.appendChild(b);
+  });
+}
+
 function render() {
   // keep the name box in sync unless the player is actively editing it
   if (document.activeElement !== $('name-input')) $('name-input').value = state.you.name || name;
   const root = $('lobby');
   root.innerHTML = '';
-  const t = state.tables[0];
+  const mine = state.you.seat;
+  if (mine) activeTable = mine.table;                       // seated → always show your game
+  if (activeTable >= state.tables.length) activeTable = 0;
+  renderTabs();
+  const t = state.tables[activeTable];
   if (!t) return;
-  const mine = state.you.seat;          // we only ever have one table now
-  const atTable = mine && mine.table === 0;
+  const atTable = mine && mine.table === activeTable;
 
   // ---- the table: a felt surface with four chairs (东南西北) around it ----
   const col = document.createElement('div'); col.className = 'table-col';
@@ -159,12 +183,12 @@ function render() {
   t.seats.forEach((seat, si) => {
     const isMe = atTable && mine.seat === si;
     const chair = document.createElement('div');
-    chair.dataset.table = 0; chair.dataset.seat = si;
+    chair.dataset.table = activeTable; chair.dataset.seat = si;
     chair.className = `chair ${POS[si]}` + (!seat ? ' empty' : seat.kind === 'bot' ? ' bot' : '') + (isMe ? ' me' : '') + (t.status === 'playing' ? ' playing' : '');
     const who = !seat ? '空位' : seat.kind === 'bot' ? '🤖 机器人' : seat.name;
     chair.innerHTML = `<span class="seat-pad"><span class="wind">${WINDS[si]}</span><span class="who">${esc(who)}</span>` +
       (seat && seat.kind === 'human' ? `<span class="ready ${seat.ready ? 'yes' : 'no'}">${seat.ready ? '✓ 已准备' : '未准备'}</span>` : '') + `</span>`;
-    chair.onclick = (ev) => onChairClick(ev, 0, si);
+    chair.onclick = (ev) => onChairClick(ev, activeTable, si);
     // Spectate: when the table is mid-game and I'm not in it, an eye on each human seat jumps into a
     // read-only view of that player (same UI as them, but no actions).
     if (t.status === 'playing' && !atTable && seat && seat.kind === 'human') {
@@ -219,19 +243,23 @@ function render() {
 
 // ---- hand off to the game page (it connects with the same uid → the server resyncs the table
 // in progress). Carry server/fast/flat/d3 through so the game targets the same server.
+function pageFor(game) { return GAME_PAGE[game] || GAME_PAGE.tianjin; }
 function goToGame() {
+  const seat = state.you.seat;
+  const game = seat ? state.tables[seat.table].game : state.tables[activeTable].game;
   const params = new URLSearchParams(location.search);
   params.set('online', '1');
-  location.href = '../mahjong-tianjin/?' + params.toString();
+  location.href = pageFor(game) + '?' + params.toString();
 }
-// Enter read-only viewer mode for a player's seat: hand off to the game page in spectate mode.
+// Enter read-only viewer mode for a player's seat: hand off to the active table's game page in
+// spectate mode (vtable tells the game which table to watch).
 function watchSeat(seat) {
   const params = new URLSearchParams(location.search);
-  params.set('online', '1'); params.set('viewer', '1'); params.set('vseat', String(seat));
-  location.href = '../mahjong-tianjin/?' + params.toString();
+  params.set('online', '1'); params.set('viewer', '1'); params.set('vseat', String(seat)); params.set('vtable', String(activeTable));
+  location.href = pageFor(state.tables[activeTable].game) + '?' + params.toString();
 }
 function showStart(m) {
-  $('start-text').textContent = `你坐在「${m.wind}」位，正在进入第 ${m.table + 1} 桌…`;
+  $('start-text').textContent = `你坐在「${m.wind}」位，正在进入${GAME_LABEL[m.game] || ''}…`;
   $('start-overlay').classList.remove('hidden');
   goToGame();
 }

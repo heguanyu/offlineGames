@@ -1,5 +1,14 @@
 :root { --gold: #e8c466; }
 * { box-sizing: border-box; }
+
+/* game tabs (天津 / 国标) — pick which table the lobby shows */
+#game-tabs { display: flex; gap: 8px; justify-content: center; padding: 12px 14px 0; flex-wrap: wrap; }
+#game-tabs:empty { display: none; }
+.game-tab { font-size: 0.9rem; font-weight: 700; color: #cfe7db; padding: 7px 16px; border-radius: 999px;
+  border: 1px solid #2c8160; background: rgba(8,39,28,0.6); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.game-tab.active { color: #2a2000; background: linear-gradient(var(--gold), #d9b24a); border-color: var(--gold); }
+.game-tab .tab-dot { font-size: 0.7rem; color: #7ddf8a; } /* you're seated at this table */
+.game-tab.active .tab-dot { color: #2a6b3a; }
 html, body { margin: 0; min-height: 100%; }
 body { background: radial-gradient(circle at 50% -10%, #14402f, #08160f); color: #eaf6f0;
   font-family: -apple-system, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-text-size-adjust: 100%; }
