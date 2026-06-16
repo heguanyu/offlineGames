@@ -28,19 +28,16 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
   await page.evaluateOnNewDocument(() => { localStorage.setItem('mahjong-online-name', '无定番'); localStorage.setItem('mahjong-online-uid', 'gbfree-play-e2e-uid'); });
 
-  // hub deep-link: ?tab=guobiao-free preselects the 无定番 table
-  await page.goto(`http://localhost:${SITE}/games/mahjong-tianjin-online/?server=ws://localhost:${PORT}&fast=1&tab=guobiao-free`, { waitUntil: 'domcontentloaded' });
+  // the 无定番 split lobby (?game=guobiao-free) shows only its table (index 2 in the default lineup)
+  await page.goto(`http://localhost:${SITE}/games/mahjong-tianjin-online/?server=ws://localhost:${PORT}&fast=1&game=guobiao-free`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.getElementById('conn')?.className.includes('on'), { timeout: 6000 });
-  await page.waitForFunction(() => document.querySelectorAll('#game-tabs .game-tab').length >= 3, { timeout: 4000 });
-  const activeLabel = await page.$eval('#game-tabs .game-tab.active', (e) => e.textContent.trim());
-  if (!activeLabel.includes('无定番')) throw new Error(`?tab=guobiao-free should preselect the 无定番 tab, active is: ${activeLabel}`);
   await page.waitForSelector('.chair[data-table="2"][data-seat="0"]');
   await page.click('.chair[data-table="2"][data-seat="0"]');
   await clickMenu(page, '坐这里');
   await page.waitForFunction(() => document.querySelector('.chair[data-table="2"][data-seat="0"]').classList.contains('me'), { timeout: 4000 });
   for (const s of [1, 2, 3]) { await page.click(`.chair[data-table="2"][data-seat="${s}"]`); await clickMenu(page, '加机器人'); await new Promise((r) => setTimeout(r, 120)); }
   await page.evaluate(() => [...document.querySelectorAll('.btn.ready')].find((b) => b.textContent.includes('准备')).click());
-  console.log('lobby: 无定番 tab preselected, seated at table 2 + 3 bots + ready');
+  console.log('lobby: 无定番 split lobby, seated at table 2 + 3 bots + ready');
 
   await page.waitForFunction(() => location.pathname.includes('/guobiao-free/'), { timeout: 8000 });
   console.log('navigated to the 无定番 online game page');

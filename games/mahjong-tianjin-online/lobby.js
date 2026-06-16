@@ -23,9 +23,10 @@ const WINDS = ['东', '南', '西', '北'];          // seat index → wind labe
 const POS = ['east', 'south', 'west', 'north'];  // seat index → chair CSS position
 const GAME_PAGE = { tianjin: '../mahjong-tianjin/', guobiao: '../guobiao/', 'guobiao-free': '../guobiao-free/' }; // gameType → game page
 const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将', 'guobiao-free': '国标无定番' };
-const INITIAL_TAB = new URLSearchParams(location.search).get('tab'); // hub deep-links here (?tab=guobiao-free)
-let activeTable = 0; // which game tab is shown (forced to your seat's table when you're seated)
-let tabApplied = false; // INITIAL_TAB is applied once, then the player can switch freely
+// This lobby is split per game (?game=tianjin|guobiao|guobiao-free, default 天津): one table, no tabs,
+// its own leaderboard. The hub's three online cards each deep-link a game.
+const GAME = (() => { const g = new URLSearchParams(location.search).get('game'); return GAME_PAGE[g] ? g : 'tianjin'; })();
+let activeTable = 0; // index of GAME's table within the lobby frame's tables list
 
 let ws = null;
 let state = { tables: [], you: { name: '', seat: null, ready: false } };
@@ -40,7 +41,7 @@ let reconnectTimer = null;
 function connect() {
   setConn('connecting');
   ws = new WebSocket(SERVER_URL);
-  ws.onopen = () => { setConn('on'); send({ type: 'hello', name, uid }); };
+  ws.onopen = () => { setConn('on'); send({ type: 'hello', name, uid, game: GAME }); };
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === 'lobby') { state = m; render(); }
@@ -145,38 +146,16 @@ function onChairClick(ev, ti, si) {
 // ---- render --------------------------------------------------------------
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// Game tabs (天津 / 国标). Hidden when the server hosts a single game. A seated player is locked to
-// their game's tab (you can only hold one seat); an idle player switches freely to browse a table.
-function renderTabs() {
-  const el = $('game-tabs');
-  if (!el) return;
-  if (!state.tables || state.tables.length < 2) { el.innerHTML = ''; return; }
-  const mine = state.you.seat;
-  el.innerHTML = '';
-  state.tables.forEach((t, i) => {
-    const b = document.createElement('button');
-    b.className = 'game-tab' + (i === activeTable ? ' active' : '');
-    const seated = mine && mine.table === i;
-    b.innerHTML = esc(t.gameLabel || GAME_LABEL[t.game] || ('桌 ' + (i + 1))) + (seated ? ' <span class="tab-dot" title="你在这桌">●</span>' : '');
-    if (!mine) b.onclick = () => { activeTable = i; render(); };
-    el.appendChild(b);
-  });
-}
-
 function render() {
   // keep the name box in sync unless the player is actively editing it
   if (document.activeElement !== $('name-input')) $('name-input').value = state.you.name || name;
   const root = $('lobby');
   root.innerHTML = '';
   const mine = state.you.seat;
-  if (mine) activeTable = mine.table;                       // seated → always show your game
-  else if (!tabApplied && INITIAL_TAB && state.tables.length) { // first populated render: honor the hub's ?tab= deep-link
-    const i = state.tables.findIndex((t) => t.game === INITIAL_TAB);
-    if (i >= 0) activeTable = i;
-    tabApplied = true;
-  }
-  if (activeTable >= state.tables.length) activeTable = 0;
-  renderTabs();
+  // This lobby only ever shows GAME's table (no tabs). A seat held at another game's table belongs to
+  // that game's lobby, so it never shows here.
+  activeTable = state.tables.findIndex((t) => t.game === GAME);
+  if (activeTable < 0) activeTable = 0;
   const t = state.tables[activeTable];
   if (!t) return;
   const atTable = mine && mine.table === activeTable;
@@ -271,6 +250,14 @@ function showStart(m) {
   goToGame();
 }
 $('start-back').addEventListener('click', () => { $('start-overlay').classList.add('hidden'); send({ type: 'leave' }); });
+
+// Title this lobby for its game (天津 / 国标 / 国标无定番).
+{
+  const label = GAME_LABEL[GAME] || '麻将';
+  const h1 = document.querySelector('header h1');
+  if (h1) h1.innerHTML = `🀄 ${label}联机 <span class="wifi">📶</span>`;
+  document.title = `${label}联机版 · 大厅`;
+}
 
 render();
 connect();

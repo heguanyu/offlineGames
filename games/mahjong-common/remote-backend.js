@@ -70,4 +70,5 @@ export class RemoteBackendBase {
   next() { this._act({ do: 'next' }); }
   unready() { this._act({ do: 'unready' }); } // cancel "我准备好了" before the next hand deals
   dealDone() { this._act({ do: 'dealDone' }); } // my deal animation finished — the server may now drive the bots
+  forfeit() { this._act({ do: 'forfeit' }); } // give up the live game: my seat becomes a bot, no lifetime score
 }

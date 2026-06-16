@@ -983,6 +983,11 @@ function onAction(name) {
     else if (name === 'cancel' || name === 'menu') $('leave-confirm-overlay').classList.add('hidden'); // 继续游戏
     return;
   }
+  if (!$('forfeit-confirm-overlay').classList.contains('hidden')) {
+    if (name === 'confirm') doForfeit();                                                  // 确认认输
+    else if (name === 'cancel' || name === 'menu') $('forfeit-confirm-overlay').classList.add('hidden'); // 取消
+    return;
+  }
   if (!$('menu-overlay').classList.contains('hidden') ||
       !$('rules-overlay').classList.contains('hidden') ||
       !$('start-overlay').classList.contains('hidden')) {
@@ -1148,10 +1153,23 @@ function bindUI() {
     $('history-body').innerHTML = historyTableHtml();
   });
   $('menu-hub-btn').addEventListener('click', leaveToLobby);
+  // 认输 (forfeit) — online players only; a red two-step confirm.
+  $('menu-forfeit-btn').addEventListener('click', () => { $('menu-overlay').classList.add('hidden'); $('forfeit-confirm-overlay').classList.remove('hidden'); });
+  $('forfeit-confirm-yes').addEventListener('click', doForfeit);
+  $('forfeit-confirm-no').addEventListener('click', () => $('forfeit-confirm-overlay').classList.add('hidden'));
   // Online: no 重开 (the server owns the match) and no local 历史战绩 (scores live on the lobby
-  // leaderboard). Hidden rather than removed so the offline build is untouched.
+  // leaderboard); offer 认输 instead. Hidden rather than removed so the offline build is untouched.
   if (ONLINE) { $('newgame-btn').style.display = 'none'; $('menu-history-btn').style.display = 'none'; }
+  if (ONLINE && !VIEWER) $('menu-forfeit-btn').hidden = false; // a forfeit only makes sense for a seated online player
   fillRules();
+}
+
+// Forfeit the live game: tell the server (our seat becomes a bot; this 锅 isn't scored for us), then
+// return to the lobby. The server concludes the 锅 if we were the last human.
+function doForfeit() {
+  $('forfeit-confirm-overlay').classList.add('hidden');
+  if (backend && backend.forfeit) backend.forfeit();
+  returnHub();
 }
 
 // User-initiated "返回大厅". Leaving a live online game (as a seated player) keeps your seat —
@@ -1166,7 +1184,8 @@ function leaveToLobby() {
 function returnHub() {
   if (!ONLINE) { location.href = '../../'; return; }
   const params = new URLSearchParams(location.search); // carry ?server=/fast/flat back to the lobby
-  params.delete('online');
+  for (const k of ['online', 'viewer', 'vseat', 'vtable']) params.delete(k);
+  params.set('game', 'tianjin'); // return to THIS game's split lobby
   const qs = params.toString();
   location.href = '../mahjong-tianjin-online/' + (qs ? '?' + qs : '');
 }

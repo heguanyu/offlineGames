@@ -295,6 +295,22 @@ export class Table {
     });
   }
 
+  // A human gives up the live game. Their seat becomes a bot in place — the play loop drives it like
+  // any other bot from here on, and the emit fan-out + score recording (both keyed on seat.kind ===
+  // 'human') skip it, so no lifetime score is recorded for a forfeiter. Any request currently pending
+  // from that seat is released so the bot takes over immediately. Caller (index.js) checks humans()
+  // afterward to decide whether to conclude the 锅 (no humans left) or keep playing.
+  forfeit(seat) {
+    if (!this.isHuman(seat)) return false;
+    this.seats[seat] = { kind: 'bot' };
+    if (this._lzPending) this._lzPending.delete(seat); // its hand is no longer withheld (it's a bot now)
+    if (this._lz && this._lz.need.has(seat)) { this._lz.answers[seat] = false; this._lz.need.delete(seat); if (this._lz.need.size === 0) this._lz.finish(); else this._emitLz(); }
+    if (this._next && this._next.need.has(seat)) { this._next.need.delete(seat); if (this._next.need.size === 0) this._next.finish(); }
+    if (this._dealAck && this._dealAck.need.has(seat)) { this._dealAck.need.delete(seat); if (this._dealAck.need.size === 0) this._dealAck.finish(); }
+    if (this._waiting && this._waiting.seat === seat) this._waiting.finish(null); // null → the loop auto-acts this turn, then the seat plays as a bot
+    return true;
+  }
+
   dispose() {
     this._gen++; // any in-flight wait now resolves and _run bails on the gen check (no timeouts to rely on)
     const w = this._waiting, lz = this._lz, nx = this._next, da = this._dealAck;

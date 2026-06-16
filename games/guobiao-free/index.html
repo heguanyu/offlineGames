@@ -33,6 +33,8 @@
       <div id="action-bar"></div>
       <div class="hint" id="hand-hint"></div>
     </div>
+    <!-- online only: countdown to the server's auto-act on your turn -->
+    <div id="turn-timer" class="hidden" aria-hidden="true"><span id="turn-timer-num"></span></div>
   </main>
   <div id="ting-center"></div>
   <div id="ting-banner"></div>
@@ -78,8 +80,19 @@
       <h2>菜单</h2>
       <button class="big-btn" id="resume-btn">继续</button>
       <button class="big-btn danger" id="newgame-btn">重开（清零比分）</button>
+      <button class="big-btn danger" id="menu-forfeit-btn" hidden>🏳️ 认输退出</button>
       <button class="link-btn" id="menu-rules-link">规则</button>
       <button class="big-btn hub" id="menu-hub-btn">← 返回大厅</button>
+    </div>
+  </div>
+
+  <!-- online: confirm forfeiting the live game (your seat → a bot; no lifetime score for this 锅) -->
+  <div class="overlay hidden" id="forfeit-confirm-overlay">
+    <div class="panel">
+      <h2>🏳️ 确认认输？</h2>
+      <p class="sub">认输后你将<b>退出本局</b>，座位交由<b>电脑接管</b>；本局<b>不计入</b>你的总分。此操作无法撤销。</p>
+      <button class="big-btn danger" id="forfeit-confirm-yes">确认认输</button>
+      <button class="big-btn" id="forfeit-confirm-no">取消</button>
     </div>
   </div>
 

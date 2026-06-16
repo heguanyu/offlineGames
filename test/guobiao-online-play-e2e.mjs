@@ -27,11 +27,9 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
   await page.evaluateOnNewDocument(() => { localStorage.setItem('mahjong-online-name', '国标客'); localStorage.setItem('mahjong-online-uid', 'gb-play-e2e-uid'); });
 
-  await page.goto(`http://localhost:${SITE}/games/mahjong-tianjin-online/?server=ws://localhost:${PORT}&fast=1`, { waitUntil: 'domcontentloaded' });
+  // the 国标 split lobby (?game=guobiao) shows only the 国标 table (index 1 in the default lineup)
+  await page.goto(`http://localhost:${SITE}/games/mahjong-tianjin-online/?server=ws://localhost:${PORT}&fast=1&game=guobiao`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.getElementById('conn')?.className.includes('on'), { timeout: 6000 });
-  // switch to the 国标 tab, then sit at its table
-  await page.waitForFunction(() => document.querySelectorAll('#game-tabs .game-tab').length >= 2, { timeout: 4000 });
-  await page.evaluate(() => [...document.querySelectorAll('#game-tabs .game-tab')].find((b) => b.textContent.includes('国标')).click());
   await page.waitForSelector('.chair[data-table="1"][data-seat="0"]');
   await page.click('.chair[data-table="1"][data-seat="0"]');
   await clickMenu(page, '坐这里');

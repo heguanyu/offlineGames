@@ -81,22 +81,7 @@ body.flat #wild-hud #wall-count { text-align: center; }
 
 body.flat .long-run { width: calc(21px * 5 + 4px); }
 
-/* online turn countdown — a depleting ring with the seconds left before the server auto-acts */
-#turn-timer {
-  position: absolute; z-index: 9; top: 72px; left: 50%; transform: translateX(-50%); pointer-events: none;
-  width: 118px; height: 118px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: conic-gradient(var(--tc, #6fe08a) calc(var(--tp, 100) * 1%), rgba(0,0,0,0.42) 0);
-  box-shadow: 0 5px 18px rgba(0,0,0,0.6);
-}
-#turn-timer.hidden { display: none; } /* ID-specificity beats #turn-timer{display:flex}; plain .hidden didn't */
-#turn-timer::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: rgba(6,26,18,0.95); }
-#turn-timer-num { position: relative; font-size: 3rem; font-weight: 900; color: #eaf6f0; line-height: 1; }
-#turn-timer.low { --tc: #ff5c5c; animation: tt-pulse 0.7s ease-in-out infinite; }
-#turn-timer.low #turn-timer-num { color: #ff8a8a; }
-@keyframes tt-pulse { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.07); } }
-body.flat #turn-timer { top: 54px; width: 92px; height: 92px; }
-body.flat #turn-timer-num { font-size: 2.3rem; }
+/* #turn-timer styles now live in the shared board.css (used by 天津 / 国标 / 无定番) */
 
 /* 拉庄: a real table — the lobby's green felt in the centre (the decision sits ON it) ringed by the
    lobby's wooden chairs. The seats are the chair asset (no bordered chips); positions mirror the table. */
@@ -275,8 +260,19 @@ body.flat #turn-timer-num { font-size: 2.3rem; }
       <button class="big-btn" id="resume-btn">继续</button>
       <button class="big-btn" id="menu-history-btn">📜 历史战绩</button>
       <button class="big-btn danger" id="newgame-btn">重开（清零比分）</button>
+      <button class="big-btn danger" id="menu-forfeit-btn" hidden>🏳️ 认输退出</button>
       <button class="link-btn" id="menu-rules-link">规则</button>
       <button class="big-btn hub" id="menu-hub-btn">← 返回大厅</button>
+    </div>
+  </div>
+
+  <!-- online: confirm forfeiting the live game (your seat → a bot; no lifetime score for this 锅) -->
+  <div class="overlay hidden" id="forfeit-confirm-overlay">
+    <div class="panel">
+      <h2>🏳️ 确认认输？</h2>
+      <p class="sub">认输后你将<b>退出本局</b>，座位交由<b>电脑接管</b>；本局<b>不计入</b>你的总分。此操作无法撤销。</p>
+      <button class="big-btn danger" id="forfeit-confirm-yes">确认认输</button>
+      <button class="big-btn" id="forfeit-confirm-no">取消</button>
     </div>
   </div>
 

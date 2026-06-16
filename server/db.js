@@ -46,18 +46,38 @@ try {
   const qTables = sdb.prepare('SELECT id,seats,pot FROM tables');
   impl = {
     backend: 'sqlite',
-    loadScoreBook() { const o = {}; for (const r of qPlayers.all()) o[r.uid] = { name: r.name, total: r.total, pots: r.pots }; return o; },
-    savePlayer(uid, rec) { qUpsertPlayer.run({ uid, name: rec.name || '', total: rec.total | 0, pots: rec.pots | 0 }); },
+    // Per-game leaderboards share the players table via a composite "game|uid" key. loadScoreBook
+    // returns a nested book { game: { uid: {name,total,pots} } }; legacy bare-uid rows (pre per-game,
+    // all 天津) read as the 'tianjin' board.
+    loadScoreBook() {
+      const o = {};
+      for (const r of qPlayers.all()) {
+        const i = r.uid.indexOf('|');
+        const game = i >= 0 ? r.uid.slice(0, i) : 'tianjin';
+        const uid = i >= 0 ? r.uid.slice(i + 1) : r.uid;
+        (o[game] || (o[game] = {}))[uid] = { name: r.name, total: r.total, pots: r.pots };
+      }
+      return o;
+    },
+    savePlayer(game, uid, rec) { qUpsertPlayer.run({ uid: game + '|' + uid, name: rec.name || '', total: rec.total | 0, pots: rec.pots | 0 }); },
     loadTables() { const out = []; for (const r of qTables.all()) out[r.id] = { seats: JSON.parse(r.seats || 'null'), pot: JSON.parse(r.pot || 'null') }; return out; },
     saveTable(id, seats, pot) { qUpsertTable.run({ id, seats: JSON.stringify(seats ?? null), pot: JSON.stringify(pot ?? null) }); },
   };
   if (legacy) {
     const tx = sdb.transaction(() => {
-      for (const [uid, rec] of Object.entries(legacy.scoreBook)) impl.savePlayer(uid, rec);
+      for (const [uid, rec] of Object.entries(legacy.scoreBook)) impl.savePlayer('tianjin', uid, rec); // legacy JSON predates per-game → 天津 board
       legacy.tables.forEach((t, i) => { if (t) impl.saveTable(i, t.seats, t.pot); });
     });
     tx();
     console.log(`[db] migrated ${Object.keys(legacy.scoreBook).length} player(s) + ${legacy.tables.filter(Boolean).length} table(s) from legacy JSON → ${DB_FILE}`);
+  }
+  // One-time: re-key pre-per-game rows (bare uid, all 天津) to the 'tianjin|uid' composite key, so the
+  // existing leaderboard lands on the 天津 board instead of an ambiguous legacy bucket.
+  const bare = qPlayers.all().filter((r) => !r.uid.includes('|'));
+  if (bare.length) {
+    const qDel = sdb.prepare('DELETE FROM players WHERE uid = ?');
+    sdb.transaction(() => { for (const r of bare) { impl.savePlayer('tianjin', r.uid, r); qDel.run(r.uid); } })();
+    console.log(`[db] re-keyed ${bare.length} legacy player row(s) → 天津 board`);
   }
   console.log(`[db] SQLite ready at ${DB_FILE}`); // informational → stdout (stderr is reserved for real warnings/errors)
 } catch (e) {
@@ -74,10 +94,21 @@ if (!impl) {
     catch (err) { console.error('[db] JSON write failed:', err && err.message); }
   };
   flush();
+  // legacy bare-uid keys (pre per-game) → the 天津 board, so they survive into the nested model
+  for (const k of Object.keys(state.scoreBook)) { if (!k.includes('|')) { state.scoreBook['tianjin|' + k] = state.scoreBook[k]; delete state.scoreBook[k]; } }
   impl = {
     backend: 'json',
-    loadScoreBook() { return state.scoreBook; },
-    savePlayer(uid, rec) { state.scoreBook[uid] = { name: rec.name || '', total: rec.total | 0, pots: rec.pots | 0 }; flush(); },
+    loadScoreBook() {
+      const o = {};
+      for (const [k, rec] of Object.entries(state.scoreBook)) {
+        const i = k.indexOf('|');
+        const game = i >= 0 ? k.slice(0, i) : 'tianjin';
+        const uid = i >= 0 ? k.slice(i + 1) : k;
+        (o[game] || (o[game] = {}))[uid] = rec;
+      }
+      return o;
+    },
+    savePlayer(game, uid, rec) { state.scoreBook[game + '|' + uid] = { name: rec.name || '', total: rec.total | 0, pots: rec.pots | 0 }; flush(); },
     loadTables() { return state.tables; },
     saveTable(id, seats, pot) { state.tables[id] = { seats: seats ?? null, pot: pot ?? null }; flush(); },
   };

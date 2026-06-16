@@ -28,6 +28,28 @@ const VIEWER_TABLE = VIEWER ? (parseInt(new URLSearchParams(location.search).get
 const ONLINE_URL = new URLSearchParams(location.search).get('server') ||
   ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? `ws://${location.hostname}:8090` : 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net');
 let onlineReadied = false, onlineEndsPot = false;
+
+// Online turn countdown (国标 / 无定番) — same as 天津: drives the shared scene timer (the 3D ring on
+// the felt, or the flat 2D #turn-timer ring) whenever a player is on the server's clock.
+let ttHandle = null, ttDeadline = 0, ttTotal = 30000, ttWaiting = false;
+function drawTurnTimer() {
+  if (!ttWaiting) {
+    if (ttHandle) { clearInterval(ttHandle); ttHandle = null; }
+    if (scene && scene.setTurnTimer) scene.setTurnTimer({ show: false });
+    return;
+  }
+  const left = Math.max(0, ttDeadline - Date.now());
+  if (scene && scene.setTurnTimer) scene.setTurnTimer({ show: true, secs: Math.round(left / 1000), frac: ttTotal > 0 ? Math.min(1, left / ttTotal) : 0, low: left <= 5000 });
+}
+function syncTurnTimer(ev) {
+  if (ev.type === 'await') { // a human is on the clock
+    ttWaiting = true;
+    ttDeadline = Date.now() + (+ev.timeout > 0 ? +ev.timeout : 30000);
+    ttTotal = +ev.total || +ev.timeout || 30000;
+    if (!ttHandle) ttHandle = setInterval(drawTurnTimer, 100);
+  } else ttWaiting = false; // bot's turn / 下一局 / between hands → no clock
+  drawTurnTimer();
+}
 // A bot's 吃/碰/杠 is shown lifted for CLAIM_DEMO_MS; logic is held until it settles
 // (+ CLAIM_SETTLE_MS). Both collapse to ~0 under ?fast=1 for tests.
 const CLAIM_DEMO_MS = FAST ? 60 : 2000;
@@ -307,6 +329,7 @@ async function onBackendEvent(ev) {
   if (ONLINE) hideReconnecting();                                 // any real frame means we're connected again
   const st = backend.getState();
   if (st) game = st;
+  if (ONLINE) syncTurnTimer(ev); // show the countdown whenever a player is on the clock (no-op offline)
   switch (ev.type) {
     case 'deal':
       $('result-overlay').classList.add('hidden'); // the next hand is dealing → hide the result panel
@@ -632,6 +655,11 @@ $('scene').addEventListener('pointermove', (e) => {
 function onAction(name) {
   if (!gameStarted) return;
   sound.resume();
+  if (!$('forfeit-confirm-overlay').classList.contains('hidden')) {
+    if (name === 'confirm') doForfeit();                                                     // 确认认输
+    else if (name === 'cancel' || name === 'menu') $('forfeit-confirm-overlay').classList.add('hidden'); // 取消
+    return;
+  }
   if (!$('menu-overlay').classList.contains('hidden') || !$('rules-overlay').classList.contains('hidden') || !$('start-overlay').classList.contains('hidden')) {
     if (name === 'cancel' || name === 'menu') closeOverlays();
     return;
@@ -729,8 +757,21 @@ function bindUI() {
   $('menu-hub-btn').addEventListener('click', returnHub);
   const fh = $('final-hub-btn'); if (fh) fh.addEventListener('click', returnHub);
   $('menu-hub-btn').textContent = ONLINE ? '← 返回大厅' : '← 返回主页';
+  // 认输 (forfeit) — online players only; a red two-step confirm.
+  $('menu-forfeit-btn').addEventListener('click', () => { $('menu-overlay').classList.add('hidden'); $('forfeit-confirm-overlay').classList.remove('hidden'); });
+  $('forfeit-confirm-yes').addEventListener('click', doForfeit);
+  $('forfeit-confirm-no').addEventListener('click', () => $('forfeit-confirm-overlay').classList.add('hidden'));
   if (ONLINE) { const ng = $('newgame-btn'); if (ng) ng.style.display = 'none'; } // server owns the match online
+  if (ONLINE && !VIEWER) $('menu-forfeit-btn').hidden = false; // a forfeit only makes sense for a seated online player
   fillRules();
+}
+
+// Forfeit the live game: tell the server (our seat becomes a bot; this 锅 isn't scored for us), then
+// return to the lobby. The server concludes the 锅 if we were the last human.
+function doForfeit() {
+  $('forfeit-confirm-overlay').classList.add('hidden');
+  if (backend && backend.forfeit) backend.forfeit();
+  returnHub();
 }
 
 // Leave the game: offline → the main hub; online → back to the 联机 lobby (carry ?server/fast/flat).
@@ -738,6 +779,7 @@ function returnHub() {
   if (!ONLINE) { location.href = '../../'; return; }
   const params = new URLSearchParams(location.search);
   for (const k of ['online', 'viewer', 'vseat', 'vtable']) params.delete(k);
+  params.set('game', CFG.sessionKey === 'guobiao-free' ? 'guobiao-free' : 'guobiao'); // return to THIS game's split lobby
   const qs = params.toString();
   location.href = '../mahjong-tianjin-online/' + (qs ? '?' + qs : '');
 }
