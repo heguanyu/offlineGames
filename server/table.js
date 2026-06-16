@@ -128,15 +128,23 @@ export class Table {
   // reconnection: re-send the full current state to one seat
   // reconnection: re-send the full state, RE-EMITTING any request pending from this seat so
   // a returning client can still answer (its 拉庄 prompt, or its turn).
-  resync(seat) {
-    if (!this.isHuman(seat)) return;
+  resync(seat) { if (this.isHuman(seat)) this.emit(seat, this._syncFrame(seat)); }
+
+  // The catch-up frame for a seat: its full live view PLUS whichever pending request that seat must
+  // see re-issued (its 拉庄 prompt / its turn / the result it hasn't acked). Used to resync a
+  // reconnecting PLAYER and to seed a joining SPECTATOR.
+  _syncFrame(seat) {
     let ev = { t: 'sync' };
     if (this._lz && this.isHuman(seat)) ev = { t: 'lazhuang', dealer: this.dealer, need: [...this._lz.need], answers: { ...this._lz.answers } }; // re-show the 拉庄 decision / 庄 tally
     else if (this._dealAck && this._dealAck.need.has(seat)) ev = { t: 'deal' }; // re-run the deal animation; its 'dealDone' releases the bots
     else if (this._waiting && this._waiting.seat === seat) ev = { t: 'await', who: this._waiting.kind, seat, timeout: Math.max(1000, this._waiting.deadline - Date.now()), total: TURN_TIMEOUT_MS };
     else if (this._next) ev = { t: 'over', readied: !this._next.need.has(seat), potEnd: this._potEnd() }; // re-show the result on refresh — even for a player who already readied (then it's a 'waiting' state)
-    this.emit(seat, { type: 'game', ev, view: this.viewFor(seat) });
+    return { type: 'game', ev, view: this.viewFor(seat) };
   }
+
+  // A spectator watching `seat` gets exactly that seat's catch-up frame — its full view (incl. the
+  // hand). Ongoing frames reach the spectator through the per-seat emit fan-out (server/index.js).
+  spectateFrame(seat) { return this.isHuman(seat) ? this._syncFrame(seat) : null; }
 
   // ---- action routing (called from index.js for the seat's socket) ----------
   onAction(seat, msg) {

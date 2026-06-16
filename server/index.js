@@ -129,8 +129,13 @@ function startGame(t) {
   const gameSeats = t.seats.map((s) => s.kind === 'bot' ? { kind: 'bot' } : { kind: 'human', uid: s.uid, name: s.name });
   for (let s = 0; s < SEATS; s++) if (gameSeats[s].kind === 'human') send(uidWs.get(gameSeats[s].uid), { type: 'gameStart', table: t.id, seat: s, wind: WIND[s] });
   broadcastLobby();
-  // route each seat's frames to that player's current socket (reconnection-safe)
-  const emit = (seatIdx, msg) => { const gs = gameSeats[seatIdx]; if (gs.kind === 'human') send(uidWs.get(gs.uid), msg); };
+  // route each seat's frames to that player's current socket (reconnection-safe), AND fan them out
+  // to any spectators watching that seat (viewer mode — they see exactly what the player sees).
+  const emit = (seatIdx, msg) => {
+    const gs = gameSeats[seatIdx];
+    if (gs.kind === 'human') send(uidWs.get(gs.uid), msg);
+    for (const c of clients.values()) if (c.spectate && c.spectate.table === t.id && c.spectate.seat === seatIdx) send(c.ws, msg);
+  };
   // online bots play at the hardest level; t.resume carries the 锅 standings across a restart;
   // persist after every hand so a crash resumes from the latest round.
   t.game = new Table(t.id, gameSeats, emit, (finalScores) => onPotOver(t, gameSeats, finalScores), 3, t.resume, persist);
@@ -183,6 +188,21 @@ function handle(client, msg) {
       client.uid = String(msg.uid || '').slice(0, 64) || ('anon-' + client.id);
       client.name = sanitizeName(msg.name) || `玩家${client.id}`;
       uidWs.set(client.uid, client.ws);
+      // Spectator: a NON-seated client asked to watch a specific human seat of a live table. Register
+      // it (the seat's frames fan out to it via emit) and seed it with the current catch-up frame.
+      // Falls through to a normal hello (→ noGame) if the game's gone or the seat isn't a live human.
+      const sp = msg.spectate;
+      if (sp && !seatOf(client.uid)) {
+        const ti = sp.table | 0, si = sp.seat | 0;
+        const st = inRange(ti, si) ? tables[ti] : null;
+        if (st && st.status === 'playing' && st.game && st.seats[si] && st.seats[si].kind === 'human') {
+          client.spectate = { table: ti, seat: si };
+          const frame = st.game.spectateFrame(si);
+          if (frame) send(client.ws, frame);
+        } else send(client.ws, { type: 'noGame' });
+        break;
+      }
+      client.spectate = null;
       const at = seatOf(client.uid); // reconnection: reclaim a seat held while we were away
       const t = at ? tables[at.table] : null;
       if (t) t.seats[at.seat].name = client.name;
@@ -292,7 +312,7 @@ const wss = new WebSocketServer({
 
 wss.on('connection', (ws) => {
   const id = nextId++;
-  const client = { ws, id, uid: null, name: '' };
+  const client = { ws, id, uid: null, name: '', spectate: null };
   clients.set(id, client);
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });

@@ -190,6 +190,9 @@ export class RemoteBackend {
     this.url = config.url;
     this.uid = config.uid;
     this.name = config.name || '';
+    // Spectator (viewer mode): { table, seat } of the human seat to watch. When set, hello asks the
+    // server to spectate that seat and EVERY action is suppressed — a pure, read-only viewer.
+    this.spectate = config.spectate || null;
     this._handler = null;
     this._view = null;       // last GameView, rotated to our seat
     this._ws = null;
@@ -206,7 +209,7 @@ export class RemoteBackend {
   connect() {
     this._closed = false;
     const ws = this._ws = new WebSocket(this.url);
-    ws.onopen = () => this._send({ type: 'hello', uid: this.uid, name: this.name });
+    ws.onopen = () => this._send({ type: 'hello', uid: this.uid, name: this.name, ...(this.spectate ? { spectate: this.spectate } : {}) });
     ws.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.type === 'noGame') { if (this._handler) this._handler({ type: 'gameGone' }); return; } // no live game on this socket → the UI returns to the lobby
@@ -218,7 +221,9 @@ export class RemoteBackend {
   dispose() { this._closed = true; clearTimeout(this._reconnect); if (this._ws) try { this._ws.close(); } catch {} this._ws = null; this._handler = null; }
 
   _send(m) { if (this._ws && this._ws.readyState === 1) this._ws.send(JSON.stringify(m)); }
-  _act(a) { this._send({ type: 'action', ...a }); }
+  // A spectator never acts — gating here makes every action method (discard/claim/…/decideLaZhuang/
+  // next/dealDone) a no-op, so the viewer can click the live UI without ever affecting the game.
+  _act(a) { if (this.spectate) return; this._send({ type: 'action', ...a }); }
 
   async _process(frame) {
     this._seat = frame.view.yourSeat;

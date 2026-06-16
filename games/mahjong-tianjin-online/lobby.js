@@ -165,6 +165,14 @@ function render() {
     chair.innerHTML = `<span class="seat-pad"><span class="wind">${WINDS[si]}</span><span class="who">${esc(who)}</span>` +
       (seat && seat.kind === 'human' ? `<span class="ready ${seat.ready ? 'yes' : 'no'}">${seat.ready ? '✓ 已准备' : '未准备'}</span>` : '') + `</span>`;
     chair.onclick = (ev) => onChairClick(ev, 0, si);
+    // Spectate: when the table is mid-game and I'm not in it, an eye on each human seat jumps into a
+    // read-only view of that player (same UI as them, but no actions).
+    if (t.status === 'playing' && !atTable && seat && seat.kind === 'human') {
+      const eye = document.createElement('button');
+      eye.className = 'watch-eye'; eye.textContent = '👁'; eye.title = `观战 ${seat.name}`;
+      eye.onclick = (ev) => { ev.stopPropagation(); watchSeat(si); };
+      chair.appendChild(eye);
+    }
     tbl.appendChild(chair);
   });
   col.appendChild(tbl);
@@ -214,6 +222,12 @@ function render() {
 function goToGame() {
   const params = new URLSearchParams(location.search);
   params.set('online', '1');
+  location.href = '../mahjong-tianjin/?' + params.toString();
+}
+// Enter read-only viewer mode for a player's seat: hand off to the game page in spectate mode.
+function watchSeat(seat) {
+  const params = new URLSearchParams(location.search);
+  params.set('online', '1'); params.set('viewer', '1'); params.set('vseat', String(seat));
   location.href = '../mahjong-tianjin/?' + params.toString();
 }
 function showStart(m) {

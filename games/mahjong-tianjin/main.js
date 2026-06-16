@@ -61,6 +61,10 @@ let fastMode = localStorage.getItem('mahjong-fast') !== '0'; // checked (on) by 
 // here once a table starts). EVERYTHING online is gated on ONLINE; with it unset the page is
 // the offline single-player game, byte-for-byte unchanged.
 const ONLINE = !!new URLSearchParams(location.search).get('online');
+// Viewer mode (online only): ?viewer=1&vseat=N → watch human seat N read-only. The server sends us
+// that seat's frames (so the UI renders exactly as that player sees it) and ignores any action.
+const VIEWER = ONLINE && !!new URLSearchParams(location.search).get('viewer');
+const VIEWER_SEAT = VIEWER ? (parseInt(new URLSearchParams(location.search).get('vseat'), 10) || 0) : 0;
 const ONLINE_URL = new URLSearchParams(location.search).get('server') ||
   ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? `ws://${location.hostname}:8090` : 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net');
 
@@ -151,7 +155,8 @@ function renderedHand() { return buildOrder(game.hands[HUMAN], isWildFn); }
 function renderHud() {
   // ---- header ----
   // 圈 (prevailing wind) · 庄 (the 庄's fixed 座风 — only the 庄 moves within the 锅) · 难度
-  $('round-info').innerHTML =
+  const watching = VIEWER && game.seatNames ? `<span class="viewing">👁 观战 ${esc(game.seatNames[HUMAN] || '')}</span> · ` : '';
+  $('round-info').innerHTML = watching +
     `<b>${WIND[game.prevailingWind]}圈</b> · <b>${WIND[game.seatWind(game.dealer)]}庄</b> · ` +
     (ONLINE ? '联机' : `难度 <b>${LEVEL_NAMES[level]}</b>`);
   renderScores();
@@ -729,6 +734,7 @@ function breakdownHtml(r) {
 let onlineReadied = false;  // result-modal ready toggle (online): 我准备好了 ⇄ ✓已准备
 let onlineEndsPot = false;  // this result closes the 锅 (server-flagged) → finish button, no toggle
 function nextHand() {
+  if (VIEWER) return; // a spectator can't ready up — the next hand deals when the real players are ready
   if (ONLINE) {
     if (onlineEndsPot) {
       // Final hand of the 锅: this only ENDS it — the server replies with 'potOver' → 最终成绩. No
@@ -785,7 +791,8 @@ function startHand() {
 // resyncs the game in progress.
 function connectOnline() {
   if (!scene) { scene = new Renderer($('scene')); scene.setRotated(isPortrait); scene.resize(); scene.onHandDrawSettled = selectDrawnTile; }
-  backend = createBackend({ mode: 'remote', url: ONLINE_URL, uid: localStorage.getItem('mahjong-online-uid') || '', name: localStorage.getItem('mahjong-online-name') || '' });
+  backend = createBackend({ mode: 'remote', url: ONLINE_URL, uid: localStorage.getItem('mahjong-online-uid') || '', name: localStorage.getItem('mahjong-online-name') || '',
+    spectate: VIEWER ? { table: 0, seat: VIEWER_SEAT } : null });
   backend.onEvent(onBackendEvent);
   backend.connect();
 }
@@ -837,6 +844,7 @@ function focusLzBtn() {
   btns[lzFocus] && btns[lzFocus].focus();
 }
 function resolveLz(yes) {
+  if (VIEWER) return; // a spectator can't answer — the panel updates from the real player's choice
   if (!lzCallback) return;
   const cb = lzCallback; lzCallback = null;
   cb(yes); // send the answer; keep the panel up (now in 'waiting' state) until play resumes

@@ -179,6 +179,10 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 
 .corner-btn.focus { outline: 3px solid #fff; outline-offset: 2px; }
 
+/* viewer/spectator indicator — folded into #round-info so a read-only watcher always knows they're观战 */
+#round-info .viewing { color: #ffe6a6; font-weight: 800; background: rgba(232,196,102,0.14);
+  border: 1px solid var(--gold); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+
 /* ---------- action HUD ---------- */
 #action-hud {
   position: absolute; z-index: 4; left: 50%; bottom: max(56px, calc(env(safe-area-inset-bottom) + 48px));

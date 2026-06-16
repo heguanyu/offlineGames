@@ -53,6 +53,11 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .chair .who { font-weight: 700; max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chair.empty .who { color: rgba(255,246,232,0.6); font-weight: 500; }
 .chair .ready { font-size: 0.64rem; margin-top: 1px; }
+/* spectate eye — small button pinned to a human chair while the table is mid-game */
+.watch-eye { position: absolute; top: -8px; right: -8px; z-index: 5; width: 26px; height: 26px; padding: 0;
+  border-radius: 50%; border: 1px solid var(--gold); background: rgba(4,18,12,0.9); color: #ffe6a6;
+  font-size: 0.8rem; line-height: 1; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+.watch-eye:hover { background: #1b5e45; box-shadow: 0 0 0 2px var(--gold); }
 .chair .ready.yes { color: #9af7a6; } .chair .ready.no { color: #ffd27a; }
 
 /* lifetime leaderboard (server-kept, keyed by uid) */
