@@ -125,6 +125,18 @@ function setupEmuPersistence({ dbName, gameName, system }) {
       console.warn('quick state restore failed:', e);
     }
 
+    // Force the IDBFS mount (/data/saves) to commit to IndexedDB on EVERY battery-save write.
+    // EmulatorJS's saveSaveFiles() only writes the in-memory FS and leaves persistence to emscripten
+    // IDBFS autoPersist — a debounced syncfs that on iOS frequently doesn't run before a home-screen
+    // swipe / force-quit freezes the PWA, so the in-game save is silently dropped (the game comes back
+    // fresh). Wrapping saveSaveFiles covers EVERY caller — the 30s interval, the exit handler, the
+    // quick-save flush and the page-hide flush below — so a save is durable the moment it's written.
+    const origSaveSaveFiles = gm.saveSaveFiles.bind(gm);
+    gm.saveSaveFiles = () => {
+      origSaveSaveFiles();
+      try { if (gm.FS && gm.FS.syncfs) gm.FS.syncfs(false, (e) => { if (e) console.warn('save syncfs failed:', e); }); } catch (e) { /* fs gone */ }
+    };
+
     // Quick save also persists the state and flushes the battery save.
     const origQuickSave = gm.quickSave.bind(gm);
     gm.quickSave = (slot) => {
@@ -133,7 +145,7 @@ function setupEmuPersistence({ dbName, gameName, system }) {
         try {
           const data = gm.FS.readFile('/' + (slot || 1) + '-quick.state');
           putState(slot || 1, data).catch((e) => console.warn('state persist failed:', e));
-          gm.saveSaveFiles();
+          gm.saveSaveFiles(); // (wrapped above → writes SRAM + syncfs to IndexedDB)
         } catch (e) {
           console.warn('state persist failed:', e);
         }
