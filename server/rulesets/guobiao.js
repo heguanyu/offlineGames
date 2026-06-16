@@ -61,7 +61,7 @@ export const ruleset = {
     const g = t.game;
     const base = {
       yourSeat: seat, scores: t.scores, dealer: t.dealer, roundWind: t.prevailingWind, rounds: t.rounds,
-      seatNames: t.seats.map((s) => (s.kind === 'bot' ? '机器人' : s.name)),
+      seatNames: t.seats.map((s) => (s.name || '机器人')), // bots carry a seat-based name (东方雨…)
       seatKinds: t.seats.map((s) => s.kind),
     };
     if (!g) return base;

@@ -1,3 +1,4 @@
+@import '../mahjong-common/timer-ring.css';
 :root { --gold: #e8c466; }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
@@ -40,7 +41,7 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .chair.north { grid-column: 1; grid-row: 2; }
 /* the seat (bigger rectangle) is 60% along the table-edge axis; the back (thin wood strip) is the
    SAME width as the seat and centred behind it, so each chair reads as one piece. */
-.chair .seat-pad { display: flex; flex-direction: column; align-items: center; justify-content: center;
+.chair .seat-pad { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
   width: 100%; height: 100%; min-height: 54px; padding: 4px; border-radius: 10px;
   background: linear-gradient(#9a6a33, #6c4823); color: #fff6e8; font-size: 0.76rem;
   box-shadow: 0 3px 6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.18); transition: box-shadow .1s; }
@@ -89,12 +90,10 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .table-ready { position: absolute; left: 50%; top: 60%; transform: translate(-50%, -50%); z-index: 6;
   white-space: nowrap; box-shadow: 0 3px 0 #b8902f, 0 4px 14px rgba(0,0,0,0.5); }
 .table-ready.on { box-shadow: 0 3px 0 #2c7a3e, 0 4px 14px rgba(0,0,0,0.5); }
-/* 1-minute ready countdown, centred on the felt just above the toggle */
-.ready-timer { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 6;
-  display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; text-align: center; }
-.ready-timer .rt-num { font-size: 1.5rem; font-weight: 800; color: #ffe6a6; line-height: 1;
-  text-shadow: 0 2px 6px rgba(0,0,0,0.6); font-variant-numeric: tabular-nums; }
-.ready-timer .rt-cap { font-size: 0.62rem; font-weight: 700; color: rgba(255,230,166,0.85); }
+/* 1-minute ready countdown — the shared .ring-timer (timer-ring.css), centred on the felt just above
+   the ready toggle. Server-synced (re-pushed each second) → a slow tween smooths the arc/colour. */
+.ready-timer { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 6;
+  --rt-size: 76px; --rt-tween: 1s; }
 
 /* lifetime leaderboard (server-kept, keyed by uid) */
 #leaderboard { background: rgba(4,18,12,0.55); border: 1px solid #1c5a44; border-radius: 16px; padding: 14px 16px; min-width: 232px; max-width: 300px; }

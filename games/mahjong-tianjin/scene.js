@@ -8,6 +8,7 @@
 // reflow when a tile leaves, and discards dropping into the pool — for free.
 import * as THREE from './lib/three.module.min.js';
 import { suitOf, rankOf, shuffle } from './engine.js';
+import { ringColor } from '../mahjong-common/timer-ring.js';
 
 const TW = 1.0, TH = 1.35, TD = 0.62; // tile width / height / depth
 const FELT = 16;
@@ -282,14 +283,16 @@ export class MahjongScene {
   setTurnTimer(o) {
     if (!this.timerMesh) return;
     if (!o || !o.show) { this.timerMesh.visible = false; return; }
-    const x = this._tt.ctx, S = 256, cx = 128, cy = 128, R = 92;
-    const col = o.low ? '#ff5c5c' : '#6fe08a';
+    const x = this._tt.ctx, S = 256, R = 92;
+    // colour sweeps green→yellow→red with progress (shared with the DOM ring); shake the final seconds.
+    const col = ringColor(o.frac);
+    const j = o.low ? 6 : 0, cx = 128 + (j ? (Math.random() * 2 - 1) * j : 0), cy = 128 + (j ? (Math.random() * 2 - 1) * j : 0);
     x.clearRect(0, 0, S, S);
     x.beginPath(); x.arc(cx, cy, R + 22, 0, Math.PI * 2); x.fillStyle = 'rgba(6,26,18,0.9)'; x.fill();
     x.lineWidth = 18; x.lineCap = 'round';
     x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.strokeStyle = 'rgba(0,0,0,0.45)'; x.stroke();
     x.beginPath(); x.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(1, o.frac))); x.strokeStyle = col; x.stroke();
-    x.fillStyle = o.low ? '#ff9a9a' : '#eaf6f0'; x.font = '900 122px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#eaf6f0'; x.font = '900 122px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText(String(o.secs), cx, cy + 6);
     this._tt.tex.needsUpdate = true;
     this.timerMesh.visible = true;

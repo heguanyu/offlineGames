@@ -3,6 +3,7 @@
 // add+remove bot). The server is authoritative and PUSHES the full lobby on every change —
 // the client never polls, it just re-renders each 'lobby' frame. When our table fills with
 // ready players/bots the server sends 'gameStart'.
+import { createRing, updateRing } from '../mahjong-common/timer-ring.js';
 const $ = (id) => document.getElementById(id);
 
 // Pick the game server. The Azure App Service now serves this very page AND the WebSocket
@@ -36,7 +37,7 @@ let uid = localStorage.getItem('mahjong-online-uid');
 if (!uid) { uid = (crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2)); localStorage.setItem('mahjong-online-uid', uid); }
 let pendingSit = null;          // a {table, seat} sit queued until a name is entered
 let reconnectTimer = null;
-let readyDeadline = null;       // local timestamp the ready countdown ticks toward (null = no countdown)
+let lastSig = null;             // structural signature of the last rendered frame (everything but the countdowns)
 
 // ---- connection (auto-reconnecting) --------------------------------------
 function connect() {
@@ -45,7 +46,14 @@ function connect() {
   ws.onopen = () => { setConn('on'); send({ type: 'hello', name, uid, game: GAME }); };
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
-    if (m.type === 'lobby') { state = m; render(); }
+    if (m.type === 'lobby') {
+      // The server re-pushes the lobby every second while a ready countdown runs. If only the
+      // countdowns moved (same seats/status), update the timers IN PLACE — no DOM churn, the ring
+      // keeps its element so its colour/arc tween smoothly. A structural change → full re-render.
+      const sig = structSig(m); state = m;
+      if (sig === lastSig) refreshTimers();
+      else { lastSig = sig; render(); }
+    }
     else if (m.type === 'gameStart') showStart(m);
   };
   ws.onclose = () => { setConn('off'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(connect, 1500); };
@@ -111,13 +119,32 @@ $('name-dialog-input').addEventListener('keydown', (e) => { if (e.key === 'Enter
 
 // ---- render --------------------------------------------------------------
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const fmtCountdown = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-// Tick the ready countdown between server frames (the lobby only pushes on changes, not every second).
-setInterval(() => {
-  if (readyDeadline == null) return;
-  const num = document.querySelector('#ready-timer .rt-num');
-  if (num) num.textContent = fmtCountdown(readyDeadline - Date.now());
-}, 500);
+const fmtMMSS = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+// Everything that affects the DOM STRUCTURE (so two frames with the same sig differ only in the
+// ticking countdowns and can be applied without rebuilding). readyIn is deliberately excluded.
+function structSig(m) {
+  return JSON.stringify({
+    g: m.game,
+    t: (m.tables || []).map((t) => ({ s: t.status, g: t.game, seats: t.seats.map((se) => se && { k: se.kind, n: se.name, r: !!se.ready }) })),
+    you: { seat: m.you && m.you.seat, ready: m.you && m.you.ready },
+    lb: m.leaderboard,
+  });
+}
+// Apply the latest server countdowns to the existing DOM (called for countdown-only frames). Uses the
+// server's values (server-synced), just without rebuilding — the ring tweens between them via CSS.
+function refreshTimers() {
+  const ring = document.getElementById('ready-timer');
+  if (ring && state.you && !state.you.ready && state.you.readyIn != null) {
+    const total = state.you.readyTotal || 60000, left = state.you.readyIn;
+    updateRing(ring, { show: true, secs: Math.ceil(left / 1000), frac: left / total, shake: left <= 5000 });
+  }
+  const t = state.tables[activeTable]; if (!t) return;
+  for (const chair of document.querySelectorAll('.chair')) {
+    const seat = t.seats[+chair.dataset.seat];
+    const mm = chair.querySelector('.ready.no .rt-mmss');
+    if (mm && seat && seat.readyIn != null) mm.textContent = fmtMMSS(seat.readyIn);
+  }
+}
 
 function render() {
   // keep the name box in sync unless the player is actively editing it
@@ -147,9 +174,19 @@ function render() {
     const chair = document.createElement('div');
     chair.dataset.table = activeTable; chair.dataset.seat = si;
     chair.className = `chair ${POS[si]}` + (!seat ? ' empty' : seat.kind === 'bot' ? ' bot' : '') + (isMe ? ' me' : '') + (t.status === 'playing' ? ' playing' : '');
-    const who = !seat ? '空位' : seat.kind === 'bot' ? '🤖 机器人' : seat.name;
-    chair.innerHTML = `<span class="seat-pad"><span class="wind">${WINDS[si]}</span><span class="who">${esc(who)}</span>` +
-      (seat && seat.kind === 'human' ? `<span class="ready ${seat.ready ? 'yes' : 'no'}">${seat.ready ? '✓ 已准备' : '未准备'}</span>` : '') + `</span>`;
+    const who = !seat ? '空位' : seat.kind === 'bot' ? '🤖 ' + (seat.name || '机器人') : seat.name;
+    // Human seats show a ready badge; a not-ready player shows their own 1-min countdown 未准备(mm:ss),
+    // ticked client-side from the local deadline stashed in data-deadline.
+    let readyHtml = '';
+    if (seat && seat.kind === 'human') {
+      if (seat.ready) readyHtml = `<span class="ready yes">✓ 已准备</span>`;
+      else if (seat.readyIn != null) readyHtml = `<span class="ready no">未准备(<span class="rt-mmss">${fmtMMSS(seat.readyIn)}</span>)</span>`;
+      else readyHtml = `<span class="ready no">未准备</span>`;
+    }
+    chair.innerHTML = `<span class="seat-pad"><span class="wind">${WINDS[si]}</span><span class="who">${esc(who)}</span>${readyHtml}</span>`;
+    // Badges (bot toggle / spectate eye) pin to the SEAT rectangle, not the chair cell, so they keep
+    // hugging the seat after it was shrunk to 60%.
+    const pad = chair.querySelector('.seat-pad');
     // Clicking an empty seat sits you there directly (no menu); occupied seats aren't clickable.
     if (waiting && !seat) chair.onclick = (ev) => { ev.stopPropagation(); requireNameThenSit(activeTable, si); };
     // Per-seat bot toggle: a 🤖 button beside an empty seat adds a bot; a 🤖 with a 🚫 over it removes
@@ -160,7 +197,7 @@ function render() {
       botBtn.title = seat ? '移除机器人' : '添加机器人';
       botBtn.innerHTML = `<span class="bot-icon">🤖</span>` + (seat ? `<span class="bot-ban">🚫</span>` : '');
       botBtn.onclick = (ev) => { ev.stopPropagation(); send({ type: seat ? 'removeBot' : 'addBot', table: activeTable, seat: si }); };
-      chair.appendChild(botBtn);
+      pad.appendChild(botBtn);
     }
     // Spectate: when the table is mid-game and I'm not in it, an eye on each human seat jumps into a
     // read-only view of that player (same UI as them, but no actions).
@@ -168,7 +205,7 @@ function render() {
       const eye = document.createElement('button');
       eye.className = 'watch-eye'; eye.textContent = '👁'; eye.title = `观战 ${seat.name}`;
       eye.onclick = (ev) => { ev.stopPropagation(); watchSeat(si); };
-      chair.appendChild(eye);
+      pad.appendChild(eye);
     }
     // My own seat while the table fills: a 离开座位 button pinned to my chair — below it for the side
     // seats (北/南), to its right for the top/bottom seats (西/东). CSS positions it by POS class.
@@ -185,17 +222,17 @@ function render() {
   // auto-frees your seat (it sends the remaining ms as you.readyIn; we tick it down locally).
   if (atTable && waiting) {
     if (!state.you.ready && state.you.readyIn != null) {
-      readyDeadline = Date.now() + state.you.readyIn;
-      const timer = document.createElement('div'); timer.className = 'ready-timer'; timer.id = 'ready-timer';
-      timer.innerHTML = `<span class="rt-num">${fmtCountdown(state.you.readyIn)}</span><span class="rt-cap">未准备将自动离座</span>`;
+      const total = state.you.readyTotal || 60000, left = state.you.readyIn;
+      const timer = createRing('ready-timer'); timer.id = 'ready-timer'; timer.title = '未准备将自动离座';
       tbl.appendChild(timer);
-    } else { readyDeadline = null; }
+      updateRing(timer, { show: true, secs: Math.ceil(left / 1000), frac: left / total, shake: left <= 5000 });
+    }
     const ready = document.createElement('button');
     ready.className = 'table-ready btn ready' + (state.you.ready ? ' on' : '');
     ready.textContent = state.you.ready ? '✓ 已准备' : '点击准备';
     ready.onclick = (ev) => { ev.stopPropagation(); send({ type: 'ready', ready: !state.you.ready }); };
     tbl.appendChild(ready);
-  } else { readyDeadline = null; }
+  }
   col.appendChild(tbl);
 
   if (atTable && t.status === 'playing') {

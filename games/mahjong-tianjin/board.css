@@ -1,6 +1,7 @@
 /* Shared table styles for the mahjong-family games (天津 / 国标 / 无定番).
    Generated dedup of the per-page <style> blocks — base table + flat 2D board.
    Page-specific rules live inline (天津) or in guobiao.css (国标 / 无定番). */
+@import '../mahjong-common/timer-ring.css';
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -523,21 +524,13 @@ body.flat .seat-hand .tile { --tw: 24px; --th: 33px; }
 
 body.flat .seat-hand.top { transform: translate(-50%, -6px); }
 
-/* online turn countdown — a depleting ring with the seconds left before the server auto-acts.
-   Shared by 天津 / 国标 / 无定番; the flat (2D) renderer drives #turn-timer, the 3D table draws its
-   own ring on the felt (see scene.js setTurnTimer). */
+/* online turn countdown — the shared .ring-timer (timer-ring.css): a depleting ring that sweeps
+   green→yellow→red and shakes in the final seconds, with the seconds left before the server auto-acts.
+   Shared by 天津 / 国标 / 无定番; the flat (2D) renderer drives this #turn-timer, the 3D table draws its
+   own ring on the felt (see scene.js setTurnTimer). Here we only place + size it (updates ~10×/s, so a
+   short tween keeps it crisp). */
 #turn-timer {
-  position: absolute; z-index: 9; top: 72px; left: 50%; transform: translateX(-50%); pointer-events: none;
-  width: 118px; height: 118px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: conic-gradient(var(--tc, #6fe08a) calc(var(--tp, 100) * 1%), rgba(0,0,0,0.42) 0);
-  box-shadow: 0 5px 18px rgba(0,0,0,0.6);
+  position: absolute; z-index: 9; top: 72px; left: 50%; transform: translateX(-50%);
+  --rt-size: 118px; --rt-tween: 0.15s;
 }
-#turn-timer.hidden { display: none; } /* ID-specificity beats #turn-timer{display:flex} */
-#turn-timer::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: rgba(6,26,18,0.95); }
-#turn-timer-num { position: relative; font-size: 3rem; font-weight: 900; color: #eaf6f0; line-height: 1; }
-#turn-timer.low { --tc: #ff5c5c; animation: tt-pulse 0.7s ease-in-out infinite; }
-#turn-timer.low #turn-timer-num { color: #ff8a8a; }
-@keyframes tt-pulse { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.07); } }
-body.flat #turn-timer { top: 54px; width: 92px; height: 92px; }
-body.flat #turn-timer-num { font-size: 2.3rem; }
+body.flat #turn-timer { top: 54px; --rt-size: 92px; }

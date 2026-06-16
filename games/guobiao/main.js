@@ -9,6 +9,7 @@ import { MahjongScene2D } from '../mahjong-tianjin/scene2d.js';
 import { Sound } from '../mahjong-tianjin/sound.js';
 import { buildOrder } from '../mahjong-tianjin/handorder.js';
 import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands } from '../mahjong-tianjin/ui-util.js';
+import { BOT_NAMES } from '../mahjong-common/bot-names.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -206,11 +207,12 @@ function positionTingBanner() {
   }
 }
 
-// Seat label: online shows the real player name (机器人 for a bot seat); offline the relation label.
+// Seat label: the human shows 玩家; a bot shows its seat name (东方雨…). Online uses the server's
+// name (which is the same seat-based bot name, or a real player's name) with the bot name as fallback.
 // Names are sanitized server-side to CJK/letters only, so they're safe to interpolate.
 function plateName(p) {
-  if (ONLINE && game.seatNames) return game.seatNames[p] || (game.seatKinds && game.seatKinds[p] === 'bot' ? '机器人' : SEAT_LABEL[p]);
-  return SEAT_LABEL[p];
+  if (ONLINE && game.seatNames) return game.seatNames[p] || (p === HUMAN ? SEAT_LABEL[p] : BOT_NAMES[p]);
+  return p === HUMAN ? SEAT_LABEL[p] : BOT_NAMES[p];
 }
 function renderPlate(p) {
   const seat = $('plate-' + p);

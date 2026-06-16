@@ -9,6 +9,7 @@ import { MahjongScene2D } from './scene2d.js';
 import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
 import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands, seatBadgeHtml } from './ui-util.js';
+import { BOT_NAMES } from '../mahjong-common/bot-names.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -265,13 +266,16 @@ function renderPlate(p) {
   const thinking = game.phase !== PHASE.OVER && game.turn === p && p !== HUMAN;
   const isDealer = p === game.dealer;
   const active = game.turn === p && game.phase !== PHASE.OVER;
-  // Online: 东/南/西/北 · 玩家名 · 自己/对家/上家/下家. Offline: just 东 · 玩家/对家/…
+  // Online: 东/南/西/北 · 名字 · 自己/下家/对家/上家. Offline: the human reads 玩家; each bot reads its
+  // seat name (东方雨…) over its relation label, matching the online layout.
   let label;
   if (ONLINE && game.seatNames) {
-    const name = game.seatNames[p] || (game.seatKinds && game.seatKinds[p] === 'bot' ? '机器人' : '');
+    const name = game.seatNames[p] || (p === HUMAN ? '' : BOT_NAMES[p]);
     label = (name ? `<span class="pname">${esc(name)}</span>` : '') + `<span class="prel">${REL_LABEL[p]}</span>`;
-  } else {
+  } else if (p === HUMAN) {
     label = `<span>${SEAT_LABEL[p]}</span>`;
+  } else {
+    label = `<span class="pname">${BOT_NAMES[p]}</span><span class="prel">${SEAT_LABEL[p]}</span>`;
   }
   seat.innerHTML =
     seatBadgeHtml(game, p) + // 👑 (庄) / ⚔️ (拉庄), above the nameplate

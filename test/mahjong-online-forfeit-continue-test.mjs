@@ -73,11 +73,11 @@ B.onMsg = (m) => {
   if (m.type !== 'game') return;
   if (aForfeited) {
     bFramesAfter++;
-    // A is absolute seat 0 → B's display index (0 - 1 + 4) % 4 = 3. The namecard must read 机器人
-    // (not A's old name) AND the seat kind must be bot — the forfeit→bot rename, everywhere.
-    if (m.view.seatKinds && m.view.seatKinds[3] === 'bot' && m.view.seatNames && m.view.seatNames[3] === '机器人') bSawBotAtA = true;
+    // The view is absolute (yourSeat tells the client how to rotate). A is absolute seat 0, so after
+    // the forfeit its seat must read as a bot whose name is the seat name 东方雨 (not A's old name '甲').
+    if (m.view.seatKinds && m.view.seatKinds[0] === 'bot' && m.view.seatNames && m.view.seatNames[0] === '东方雨') bSawBotAtA = true;
     if (bFramesAfter >= 4 && bSawBotAtA && aGotLobbyAfter) {
-      return done(0, `A forfeited → replaced by a bot; B kept playing (${bFramesAfter} frames), A's seat shows 机器人, A returned to lobby\nMAHJONG ONLINE FORFEIT-CONTINUE TEST PASS`);
+      return done(0, `A forfeited → replaced by a bot; B kept playing (${bFramesAfter} frames), A's seat shows 东方雨 (bot), A returned to lobby\nMAHJONG ONLINE FORFEIT-CONTINUE TEST PASS`);
     }
   }
   autoPlay(B, m.ev, m.view);

@@ -1,0 +1,27 @@
+/* Reusable countdown ring — see games/mahjong-common/timer-ring.js. The filled arc is --rt-pct% of
+   the circle; its colour is hsl(--rt-hue …) sweeping green→yellow→red. @property registers both vars
+   so they TRANSITION smoothly between updates (--rt-tween), even when the value is only refreshed
+   once a second (the lobby's server-synced ready timer). Callers set position, --rt-size, --rt-tween. */
+@property --rt-pct { syntax: '<number>'; inherits: false; initial-value: 100; }
+@property --rt-hue { syntax: '<number>'; inherits: false; initial-value: 120; }
+
+.ring-timer {
+  --rt-size: 96px; --rt-tween: 0.9s;
+  width: var(--rt-size); height: var(--rt-size); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; pointer-events: none;
+  background: conic-gradient(hsl(var(--rt-hue), 78%, 52%) calc(var(--rt-pct) * 1%), rgba(0,0,0,0.42) 0);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.55);
+  transition: --rt-pct var(--rt-tween) linear, --rt-hue var(--rt-tween) linear;
+}
+.ring-timer::before { content: ''; position: absolute; inset: 11%; border-radius: 50%; background: rgba(6,26,18,0.95); }
+.ring-timer .rt-num { position: relative; font-weight: 900; color: #eaf6f0; line-height: 1;
+  font-size: calc(var(--rt-size) * 0.42); font-variant-numeric: tabular-nums; }
+.ring-timer.hidden { display: none; }
+
+/* final-seconds shake — uses the standalone `translate` property so it never fights a caller's
+   `transform` (e.g. translate(-50%,-50%) centring). */
+.ring-timer.shake { animation: rt-shake 0.45s ease-in-out infinite; }
+@keyframes rt-shake {
+  0%, 100% { translate: 0 0; } 20% { translate: -2px 1px; } 40% { translate: 2px -1px; }
+  60% { translate: -1px -1px; } 80% { translate: 1px 1px; }
+}

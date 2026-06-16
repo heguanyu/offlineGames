@@ -10,6 +10,7 @@
 // when sync() is called (i.e. on a real game event); a static board between turns
 // costs ~zero. No deck wall, no flight animations — just the live state.
 import { faceTileEl, seatBadgeHtml } from './ui-util.js';
+import { updateRing } from '../mahjong-common/timer-ring.js';
 
 const WIND = ['东', '南', '西', '北'];
 const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
@@ -70,14 +71,11 @@ export class MahjongScene2D {
   // goes unused; done() resumes main.js's tick().
   beginDeal(game, done) { this._render(game, { renderedHand: game.hands[HUMAN], myTurn: false }); requestAnimationFrame(() => done()); }
 
-  // Flat mode has no 3D table, so the turn countdown uses the 2D DOM ring (#turn-timer).
+  // Flat mode has no 3D table, so the turn countdown uses the 2D DOM ring (#turn-timer), the shared
+  // .ring-timer component (green→yellow→red, shakes in the final seconds).
   setTurnTimer(o) {
     const el = document.getElementById('turn-timer'); if (!el) return;
-    if (!o || !o.show) { el.classList.add('hidden'); return; }
-    el.style.setProperty('--tp', (o.frac * 100).toFixed(1));
-    el.classList.toggle('low', !!o.low);
-    const n = document.getElementById('turn-timer-num'); if (n) n.textContent = o.secs;
-    el.classList.remove('hidden');
+    updateRing(el, o && o.show ? { show: true, secs: o.secs, frac: o.frac, shake: !!o.low } : { show: false });
   }
 
   beginClaimDemo(player, ms = 2000) { this.claimDemo = { player, until: performance.now() + ms }; if (this._last) this._render(this._last.game, this._last.ui); }

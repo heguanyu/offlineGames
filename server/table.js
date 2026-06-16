@@ -10,6 +10,7 @@
 // comes from a `ruleset` (server/rulesets/*.js). 天津 is the default; pass the 国标 ruleset to
 // host that game with the identical protocol.
 import { ruleset as tianjin } from './rulesets/tianjin.js';
+import { BOT_NAMES } from '../games/mahjong-common/bot-names.js';
 
 const BOT_THINK_MS = +process.env.BOT_THINK_MS || 700; // bot "thinking" pace (tests set it low)
 const TURN_TIMEOUT_MS = 30000;  // auto-act if a human doesn't move
@@ -302,7 +303,7 @@ export class Table {
   // afterward to decide whether to conclude the 锅 (no humans left) or keep playing.
   forfeit(seat) {
     if (!this.isHuman(seat)) return false;
-    this.seats[seat] = { kind: 'bot' };
+    this.seats[seat] = { kind: 'bot', name: BOT_NAMES[seat] }; // a bot takes the seat under its seat name
     if (this._lzPending) this._lzPending.delete(seat); // its hand is no longer withheld (it's a bot now)
     if (this._lz && this._lz.need.has(seat)) { this._lz.answers[seat] = false; this._lz.need.delete(seat); if (this._lz.need.size === 0) this._lz.finish(); else this._emitLz(); }
     if (this._next && this._next.need.has(seat)) { this._next.need.delete(seat); if (this._next.need.size === 0) this._next.finish(); }

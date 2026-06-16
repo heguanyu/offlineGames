@@ -22,6 +22,7 @@ import { WebSocketServer } from 'ws';
 import { Table } from './table.js';
 import { ruleset as tianjin } from './rulesets/tianjin.js';
 import { ruleset as guobiao, freeRuleset as guobiaoFree } from './rulesets/guobiao.js';
+import { BOT_NAMES } from '../games/mahjong-common/bot-names.js';
 import db from './db.js';
 
 // The game each table hosts. Same lobby + Table + protocol for every entry; the ruleset is the only
@@ -132,14 +133,18 @@ function lobbyFor(uid, game) {
     game, // the lobby is split per game; the client renders only its game's table + this board
     you: { name: (uid && [...clients.values()].find((c) => c.uid === uid)?.name) || '', seat: mine,
       ready: mine ? !!tables[mine.table].seats[mine.seat].ready : false,
-      // ms left on the ready countdown (null once ready / not seated) — the client ticks it down
+      // ms left on the ready countdown (null once ready / not seated) — the client ticks it down and
+      // draws a depleting ring against the full window (readyTotal).
       readyIn: (mine && !tables[mine.table].seats[mine.seat].ready && tables[mine.table].seats[mine.seat].readyBy)
-        ? Math.max(0, tables[mine.table].seats[mine.seat].readyBy - Date.now()) : null },
+        ? Math.max(0, tables[mine.table].seats[mine.seat].readyBy - Date.now()) : null,
+      readyTotal: READY_MS },
     tables: tables.map((t) => ({
       id: t.id, status: t.status, game: t.gameType, gameLabel: GAME_LABEL[t.gameType] || t.gameType,
-      seats: t.seats.map((seat) => !seat ? null
-        : seat.kind === 'bot' ? { kind: 'bot' }
-        : { kind: 'human', name: seat.name, ready: !!seat.ready }),
+      seats: t.seats.map((seat, i) => !seat ? null
+        : seat.kind === 'bot' ? { kind: 'bot', name: BOT_NAMES[i] } // bots are named by seat (东方雨…)
+        // readyIn lets every client show a not-ready player's own countdown (未准备(mm:ss)) — no uid leaks
+        : { kind: 'human', name: seat.name, ready: !!seat.ready,
+            readyIn: (!seat.ready && seat.readyBy) ? Math.max(0, seat.readyBy - Date.now()) : null }),
     })),
     leaderboard: leaderboard(game, uid),
   };
@@ -150,7 +155,7 @@ const broadcastLobby = () => { for (const c of clients.values()) send(c.ws, lobb
 // open the game page, then routes that seat's frames to the player's current socket.
 function startGame(t) {
   t.status = 'playing';
-  const gameSeats = t.seats.map((s) => s.kind === 'bot' ? { kind: 'bot' } : { kind: 'human', uid: s.uid, name: s.name });
+  const gameSeats = t.seats.map((s, i) => s.kind === 'bot' ? { kind: 'bot', name: BOT_NAMES[i] } : { kind: 'human', uid: s.uid, name: s.name });
   for (let s = 0; s < SEATS; s++) if (gameSeats[s].kind === 'human') send(uidWs.get(gameSeats[s].uid), { type: 'gameStart', table: t.id, seat: s, wind: WIND[s], game: t.gameType, page: GAME_PAGE[t.gameType] });
   broadcastLobby();
   // route each seat's frames to that player's current socket (reconnection-safe), AND fan them out
@@ -395,17 +400,21 @@ const heartbeat = setInterval(() => {
 wss.on('close', () => clearInterval(heartbeat));
 
 // Ready sweep: a seated human who hasn't readied within READY_MS is removed from the table, so an idle
-// player never blocks a seat indefinitely. Only waiting tables; bots and ready players are untouched.
+// player never blocks a seat indefinitely. While any seat is still counting down we re-push the lobby
+// every tick, so the countdown shown by every client (self + others) is server-synced, not a local
+// guess. Only waiting tables; bots and ready players are untouched.
 const readySweep = setInterval(() => {
-  const now = Date.now(); let changed = false;
+  const now = Date.now(); let changed = false, counting = false;
   for (const t of tables) {
     if (t.status !== 'waiting') continue;
     for (let s = 0; s < SEATS; s++) {
       const seat = t.seats[s];
-      if (seat && seat.kind === 'human' && !seat.ready && seat.readyBy && now > seat.readyBy) { t.seats[s] = null; changed = true; }
+      if (!seat || seat.kind !== 'human' || seat.ready || !seat.readyBy) continue;
+      if (now > seat.readyBy) { t.seats[s] = null; changed = true; } else counting = true;
     }
   }
-  if (changed) { broadcastLobby(); persist(); }
+  if (changed) persist();
+  if (changed || counting) broadcastLobby();
 }, 1000);
 wss.on('close', () => clearInterval(readySweep));
 

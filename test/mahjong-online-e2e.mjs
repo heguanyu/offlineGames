@@ -75,11 +75,15 @@ try {
   // B sees A's seat (server pushed the update — no poll)
   await B.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="0"] .who').textContent.includes('阿强'), { timeout: 4000 });
   if (!(await seatText(B, 0, 0)).includes('阿强')) throw new Error('cross-client sync failed');
-  console.log('B sees A seated (cross-client push)');
+  // B also sees A's not-ready countdown 未准备(mm:ss) — server-synced, pushed each second
+  await B.waitForFunction(() => { const s = document.querySelector('.chair[data-table="0"][data-seat="0"] .ready.no'); return s && /未准备\(\d\d:\d\d\)/.test(s.textContent); }, { timeout: 4000 });
+  console.log('B sees A seated + 未准备 countdown (cross-client push)');
 
   // add/remove bot (the single table, while waiting): B adds a bot to seat 2 then removes it.
   await addBot(B, 0, 2);
   await B.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="2"]').classList.contains('bot'), { timeout: 4000 });
+  // bots are named by seat: seat 2 is 西 → 西门风
+  if (!(await seatText(B, 0, 2)).includes('西门风')) throw new Error('bot not named by seat (want 西门风 at seat 2)');
   await removeBot(B, 0, 2);
   await B.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="2"]').classList.contains('empty'), { timeout: 4000 });
   console.log('add/remove bot OK');
