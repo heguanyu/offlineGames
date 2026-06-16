@@ -166,6 +166,7 @@ function startGame(t) {
 // All four seats filled and every human ready → start the table's authoritative game.
 function maybeStart(t) {
   if (t.status !== 'waiting') return;
+  if (!t.seats.some((s) => s && s.kind === 'human')) return; // never auto-start an all-bot table (e.g. left behind after a forfeit)
   if (!t.seats.every((s) => s && (s.kind === 'bot' || s.ready))) return;
   startGame(t);
 }
@@ -203,7 +204,10 @@ function forfeitSeat(t, seat) {
   t.game.forfeit(seat);            // game: seat → bot + release any pending request so the bot takes over
   t.seats[seat] = { kind: 'bot' };  // lobby: drop the human; a bot holds the seat for the rest of the 锅
   if (t.game.humans().length === 0) {
-    onPotOver(t, t.game.seats, t.game.scores.slice()); // no humans left → conclude (records nothing; all bots)
+    // no humans left → conclude the 锅 NOW and reset the table to empty (clear the orphaned bots, so it
+    // doesn't linger as a phantom all-bot table — which maybeStart would otherwise have auto-started).
+    t.seats = [null, null, null, null];
+    onPotOver(t, t.game.seats, t.game.scores.slice()); // records nothing (all bots); disposes + back to waiting
   } else {
     t.game.pushEvent({ t: 'sync' }); // remaining players re-render with the bot takeover (nameplate → 机器人)
     broadcastLobby();

@@ -33,8 +33,8 @@ function onMsg(msg) {
       if (t.status !== 'waiting') return; // wait for the table to settle back to waiting
       if (msg.you && msg.you.seat) return fail('forfeiter should no longer hold a seat');
       if ((msg.leaderboard || []).some((r) => r.mine)) return fail('forfeiter must NOT be recorded on the leaderboard');
-      if (t.seats[0] && t.seats[0].kind !== 'bot') return fail('forfeited seat should be held by a bot, got: ' + JSON.stringify(t.seats[0]));
-      return done(0, `forfeit concluded the 锅, table back to waiting, seat→bot, no score recorded\nMAHJONG ONLINE FORFEIT TEST PASS`);
+      if (t.seats.some((s) => s)) return fail('the table should reset to EMPTY when the last human forfeits (no phantom all-bot table), got: ' + JSON.stringify(t.seats));
+      return done(0, `forfeit concluded the 锅, table reset to waiting + empty, no score recorded\nMAHJONG ONLINE FORFEIT TEST PASS`);
     }
     if (!setup && msg.you && !msg.you.seat) {
       send({ type: 'sit', table: 0, seat: 0 });

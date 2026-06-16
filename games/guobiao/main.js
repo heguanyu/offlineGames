@@ -104,6 +104,10 @@ function saveSession() {
 }
 { const lv = parseInt(localStorage.getItem(CFG.sessionKey + '-level'), 10); if (lv >= 1 && lv <= 3) level = lv; }
 
+// One 番种 label for the win UI (buttons + result chips). Fans are { name, points }; this renders
+// defensively so an unexpected shape can never surface as "[object Object]" (the winning reason).
+function fanLabel(f) { return (f && typeof f === 'object') ? (f.name != null ? String(f.name) : '') : String(f ?? ''); }
+
 // ---- hand order (no wilds → just sorted; scene.js flanks the drawn tile) ----
 const noWild = () => false;
 function renderedHand() { return buildOrder(game.hands[HUMAN], noWild); }
@@ -248,7 +252,7 @@ function renderActions() {
     // (shown alone); otherwise the waits disclaimer floats big just above the hand.
     if (game.selfDrawWin) {
       const w = game.selfDrawWin;
-      center.appendChild(mkBtn(`胡 · ${w.fans[0].name} · ${w.fan}番`, () => doDeclareWin(), false, 'hu'));
+      center.appendChild(mkBtn(`胡 · ${fanLabel(w.fans[0])} · ${w.fan}番`, () => doDeclareWin(), false, 'hu'));
     } else {
       banner.textContent = `已听 · 自动出牌（等 ${tingWaits.map(tileName).join(' ')}）`;
     }
@@ -259,7 +263,7 @@ function renderActions() {
     const c = game.currentClaim();
     // 点炮 win — a confirm: take it (胡, showing pattern + score) or 过 to play on.
     // The 胡 floats big + centered (like 打出并听牌); 过 stays in the bottom bar.
-    if (c.type === 'win') { center.appendChild(mkBtn(`胡 · ${c.result.fans[0].name} · ${c.result.fan}番`, () => doClaimTake(), false, 'hu')); }
+    if (c.type === 'win') { center.appendChild(mkBtn(`胡 · ${fanLabel(c.result.fans[0])} · ${c.result.fan}番`, () => doClaimTake(), false, 'hu')); }
     else if (c.type === 'pung') buttons.push(mkBtn('碰', () => doClaimTake()));
     else if (c.type === 'kong') buttons.push(mkBtn('杠', () => doClaimTake()));
     else if (c.type === 'chow') {
@@ -270,7 +274,7 @@ function renderActions() {
   } else if (game.phase === PHASE.AWAIT_DISCARD && game.turn === HUMAN) {
     if (game.selfDrawWin) { // self-draw win available — offer 胡 (you may still play on)
       const w = game.selfDrawWin;
-      center.appendChild(mkBtn(`胡 · ${w.fans[0].name} · ${w.fan}番`, () => doDeclareWin(), false, 'hu')); // big + centered, like 打出并听牌
+      center.appendChild(mkBtn(`胡 · ${fanLabel(w.fans[0])} · ${w.fan}番`, () => doDeclareWin(), false, 'hu')); // big + centered, like 打出并听牌
     }
     for (const k of game.selfKongOptions(HUMAN)) buttons.push(mkBtn(`杠 ${tileName(k.kind)}`, () => doSelfKong(k.kind), true));
     // If the selected discard would leave a ready hand, present 打出并听牌 (declare
@@ -513,7 +517,7 @@ function showResult() {
   } else {
     const w = r.winner;
     $('result-title').textContent = `${SEAT_LABEL[w]}（${WIND[game.seatWind(w)]}）${r.byDiscard ? '和牌' : '自摸'}！`;
-    for (const f of r.fans) { const c = document.createElement('span'); c.className = 'fan-chip'; c.textContent = `${f.name} ${f.points}`; fansEl.appendChild(c); }
+    for (const f of r.fans) { const c = document.createElement('span'); c.className = 'fan-chip'; c.textContent = `${fanLabel(f)} ${f.points ?? ''}`.trim(); fansEl.appendChild(c); }
     scoreEl.textContent = r.fan + ' 番';
     if (r.winningTile != null) {
       const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = (r.byDiscard ? '点炮' : '自摸') + ' · 和这张';
