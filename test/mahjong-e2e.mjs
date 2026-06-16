@@ -153,8 +153,10 @@ try {
   await page.evaluate(() => window.__mj.dealLz());
   await page.waitForFunction(() => document.querySelector('#plate-0 .lazhuang') &&
     document.getElementById('scores').textContent.includes('⚔️'), { timeout: 8000 });
+  // the human (0) always 拉庄s here; bots seat 2/3 may also join their own 50% gamble, so just
+  // assert the human's choice landed in the set (not exact equality).
   const lzSet = await page.evaluate(() => window.__mj.game().laZhuang.join(','));
-  if (lzSet !== '0') throw new Error(`拉庄 set should be [0], got [${lzSet}]`);
+  if (!lzSet.split(',').includes('0')) throw new Error(`拉庄 set should include the human (0), got [${lzSet}]`);
 
   // the win breakdown marks both 庄x2 and 拉庄x2 on the 庄 row.
   await page.evaluate(() => window.__mj.debugLzWin());

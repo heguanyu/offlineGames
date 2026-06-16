@@ -43,9 +43,10 @@ export const HUMAN = 0;
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Whether bot `seat` 拉庄s against `dealer`. This is a SERVER-SIDE decision (the bots live
-// behind the backend), so it belongs here, not in the UI. A stub today — bots never 拉庄
-// yet; wiring real logic in is a one-function change.
-export function shouldBotLaZhuang(seat, dealer) { return false; }
+// behind the backend), so it belongs here, not in the UI. Each bot takes a blind 50% gamble —
+// the same odds the online server uses (server/table.js). `rng` (defaulting to Math.random)
+// keeps a seeded backend deterministic.
+export function shouldBotLaZhuang(seat, dealer, rng = Math.random) { return rng() < 0.5; }
 
 // Pick a backend implementation. `config.mode`: 'local' (default) | 'remote'.
 export function createBackend(config = {}) {
@@ -89,7 +90,7 @@ export class LocalBackend {
     const gen = ++this._gen;
     if (cfg.level != null) this.level = cfg.level;
     // Deal FIRST (the UI refreshes to the new hand); 拉庄 is asked AFTER, still blind — the UI keeps
-    // the human's own hand face-down until they answer. Bots never 拉庄 yet (shouldBotLaZhuang).
+    // the human's own hand face-down until they answer. Each bot takes a 50% gamble (shouldBotLaZhuang).
     this._game = new Game({
       rng: this.rng,
       dealer: cfg.dealer, prevailingWind: cfg.prevailingWind,
@@ -99,7 +100,7 @@ export class LocalBackend {
     await this._emit({ type: 'deal' });
     if (gen !== this._gen) return;
     const challengers = [];
-    for (let p = 0; p < 4; p++) if (p !== cfg.dealer && p !== HUMAN && shouldBotLaZhuang(p, cfg.dealer)) challengers.push(p);
+    for (let p = 0; p < 4; p++) if (p !== cfg.dealer && p !== HUMAN && shouldBotLaZhuang(p, cfg.dealer, this.rng)) challengers.push(p);
     if (cfg.dealer !== HUMAN) {
       const yes = await this._ask({ type: 'lazhuang', dealer: cfg.dealer, need: [HUMAN], answers: {} });
       if (gen !== this._gen) return; // abandoned (e.g. 重开) while the panel was open

@@ -16,8 +16,8 @@ const LZ_TIMEOUT_MS = 15000;    // auto-不拉 if a human doesn't answer 拉庄
 const NEXT_TIMEOUT_MS = 25000;  // auto-advance if a human doesn't click 下一局
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// bots never 拉庄 yet (server-side decision, same stub as the client)
-const botLaZhuang = (/* seat, dealer */) => false;
+// each bot takes a blind 50% gamble on 拉庄 (server-side decision, same odds as the client backend)
+const botLaZhuang = (/* seat, dealer */) => Math.random() < 0.5;
 // safe auto-move when a human stalls: discard the first non-wild (a 混儿 can't be discarded).
 const autoDiscardTile = (g, p) => g.hands[p].find((t) => !g.isWild(t));
 
