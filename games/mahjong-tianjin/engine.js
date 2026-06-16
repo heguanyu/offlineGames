@@ -284,6 +284,12 @@ function scoreFromDecomp(decomp, ctx) {
   for (const s of ['m', 'p', 's']) {
     if (suitHasDragon(seqStartsBySuit, s)) { long = true; longSuit = s; if (s === wildSuit) benHunLong = true; }
   }
+  // A run that forms the 龙 must NOT also be credited as 混吊/双混吊 — that 吊 fan only
+  // applies to a meld OUTSIDE the dragon (the 混儿 sitting inside the 龙's runs are already
+  // rewarded by 龙 / 本混龙). Identify the three dragon runs so the 混吊/双混吊 search skips them.
+  const longBase = longSuit === 'm' ? 0 : longSuit === 'p' ? 9 : 18;
+  const inDragon = (g) => long && g.type === 'chow' &&
+    (g.kinds[0] === longBase || g.kinds[0] === longBase + 3 || g.kinds[0] === longBase + 6);
 
   // 混吊 / 双混吊 (×2) — STANDING (hand-row) 混儿 that complete the hand no matter what
   // tile arrives: 混吊 = the 将 (pair) is the 单吊 wait carrying a 混儿; 双混吊 = a MELD
@@ -300,7 +306,7 @@ function scoreFromDecomp(decomp, ctx) {
     // whose winning-rank slot is filled by a JOKER (g.kinds lists the rank, but
     // g.natural does NOT) is NOT completed by the drawn tile, so filtering on
     // g.natural (not g.kinds) avoids mis-crediting 双混吊 to such a run.
-    const winByKind = decomp.filter((g) => g.natural.has(winningKind));
+    const winByKind = decomp.filter((g) => g.natural.has(winningKind) && !inDragon(g));
     winGroup = winByKind.find((g) => g.jokers >= groupSize(g) - 1) || winByKind[0] || null;
     const j = winGroup ? winGroup.jokers : 0;
     wildCompleted = !su && !!winGroup && j >= groupSize(winGroup) - 1;
@@ -316,7 +322,7 @@ function scoreFromDecomp(decomp, ctx) {
     //     the drawn 混儿 as its 3rd tile (e.g. the 5万 of an all-混儿 4-5-6万 → 双混捉五).
     // A meld with only ONE standing 混儿 (2 jokers + a natural) has no standing-混儿 wait,
     // so it earns no fan and still scores plain 捉五 / 龙.
-    const cand = decomp.filter((g) => g.jokers >= groupSize(g));
+    const cand = decomp.filter((g) => g.jokers >= groupSize(g) && !inDragon(g));
     winGroup = cand.find((g) => g.type !== 'pair') || cand[0] || null; // prefer 双混 on a tie
     wildCompleted = !!winGroup;
     winPair = !!(winGroup && winGroup.type === 'pair');

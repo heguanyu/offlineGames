@@ -189,6 +189,17 @@ r = analyzeWin(longPark, [], { wilds: [27, 28], winningKind: 27 });
 ok(r && r.meta.long && !r.meta.hunDiao, '龙 with a parked drawn 混儿 is just 龙, not 混吊龙');
 eq(r.score, 4, '龙(4), no 混吊');
 
+// 本混龙, NOT 本混龙+双混吊: wilds = 4万/5万 (man suit). Hand 123万 789万 natural + three
+// 混儿 (4万,4万,5万) + 22条 33条, drew the 6万. Best reading is 123/456/789万 (the 456 being
+// joker·joker·natural 6万) = a full 1-9万 龙 in the wild suit → 本混龙(8). The 456万 run is
+// PART of the 龙, so its two standing 混儿 must NOT also be credited as 双混吊 — that 吊 fan
+// only applies to a meld OUTSIDE the dragon. (Was mis-scored 本混龙×双混吊 = 16.)
+const benHunNoShuang = [M(1), M(2), M(3), M(7), M(8), M(9), M(4), M(4), M(5), S(2), S(2), S(3), S(3)];
+r = analyzeWin([...benHunNoShuang, M(6)], [], { wilds: [M(4), M(5)], winningKind: M(6) });
+ok(r && r.meta.benHunLong && !r.meta.shuangHun, '本混龙 only — the 混儿 inside the 龙 are not also 双混吊');
+ok(r && r.fans.includes('本混龙') && !r.fans.includes('双混吊'), '本混龙 labelled, 双混吊 not');
+eq(r && r.score, 8, '本混龙(8), no 双混吊 (the dragon run is not an outside meld)');
+
 // --- 杠分 (kong points) + 金杠 -------------------------------------------------
 console.log('kong points:');
 {
