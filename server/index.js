@@ -75,6 +75,15 @@ const tables = Array.from({ length: TABLES }, (_, id) => {
   return { id, status: 'waiting', seats, game: null, resume: (sv && sv.pot) || null, gameType: TABLE_GAMES[id] };
 });
 
+// Backfill on restart: a human seat restored from the DB carries no readyBy (it's not persisted, and
+// may predate the ready timer entirely), so the sweep would never free it — leaving a player parked
+// idle at a lobby table forever. Give each a fresh 1-minute window. SKIP tables with a 锅 to resume:
+// those seats are held for their players to reconnect (resumeTable), not subject to the ready timeout.
+for (const t of tables) {
+  if (t.resume) continue;
+  for (const seat of t.seats) if (seat && seat.kind === 'human' && !seat.ready && !seat.readyBy) seat.readyBy = Date.now() + READY_MS;
+}
+
 // Write each table's current snapshot (seats + 锅 standings) to the DB. Cheap + synchronous, so it's
 // called directly on every change (seat edits, after each hand); a graceful shutdown adds a final flush.
 function persist() { for (const t of tables) db.saveTable(t.id, t.seats, t.game ? t.game.snapshot() : (t.resume || null)); }
@@ -262,8 +271,9 @@ function handle(client, msg) {
       const at = seatOf(client.uid); // reconnection: reclaim a seat held while we were away
       const t = at ? tables[at.table] : null;
       if (t) { const seat = t.seats[at.seat]; seat.name = client.name;
-        // a restored/reclaimed waiting seat that isn't ready gets a fresh ready window (so the sweep frees it)
-        if (t.status === 'waiting' && !seat.ready && !seat.readyBy) seat.readyBy = Date.now() + READY_MS; }
+        // reclaiming a waiting seat (e.g. restored after a restart) → a FRESH ready window: you're back,
+        // ready up within a minute or the sweep frees the seat.
+        if (t.status === 'waiting' && !seat.ready) seat.readyBy = Date.now() + READY_MS; }
       // Live game → resync onto the table. A 锅 interrupted by a server restart (seat restored,
       // standings saved, but no game object) → resume it now so a refresh lands back on the table
       // instead of bouncing to the lobby. Otherwise → no live game, the game page returns to the lobby.
