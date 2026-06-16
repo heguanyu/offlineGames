@@ -2,10 +2,14 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>天津麻将联机版 · 大厅</title>
 <link rel="apple-touch-icon" href="../../icons/icon-180.png">
 <link rel="icon" href="../../icons/icon-180.png">
+<!-- Match the hub's iOS standalone behavior: no viewport-fit=cover, so iOS insets the
+     content below the system status bar instead of drawing the sticky header under it. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#0c2a1e">
 <link rel="stylesheet" href="./lobby.css">
 </head>
