@@ -94,18 +94,38 @@ function backTexture() {
   backTex = new THREE.CanvasTexture(c); backTex.colorSpace = THREE.SRGBColorSpace; backTex.anisotropy = 4;
   return backTex;
 }
-// Felt fabric texture (same idea as the mahjong table) — speckled green so the table reads as cloth
-// instead of a flat, cheap-looking fill.
-let feltTex = null;
-function feltTexture() {
-  if (feltTex) return feltTex;
-  const c = document.createElement('canvas'); c.width = c.height = 512;
+// Table materials — SAME as the mahjong table (shared CC0 textures in ../mahjong-tianjin/textures):
+// felt = non-tiling green canvas (blotches + Gaussian grain, no visible repeat) + tiled Fabric034
+// normal/roughness; rim = Wood066 antique-chestnut. The normal maps need a directional light to read.
+const TEX = (file, srgb, rep) => {
+  const t = new THREE.TextureLoader().load(new URL(`../mahjong-tianjin/textures/${file}`, import.meta.url).href);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 8;
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  return t;
+};
+function feltColorTexture() {
+  const N = 1024, c = document.createElement('canvas'); c.width = c.height = N;
   const x = c.getContext('2d');
-  x.fillStyle = '#0f5e44'; x.fillRect(0, 0, 512, 512);
-  for (let i = 0; i < 26000; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * 0.028})`; x.fillRect(Math.random() * 512, Math.random() * 512, 1, 1); }
-  for (let i = 0; i < 14000; i++) { x.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`; x.fillRect(Math.random() * 512, Math.random() * 512, 1, 1); }
-  feltTex = new THREE.CanvasTexture(c); feltTex.colorSpace = THREE.SRGBColorSpace; feltTex.anisotropy = 4;
-  return feltTex;
+  x.fillStyle = '#247c57'; x.fillRect(0, 0, N, N);
+  for (let i = 0; i < 60; i++) {
+    const cx = Math.random() * N, cy = Math.random() * N, r = 140 + Math.random() * 320;
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, Math.random() < 0.5 ? 'rgba(90,180,135,0.09)' : 'rgba(18,72,50,0.07)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, N, N);
+  }
+  const im = x.getImageData(0, 0, N, N), d = im.data;
+  for (let i = 0; i < d.length; i += 4) { const n = (Math.random() + Math.random() + Math.random() - 1.5) * 13; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  x.putImageData(im, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+function feltMaterial() {
+  return new THREE.MeshStandardMaterial({ map: feltColorTexture(), normalMap: TEX('felt_normal.jpg', false, 4),
+    roughnessMap: TEX('felt_rough.jpg', false, 4), color: 0xffffff, roughness: 1.0, metalness: 0.0, normalScale: new THREE.Vector2(0.5, 0.5) });
+}
+function woodMaterial() {
+  return new THREE.MeshStandardMaterial({ map: TEX('wood_color.jpg', true, 3), normalMap: TEX('wood_normal.jpg', false, 3),
+    roughnessMap: TEX('wood_rough.jpg', false, 3), color: 0xddc7ad, roughness: 0.82, metalness: 0.0, normalScale: new THREE.Vector2(0.6, 0.6) });
 }
 
 // A rounded-corner card body: a rounded rectangle extruded by the card depth, so the face is a
@@ -144,7 +164,8 @@ export class DouScene {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
-    this.renderer.shadowMap.enabled = false;            // ambient-only lighting (no directional → no shadows)
+    this.renderer.shadowMap.enabled = true;             // a centered key light + soft shadows (like the mahjong table)
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
 
@@ -179,10 +200,17 @@ export class DouScene {
   setRotated(r) { this.rotated = !!r; }
   resize() { this._resize(); }
 
-  // ONLY ambient light — flat, perfectly even illumination so the hand row has no left-to-right
-  // brightness gradient (a directional light made the near-side cards brighter than the far ones).
+  // A CENTERED (x=0) key light + ambient fill. Centered means it's symmetric left↔right, so the hand
+  // row has no left-to-right brightness gradient (the old side light did), while still catching the
+  // felt/wood normal maps and casting soft card shadows — matching the mahjong table's look.
   _lights() {
-    this.scene.add(new THREE.AmbientLight(0xffffff, 2.25));
+    this.scene.add(new THREE.HemisphereLight(0xcfe9df, 0x223026, 1.0));
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const key = new THREE.DirectionalLight(0xfff4e0, 2.1);
+    key.position.set(0, 16, 5); key.castShadow = true;   // x=0 → symmetric, no left/right hand gradient
+    key.shadow.mapSize.set(2048, 2048);
+    const s = 12; Object.assign(key.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 44 });
+    key.shadow.bias = -0.0004; this.scene.add(key);
   }
   // A single glowing ONE-THIRD ring (120°) laid flat on the felt, centered at the table origin. It
   // rotates in-plane (rotation.z) to point at whichever seat's turn it is, and pulses. (Same idea as
@@ -202,12 +230,10 @@ export class DouScene {
     this._turnRingActive = -1;
   }
   _table() {
-    const rim = new THREE.Mesh(new THREE.CylinderGeometry(FELT / 2 + 1.1, FELT / 2 + 1.1, 0.7, 64),
-      new THREE.MeshStandardMaterial({ color: 0x5a381e, roughness: 0.72 }));
-    rim.position.y = -0.45; this.scene.add(rim);
-    const felt = new THREE.Mesh(new THREE.CylinderGeometry(FELT / 2, FELT / 2, 0.5, 64),
-      new THREE.MeshStandardMaterial({ map: feltTexture(), roughness: 0.96 }));   // speckled cloth (not a flat fill)
-    felt.position.y = -0.26; this.scene.add(felt);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(FELT / 2 + 1.1, FELT / 2 + 1.1, 0.7, 64), woodMaterial());
+    rim.position.y = -0.45; rim.receiveShadow = true; this.scene.add(rim);
+    const felt = new THREE.Mesh(new THREE.CylinderGeometry(FELT / 2, FELT / 2, 0.5, 64), feltMaterial());
+    felt.position.y = -0.26; felt.receiveShadow = true; this.scene.add(felt);
   }
 
   // Build a card mesh. faceCard set → real face on the +z cap; else a back on both caps.

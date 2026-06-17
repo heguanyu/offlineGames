@@ -1199,7 +1199,7 @@ function returnHub() {
   for (const k of ['online', 'viewer', 'vseat', 'vtable']) params.delete(k);
   params.set('game', 'tianjin'); // return to THIS game's split lobby
   const qs = params.toString();
-  location.href = '../mahjong-tianjin-online/' + (qs ? '?' + qs : '');
+  location.href = '../mahjong-common-online/' + (qs ? '?' + qs : '');
 }
 
 // Keyboard/gamepad focus between the result panel's two buttons (下一局 / 返回).
