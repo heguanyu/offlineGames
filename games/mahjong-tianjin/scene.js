@@ -197,15 +197,12 @@ export class MahjongScene {
     this.ivory = new THREE.MeshStandardMaterial({
       color: 0xc6c0b1, roughness: 0.92, metalness: 0.0, transparent: true, opacity: 0.8,
     });
-    // tile BACK: a CC0 onyx photo (ambientCG Onyx015, 256px) tinted jade-green + low roughness, so
-    // the back reads as polished jade resin (a glossy highlight from the key light) not flat paint.
-    this.green = (() => {
-      const loader = new THREE.TextureLoader();
-      const url = (f) => new URL(`./textures/${f}`, import.meta.url).href;
-      const map = loader.load(url('back_color.jpg')); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
-      const nrm = loader.load(url('back_normal.jpg'));
-      return new THREE.MeshStandardMaterial({ map, normalMap: nrm, color: 0x33a374, roughness: 0.34, metalness: 0.06, normalScale: new THREE.Vector2(0.25, 0.25) });
-    })();
+    // tile BACK: a PURE jade-green (no busy texture) with a clear-coat layer — reads as smooth polished
+    // resin via the material alone (a soft clearcoat highlight + matte diffuse body), not a patterned photo.
+    this.green = new THREE.MeshPhysicalMaterial({
+      color: 0x2c9a6f, roughness: 0.62, metalness: 0.0,
+      clearcoat: 0.6, clearcoatRoughness: 0.42,
+    });
     this.faceMat = new Map();   // faceKey -> material
     this.faceRecords = [];      // { canvas, tex, kind, wild } for async redraw on load
     onDesignLoad = (k) => this._redrawKind(k);
@@ -380,7 +377,7 @@ export class MahjongScene {
       map: tex('wood_color.jpg', true),
       normalMap: tex('wood_normal.jpg', false),
       roughnessMap: tex('wood_rough.jpg', false),
-      color: 0xcaa67a, roughness: 0.8, metalness: 0.0,        // light walnut tint
+      color: 0xddc7ad, roughness: 0.82, metalness: 0.0,       // near-neutral so the rim reads as the antique-chestnut map
       normalScale: new THREE.Vector2(0.6, 0.6),
     });
   }
