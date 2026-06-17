@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>斗地主 · Dou Dizhu</title>
+<link rel="apple-touch-icon" href="../../icons/icon-180.png">
+<link rel="icon" href="../../icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0c2a1e">
+<link rel="stylesheet" href="./doudizhu.css">
+</head>
+<body>
+  <div id="table">
+    <canvas id="scene"></canvas>
+
+    <div id="nav">
+      <a href="../../index.html">← 大厅</a>
+      <span class="spacer"></span>
+      <span class="badge" id="multiplier"></span>
+      <label><input type="checkbox" id="fast-toggle"> 快速</label>
+      <button id="mute-btn" type="button">🔊</button>
+    </div>
+
+    <!-- per-seat overlays injected by main.js -->
+    <div id="overlays"></div>
+
+    <!-- bottom action bar (bidding buttons OR play/pass/hint, swapped by main.js) -->
+    <div id="actions" hidden></div>
+
+    <!-- start screen: difficulty pick -->
+    <div id="start-overlay" class="overlay">
+      <div class="panel">
+        <h1>斗地主</h1>
+        <p class="sub">3 人 · 叫分 1/2/3 · 你 vs 两位 AI</p>
+        <div class="diff-row" id="diff-row">
+          <button class="diff-btn" data-level="0">新手</button>
+          <button class="diff-btn sel" data-level="1">普通</button>
+          <button class="diff-btn" data-level="2">高手</button>
+        </div>
+        <button class="act-btn" id="start-btn" style="width:100%;margin-top:8px">开始</button>
+      </div>
+    </div>
+
+    <!-- result -->
+    <div id="result-overlay" class="overlay" hidden>
+      <div class="panel">
+        <div id="result-title"></div>
+        <div id="result-detail"></div>
+        <div id="result-score"></div>
+        <div class="scorebar" id="result-scorebar"></div>
+        <button class="act-btn" id="next-btn" style="width:100%">再来一局</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

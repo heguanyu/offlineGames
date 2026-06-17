@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.4.90';
+const CACHE = 'offline-games-0.5.0';
 
 const ASSETS = [
   './',
@@ -81,6 +81,16 @@ const ASSETS = [
   './games/guobiao/main.js',
   './games/guobiao-free/',
   './games/guobiao-free/index.html',
+  './games/doudizhu/',
+  './games/doudizhu/index.html',
+  './games/doudizhu/doudizhu.css',
+  './games/doudizhu/engine.js',
+  './games/doudizhu/ai.js',
+  './games/doudizhu/backend.js',
+  './games/doudizhu/scene.js',
+  './games/doudizhu/select.js',
+  './games/doudizhu/sound.js',
+  './games/doudizhu/main.js',
   './shared/emu-persistence.js',
   './emulatorjs/data/emulator.css',
   './emulatorjs/data/loader.js',
