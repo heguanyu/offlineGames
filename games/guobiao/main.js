@@ -791,12 +791,12 @@ function doForfeit() {
 
 // Leave the game: offline → the main hub; online → back to the 联机 lobby (carry ?server/fast/flat).
 function returnHub() {
-  if (!ONLINE) { location.href = '../../'; return; }
+  if (!ONLINE) { location.replace('../../'); return; }
   const params = new URLSearchParams(location.search);
   for (const k of ['online', 'viewer', 'vseat', 'vtable']) params.delete(k);
   params.set('game', CFG.sessionKey === 'guobiao-free' ? 'guobiao-free' : 'guobiao'); // return to THIS game's split lobby
   const qs = params.toString();
-  location.href = '../mahjong-common-online/' + (qs ? '?' + qs : '');
+  location.replace('../mahjong-common-online/' + (qs ? '?' + qs : ''));
 }
 
 // Keyboard/gamepad focus between the result panel's two buttons (下一局 / 返回).

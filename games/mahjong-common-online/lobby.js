@@ -74,7 +74,7 @@ function refreshMaintMessage() {
   $('maint-title').textContent = offline ? '📵 无网络连接' : '🛠️ 服务器维护中';
   $('maint-msg').textContent = offline ? '请检查你的网络连接，恢复后会自动重连…' : '服务器正在维护中，马上回来…';
 }
-$('maint-hub').addEventListener('click', () => { location.href = '../../'; });
+$('maint-hub').addEventListener('click', () => { location.replace('../../'); });
 // if connectivity flips while the overlay is showing, swap the message to match
 for (const ev of ['online', 'offline']) addEventListener(ev, () => { if (!$('maint-overlay').classList.contains('hidden')) refreshMaintMessage(); });
 
@@ -286,14 +286,14 @@ function goToGame() {
   const game = seat ? state.tables[seat.table].game : state.tables[activeTable].game;
   const params = new URLSearchParams(location.search);
   params.set('online', '1');
-  location.href = pageFor(game) + '?' + params.toString();
+  location.replace(pageFor(game) + '?' + params.toString());
 }
 // Enter read-only viewer mode for a player's seat: hand off to the active table's game page in
 // spectate mode (vtable tells the game which table to watch).
 function watchSeat(seat) {
   const params = new URLSearchParams(location.search);
   params.set('online', '1'); params.set('viewer', '1'); params.set('vseat', String(seat)); params.set('vtable', String(activeTable));
-  location.href = pageFor(state.tables[activeTable].game) + '?' + params.toString();
+  location.replace(pageFor(state.tables[activeTable].game) + '?' + params.toString());
 }
 function showStart(m) {
   $('start-text').textContent = `你坐在「${m.wind}」位，正在进入${GAME_LABEL[m.game] || ''}…`;

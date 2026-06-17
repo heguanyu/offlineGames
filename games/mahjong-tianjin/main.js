@@ -1132,7 +1132,7 @@ function bindUI() {
     startHand();
   });
   $('rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
-  $('start-hub-link').addEventListener('click', () => { location.href = '../../'; }); // difficulty screen → main hub
+  $('start-hub-link').addEventListener('click', () => { location.replace('../../'); }); // difficulty screen → main hub
   $('menu-rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
   $('rules-close').addEventListener('click', () => $('rules-overlay').classList.add('hidden'));
   $('menu-btn').addEventListener('click', openMenu);
@@ -1194,12 +1194,12 @@ function leaveToLobby() {
 
 // Leave the game: offline → the main hub; online → back to the lobby.
 function returnHub() {
-  if (!ONLINE) { location.href = '../../'; return; }
+  if (!ONLINE) { location.replace('../../'); return; }
   const params = new URLSearchParams(location.search); // carry ?server=/fast/flat back to the lobby
   for (const k of ['online', 'viewer', 'vseat', 'vtable']) params.delete(k);
   params.set('game', 'tianjin'); // return to THIS game's split lobby
   const qs = params.toString();
-  location.href = '../mahjong-common-online/' + (qs ? '?' + qs : '');
+  location.replace('../mahjong-common-online/' + (qs ? '?' + qs : ''));
 }
 
 // Keyboard/gamepad focus between the result panel's two buttons (下一局 / 返回).

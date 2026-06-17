@@ -82,12 +82,12 @@ function boot() {
   }
   $('start-btn').addEventListener('click', () => { resume(); $('start-overlay').hidden = true; newGame(); });
   $('next-btn').addEventListener('click', () => { $('result-overlay').hidden = true; newGame(); });
-  $('result-home').addEventListener('click', () => { location.href = '../../index.html'; });
+  $('result-home').addEventListener('click', () => { location.replace('../../index.html'); });
   $('mute-btn').addEventListener('click', () => { LS.mute = !isMuted(); setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊'; });
   $('menu-btn').addEventListener('click', () => { $('menu-overlay').hidden = false; });
   $('menu-continue').addEventListener('click', () => { $('menu-overlay').hidden = true; });
   $('menu-restart').addEventListener('click', () => { LS.scores = [0, 0, 0]; updateScoreboard(null); $('menu-overlay').hidden = true; $('result-overlay').hidden = true; newGame(); });
-  $('menu-home').addEventListener('click', () => { location.href = '../../index.html'; });
+  $('menu-home').addEventListener('click', () => { location.replace('../../index.html'); });
 
   $('scene').addEventListener('pointerdown', onPointerDown);
   window.addEventListener('keydown', onKey);
