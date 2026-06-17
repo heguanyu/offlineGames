@@ -8,7 +8,7 @@
 import * as THREE from '../mahjong-tianjin/lib/three.module.min.js';
 import { rankLabel } from './engine.js';
 
-const CW = 1.0, CH = 1.45, CD = 0.06;   // card width / height / depth
+const CW = 1.0, CH = 1.45, CD = 0.02;   // card width / height / depth (thin cards)
 const FELT = 15;
 const HAND_Y = 0.62;   // human hand sits ABOVE the felt (was clipping into the table)
 const OPP_Y = 0.95;    // opponents' upright fans stand on the table
@@ -155,6 +155,9 @@ export class DouScene {
     this.raycaster = new THREE.Raycaster();
     this.clock = new THREE.Clock();
     this.rotated = false;
+    this._fx = [];               // active visual effects (plane fly-by, bomb burst) updated each frame
+    this._shake = null;          // { until, mag } camera shake
+    this._camPos = this.camBase.clone(); // base camera position (shake offsets from here)
     this._resize();
     new ResizeObserver(() => this._resize()).observe(canvas.parentElement);
     this._loop();
@@ -355,7 +358,8 @@ export class DouScene {
     this.camera.aspect = w / Math.max(1, h);
     // pull the camera back on tall/narrow viewports so the table fits
     const k = Math.max(1, (h / w) / 0.62);
-    this.camera.position.copy(this.camBase).multiplyScalar(k > 1 ? 1 + (k - 1) * 0.5 : 1);
+    this._camPos = this.camBase.clone().multiplyScalar(k > 1 ? 1 + (k - 1) * 0.5 : 1);
+    this.camera.position.copy(this._camPos);
     this.camera.lookAt(this.camLook);
     this.camera.updateProjectionMatrix();
   }
@@ -367,16 +371,61 @@ export class DouScene {
     const dealing = this._deal && this._deal.active;
     for (const r of this.cards.values()) {
       if (!r.target) continue;
-      // during the deal, a card waits stacked at the deck until its serve time, then flies out
+      // during the deal, a card waits in the deck (a neat stack: served-soon on top) until its turn
       if (dealing && r.key && this._deal.serveAt.has(r.key) && now < this._deal.serveAt.get(r.key)) {
-        r.mesh.position.copy(this._deal.deck);
+        const s = Math.min((this._deal.idx.get(r.key) || 0), 26) * 0.006;
+        r.mesh.position.set(this._deal.deck.x, this._deal.deck.y + s, this._deal.deck.z - s * 0.4);
+        r.mesh.quaternion.copy(r.target.quat);
         continue;
       }
       r.mesh.position.lerp(r.target.pos, a);
       r.mesh.quaternion.slerp(r.target.quat, a);
       const s = r.target.scale; r.mesh.scale.lerp(new THREE.Vector3(s, s, s), a);
     }
+    if (this._fx.length) this._fx = this._fx.filter((fx) => fx(now, dt));   // run active effects
+    // camera shake (bomb): jitter the camera off its base, decaying to zero
+    if (this._shake) {
+      const left = this._shake.until - now;
+      if (left <= 0) { this._shake = null; this.camera.position.copy(this._camPos); }
+      else { const m = this._shake.mag * (left / this._shake.dur); this.camera.position.set(this._camPos.x + (Math.random() * 2 - 1) * m, this._camPos.y + (Math.random() * 2 - 1) * m, this._camPos.z + (Math.random() * 2 - 1) * m); }
+    }
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // ---- combo effects ------------------------------------------------------
+  // ✈ flies across the table when a 飞机 (plane) is played.
+  planeFx() {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d'); x.fillStyle = '#eef4ff'; x.font = '104px serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('✈', 64, 70);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+    sp.scale.set(3, 3, 1); sp.renderOrder = 999; this.scene.add(sp);
+    const t0 = performance.now(), dur = 1300;
+    this._fx.push((now) => {
+      const t = (now - t0) / dur;
+      if (t >= 1) { this.scene.remove(sp); sp.material.map.dispose(); sp.material.dispose(); return false; }
+      sp.position.set(-12 + t * 24, 5.5 - Math.sin(t * Math.PI) * 1.2, 4); // fly left→right with a gentle arc
+      sp.material.opacity = Math.sin(t * Math.PI);
+      return true;
+    });
+  }
+  // An orange burst at table centre + a camera shake when a 炸弹 / 王炸 is played.
+  bombFx() {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const x = c.getContext('2d'); const g = x.createRadialGradient(128, 128, 4, 128, 128, 128);
+    g.addColorStop(0, 'rgba(255,250,210,0.95)'); g.addColorStop(0.4, 'rgba(255,170,40,0.85)'); g.addColorStop(0.75, 'rgba(220,60,20,0.5)'); g.addColorStop(1, 'rgba(180,40,10,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthTest: false }));
+    sp.position.set(0, 1.5, 0); sp.renderOrder = 999; this.scene.add(sp);
+    const t0 = performance.now(), dur = 520;
+    this._shake = { until: t0 + 460, dur: 460, mag: 0.6 };
+    this._fx.push((now) => {
+      const t = (now - t0) / dur;
+      if (t >= 1) { this.scene.remove(sp); sp.material.map.dispose(); sp.material.dispose(); return false; }
+      const s = 2 + t * 9; sp.scale.set(s, s, 1); sp.material.opacity = 1 - t;
+      return true;
+    });
   }
 
   // Deal animation: every card starts stacked at a centre "deck" and is served one at a time,
@@ -387,9 +436,9 @@ export class DouScene {
     for (let r = 0; r < hand.length; r++) { order.push('c' + hand[r].id); order.push('b1_' + r); order.push('b2_' + r); }
     const SERVE = fast ? 9 : 20, FLIGHT = fast ? 140 : 240;
     const t0 = performance.now();
-    const serveAt = new Map();
-    order.forEach((k, i) => serveAt.set(k, t0 + i * SERVE));
-    this._deal = { active: true, serveAt, deck: new THREE.Vector3(0, 1.5, -0.3) };
+    const serveAt = new Map(), idx = new Map();
+    order.forEach((k, i) => { serveAt.set(k, t0 + i * SERVE); idx.set(k, order.length - i); }); // served-soon = on top
+    this._deal = { active: true, serveAt, idx, deck: new THREE.Vector3(0, 1.5, -0.3) };
     return new Promise((res) => setTimeout(() => { if (this._deal) this._deal.active = false; res(); }, order.length * SERVE + FLIGHT + 120));
   }
 }

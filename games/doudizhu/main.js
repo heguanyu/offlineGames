@@ -179,11 +179,12 @@ function speakMove(d) {
   }
 }
 // Announce a play and return the voice duration (ms) so the caller can wait for it to finish.
+const PLANE_TYPES = [COMBO.PLANE, COMBO.PLANE_SINGLE, COMBO.PLANE_PAIR];
 function announcePlay(ev) {
   const d = ev.move;
-  if (d.type === COMBO.BOMB) sfx.bomb();
-  else if (d.type === COMBO.ROCKET) sfx.rocket();
-  else sfx.play();
+  if (d.type === COMBO.BOMB) { sfx.bomb(); state.scene.bombFx?.(); }
+  else if (d.type === COMBO.ROCKET) { sfx.rocket(); state.scene.bombFx?.(); }
+  else { sfx.play(); if (PLANE_TYPES.includes(d.type)) state.scene.planeFx?.(); }
   return speak(speakMove(d), ev.seat);
 }
 
