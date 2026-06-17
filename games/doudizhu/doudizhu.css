@@ -70,6 +70,20 @@ body.flat #actions.play-bar { bottom: 18%; }
 #nav .spacer { flex: 1; }
 #mute-btn { font: inherit; background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
 
+/* cumulative scoreboard — top-right corner (like the mahjong games) */
+#scores {
+  position: absolute; top: max(46px, calc(env(safe-area-inset-top) + 40px)); right: 8px; z-index: 6;
+  display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; border-radius: 12px;
+  background: rgba(4,18,12,0.66); border: 1px solid #1c5a44; backdrop-filter: blur(3px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45); font-size: 0.76rem; pointer-events: none;
+}
+#scores:empty { display: none; }
+#scores .sb-row { display: flex; justify-content: space-between; gap: 14px; line-height: 1.25; }
+#scores .sb-name { color: #9fd3bf; }
+#scores .sb-pt { font-weight: 800; }
+#scores .sb-pt.s-pos { color: #7ddf8a; }
+#scores .sb-pt.s-neg { color: #ff7a7a; }
+
 /* per-seat HTML overlays (count, role, bid bubble), positioned by main.js via worldToScreen */
 .seat-tag {
   position: absolute; transform: translate(-50%, -50%); z-index: 4; text-align: center;

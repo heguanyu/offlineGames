@@ -87,6 +87,7 @@ function boot() {
   $('scene').addEventListener('pointerdown', onPointerDown);
   window.addEventListener('keydown', onKey);
   window.addEventListener('resize', positionOverlays);
+  updateScoreboard(null);
   pollPad();
 }
 function markDiff(btn) { for (const b of document.querySelectorAll('.diff-btn')) b.classList.toggle('sel', b === btn); }
@@ -226,7 +227,18 @@ function render() {
   });
   positionOverlays();
   updateRoundInfo(g);
+  updateScoreboard(g);
   if (state.awaiting === 'play') refreshPlayBar();
+}
+
+// Cumulative scoreboard (top-right): each seat's running total, 👑 on the landlord.
+function updateScoreboard(g) {
+  const scores = LS.scores;
+  $('scores').innerHTML = [0, 1, 2].map((s) => {
+    const crown = g && g.landlord === s ? '👑' : '';
+    const v = scores[s];
+    return `<div class="sb-row"><span class="sb-name">${crown}${SEAT_NAME[s]}</span><span class="sb-pt ${v >= 0 ? 's-pos' : 's-neg'}">${v >= 0 ? '+' : ''}${v}</span></div>`;
+  }).join('');
 }
 
 // Top-bar round info: difficulty, and during play the 底分 + 倍数.
@@ -444,6 +456,7 @@ function pollPad() {
 function showResult(r) {
   const youWon = (r.landlord === HUMAN) === r.landlordWon;
   const scores = LS.scores; for (let s = 0; s < 3; s++) scores[s] += r.delta[s]; LS.scores = scores;
+  updateScoreboard(state.backend && state.backend.getState());
   $('result-title').textContent = youWon ? '你赢了！' : '你输了';
   $('result-title').className = youWon ? 'win' : 'lose';
   const tags = [];

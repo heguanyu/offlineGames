@@ -286,7 +286,7 @@ export class DouScene {
       if (!r) {
         const atDeck = this._deal && this._deal.active && this._deal.serveAt.has(key);
         r = { mesh: this._makeMesh(d.faceCard), id: d.id, pick: d.pick, key };
-        r.mesh.position.copy(atDeck ? this._deal.deck : (d.from || d.pos)); r.mesh.quaternion.copy(d.quat);
+        r.mesh.position.copy(atDeck ? this._deal.deck : (d.from || d.pos)); r.mesh.quaternion.copy(atDeck ? this._deal.quat : d.quat);
         this.cards.set(key, r);
       }
       r.target = d; r.id = d.id; r.pick = d.pick;
@@ -371,11 +371,12 @@ export class DouScene {
     const dealing = this._deal && this._deal.active;
     for (const r of this.cards.values()) {
       if (!r.target) continue;
-      // during the deal, a card waits in the deck (a neat stack: served-soon on top) until its turn
+      // during the deal, a card waits in the deck (served-soon on top) until its turn — lying FLAT and
+      // FACE-DOWN, parallel to the table, stacked on the felt.
       if (dealing && r.key && this._deal.serveAt.has(r.key) && now < this._deal.serveAt.get(r.key)) {
-        const s = Math.min((this._deal.idx.get(r.key) || 0), 26) * 0.006;
-        r.mesh.position.set(this._deal.deck.x, this._deal.deck.y + s, this._deal.deck.z - s * 0.4);
-        r.mesh.quaternion.copy(r.target.quat);
+        const s = Math.min((this._deal.idx.get(r.key) || 0), 40) * 0.005;
+        r.mesh.position.set(this._deal.deck.x, this._deal.deck.y + s, this._deal.deck.z);
+        r.mesh.quaternion.copy(this._deal.quat);
         continue;
       }
       r.mesh.position.lerp(r.target.pos, a);
@@ -438,7 +439,8 @@ export class DouScene {
     const t0 = performance.now();
     const serveAt = new Map(), idx = new Map();
     order.forEach((k, i) => { serveAt.set(k, t0 + i * SERVE); idx.set(k, order.length - i); }); // served-soon = on top
-    this._deal = { active: true, serveAt, idx, deck: new THREE.Vector3(0, 1.5, -0.3) };
+    const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)); // flat, face-DOWN (back up)
+    this._deal = { active: true, serveAt, idx, deck: new THREE.Vector3(0, 0.07, -0.4), quat };
     return new Promise((res) => setTimeout(() => { if (this._deal) this._deal.active = false; res(); }, order.length * SERVE + FLIGHT + 120));
   }
 }
