@@ -6,10 +6,9 @@
 // VOICE uses pre-rendered Kokoro clips (tools/gen-voice-kokoro.py), bundled per persona = WIND
 // 0..3 (东南西北): 东 young man, 南 young woman, 西 mature man, 北 mature woman. Tiles + 碰/吃/明杠/
 // 暗杠/金杠 + 胡啦(天津)/点炮·自摸(国标). Missing/unloaded clips fall back to SpeechSynthesis.
-// TEMP: the Kokoro clips sounded bad — force the SpeechSynthesis fallback until a better Mandarin
-// model is generated. Flip back to true once good clips are in place.
-const USE_CLIPS = false;
-const CLIP_BASE = new URL('./voice/', import.meta.url).href;
+// Qwen3-TTS clips live in the SHARED mahjong-common/voice (used by 天津 + 国标), per persona = WIND 0..3.
+const USE_CLIPS = true;
+const CLIP_BASE = new URL('../mahjong-common/voice/', import.meta.url).href;
 function tileSlug(id) {
   if (id < 9) return 'm' + (id + 1);
   if (id < 18) return 'p' + (id - 8);

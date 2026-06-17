@@ -7,9 +7,8 @@
 // always a voice. main.js passes token ARRAYS to speak().
 let ctx = null;
 let muted = false;
-// TEMP: the Kokoro clips sounded bad — force the SpeechSynthesis fallback until a better Mandarin
-// model is generated. Flip back to true once good clips are in place.
-const USE_CLIPS = false;
+// Qwen3-TTS clips (good Mandarin); SpeechSynthesis remains the fallback if any clip is missing.
+const USE_CLIPS = true;
 const seatPitch = [1.0, 1.12, 0.92]; // MILD fallback TTS pitch per seat (extreme pitch sounded off)
 
 export function setMuted(m) { muted = !!m; }
