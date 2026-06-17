@@ -6,6 +6,9 @@
 // VOICE uses pre-rendered Kokoro clips (tools/gen-voice-kokoro.py), bundled per persona = WIND
 // 0..3 (东南西北): 东 young man, 南 young woman, 西 mature man, 北 mature woman. Tiles + 碰/吃/明杠/
 // 暗杠/金杠 + 胡啦(天津)/点炮·自摸(国标). Missing/unloaded clips fall back to SpeechSynthesis.
+// TEMP: the Kokoro clips sounded bad — force the SpeechSynthesis fallback until a better Mandarin
+// model is generated. Flip back to true once good clips are in place.
+const USE_CLIPS = false;
 const CLIP_BASE = new URL('./voice/', import.meta.url).href;
 function tileSlug(id) {
   if (id < 9) return 'm' + (id + 1);
@@ -41,11 +44,12 @@ export class Sound {
     // pitch/rate carry the differentiation otherwise. Indexed by seat 0..3.
     // Pitches are pushed toward the 0..2 extremes so the three bots are clearly
     // distinct even when the device has only one zh voice.
-    // Indexed by WIND 0..3 (东南西北) — matches the Kokoro clip personas; only used as the TTS fallback.
+    // Indexed by WIND 0..3 (东南西北). MILD pitch only — extreme pitch sounded unnatural; keep the TTS
+    // voice close to the device's natural Mandarin, with just a touch of per-seat distinction.
     this.voiceProfiles = [
-      { pitch: 1.15, rate: 1.05, gender: 'male' },   // 0 东 — young man
-      { pitch: 1.7, rate: 1.1, gender: 'female' },   // 1 南 — young woman
-      { pitch: 0.7, rate: 0.92, gender: 'male' },    // 2 西 — mature man
+      { pitch: 1.08, rate: 1.04, gender: 'male' },   // 0 东 — young man
+      { pitch: 1.18, rate: 1.06, gender: 'female' }, // 1 南 — young woman
+      { pitch: 0.92, rate: 0.96, gender: 'male' },   // 2 西 — mature man
       { pitch: 1.0, rate: 0.98, gender: 'female' },  // 3 北 — mature woman
     ];
     this._clip = [{}, {}, {}, {}];   // _clip[wind][slug] = AudioBuffer
@@ -98,6 +102,7 @@ export class Sound {
   // ---- Kokoro voice clips (preferred over TTS) ----
   // Fetch + decode every persona's clips once (after a gesture-driven resume()).
   async preloadClips() {
+    if (!USE_CLIPS) return;
     if (this._clipLoaded || this._clipLoading || !this.ctx) return;
     this._clipLoading = true;
     const ctx = this.ctx;
@@ -114,7 +119,7 @@ export class Sound {
   _playClip(slug, vi = 0) {
     if (this.muted) return;
     const ctx = this.resume();
-    const buf = ctx && this._clip[vi] && this._clip[vi][slug];
+    const buf = USE_CLIPS && ctx && this._clip[vi] && this._clip[vi][slug];
     if (buf) { try { const s = ctx.createBufferSource(); s.buffer = buf; s.connect(ctx.destination); s.start(); } catch {} }
     else this.say(CLIP_TEXT[slug] || slug, vi);
   }

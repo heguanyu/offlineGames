@@ -7,7 +7,10 @@
 // always a voice. main.js passes token ARRAYS to speak().
 let ctx = null;
 let muted = false;
-const seatPitch = [1.0, 1.85, 0.6]; // fallback TTS pitch per seat
+// TEMP: the Kokoro clips sounded bad — force the SpeechSynthesis fallback until a better Mandarin
+// model is generated. Flip back to true once good clips are in place.
+const USE_CLIPS = false;
+const seatPitch = [1.0, 1.12, 0.92]; // MILD fallback TTS pitch per seat (extreme pitch sounded off)
 
 export function setMuted(m) { muted = !!m; }
 export function isMuted() { return muted; }
@@ -72,7 +75,7 @@ function speechRegion(buf) {
   return { buf, offset: s / sr, duration: Math.max(0.04, (e - s) / sr) };
 }
 async function preload() {
-  if (loaded || loading || !ctx) return;
+  if (!USE_CLIPS || loaded || loading || !ctx) return;
   loading = true;
   const slugs = [...new Set(Object.values(SLUG))];
   const jobs = [];
@@ -98,7 +101,7 @@ export function speak(tokens, seat = 0) {
   resume();
   stopVoice();
   const slugs = tokens.map((t) => SLUG[t]);
-  const ready = ctx && loaded && slugs.every((s) => s && buffers[seat][s]);
+  const ready = USE_CLIPS && ctx && loaded && slugs.every((s) => s && buffers[seat][s]);
   if (ready) {
     const start = Math.max(ctx.currentTime, 0) + 0.02;
     let t = start, end = start;
