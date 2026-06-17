@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.5.31';
+const CACHE = 'offline-games-0.5.32';
 
 const ASSETS = [
   './',
@@ -11,6 +11,8 @@ const ASSETS = [
   './manifest.webmanifest',
   './icons/icon-180.png',
   './icons/icon-512.png',
+  './voicepick/', // QA tool (hub Tools card): voice-clip play-time audit; reads the cached voice WAVs
+  './voicepick/index.html',
   './games/pad-test/',
   './games/pad-test/index.html',
   './games/gba/',
