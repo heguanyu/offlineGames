@@ -67,7 +67,10 @@ export class Game {
     this.dealer = opts.dealer ?? 0;
     this.roundWind = opts.roundWind ?? 0;
     this.scores = opts.scores ? opts.scores.slice() : [0, 0, 0, 0];
-    this.minFan = opts.minFan ?? MIN_FAN; // 8 for standard MCR; 0 for 无定番
+    this.minFan = opts.minFan ?? MIN_FAN; // 8 for standard MCR; 0 for 无定番 (any fan, incl. 0, may win)
+    // Base score added to every payment (the 底分). Defaults to minFan so standard MCR keeps
+    // (fan + 8). Decoupled from minFan so 无定番 can win on any fan yet still charge a fixed base.
+    this.baseScore = opts.baseScore ?? this.minFan;
     this.log = [];
     this._deal(opts);
   }
@@ -248,13 +251,12 @@ export class Game {
     this._emit(`${this.seatName(player)} ${byDiscard ? '和牌' : '自摸'} ${result.fan}番`);
   }
 
-  // MCR payment: winner gets (fan + base), where base is the 起和番 floor (8 for
-  // standard MCR, 0 for 无定番). Self-draw → each pays it. Discard → the 点炮者 pays
-  // (fan + base), the other two pay the base each. 无定番 (base 0) therefore charges
-  // only the actual fan, with no fixed surcharge.
+  // MCR payment: winner gets (fan + base), where base is the 底分 (8 for standard MCR,
+  // configurable for 无定番). Self-draw → each pays it. Discard → the 点炮者 pays
+  // (fan + base), the other two pay the base each.
   _settle(winner, fan, payer) {
     const pay = new Array(4).fill(0);
-    const base = this.minFan;
+    const base = this.baseScore;
     const full = fan + base;
     for (let p = 0; p < 4; p++) {
       if (p === winner) continue;
@@ -276,7 +278,7 @@ export class Game {
   serialize() {
     const cloneMelds = (ms) => ms.map((m) => ({ ...m, tiles: m.tiles.slice() }));
     return {
-      dealer: this.dealer, roundWind: this.roundWind, scores: this.scores.slice(), minFan: this.minFan,
+      dealer: this.dealer, roundWind: this.roundWind, scores: this.scores.slice(), minFan: this.minFan, baseScore: this.baseScore,
       hands: this.hands.map((h) => h.slice()), melds: this.melds.map(cloneMelds),
       discards: this.discards.map((d) => d.slice()), discardLog: this.discardLog.map((e) => ({ ...e })),
       wall: this.wall.slice(), turn: this.turn, phase: this.phase, drawnTile: this.drawnTile,
@@ -299,6 +301,7 @@ export class Game {
     const g = Object.create(Game.prototype);
     g.rng = Math.random; g.log = [];
     g.dealer = s.dealer; g.roundWind = s.roundWind; g.scores = s.scores.slice(); g.minFan = s.minFan ?? MIN_FAN;
+    g.baseScore = s.baseScore ?? g.minFan;
     g.hands = s.hands.map((h) => h.slice());
     g.melds = s.melds.map((ms) => ms.map((m) => ({ ...m, tiles: m.tiles.slice() })));
     g.discards = s.discards.map((d) => d.slice());

@@ -197,11 +197,11 @@ export class MahjongScene {
     this.ivory = new THREE.MeshStandardMaterial({
       color: 0xc6c0b1, roughness: 0.92, metalness: 0.0, transparent: true, opacity: 0.8,
     });
-    // tile BACK: a PURE jade-green (no busy texture) with a clear-coat layer — reads as smooth polished
-    // resin via the material alone (a soft clearcoat highlight + matte diffuse body), not a patterned photo.
-    this.green = new THREE.MeshPhysicalMaterial({
-      color: 0x2c9a6f, roughness: 0.62, metalness: 0.0,
-      clearcoat: 0.6, clearcoatRoughness: 0.42,
+    // tile BACK: a PURE slate-blue (no busy texture) — a mostly matte, diffuse body with only a faint
+    // clearcoat, so it reads as soft resin rather than glossy plastic and stands clear of the green felt.
+    this.back = new THREE.MeshPhysicalMaterial({
+      color: 0x4165af, roughness: 0.9, metalness: 0.0,
+      clearcoat: 0.1, clearcoatRoughness: 0.7,
     });
     this.faceMat = new Map();   // faceKey -> material
     this.faceRecords = [];      // { canvas, tex, kind, wild } for async redraw on load
@@ -246,6 +246,8 @@ export class MahjongScene {
   // so pick() must un-rotate them. (worldToScreen needs no change — the HUD is in
   // the same rotated frame as the canvas.)
   setRotated(r) { this.rotated = !!r; }
+  // TEMP (palette tweaking): live-set the tile-back color from a #rrggbb string.
+  setBackColor(hex) { this.back.color.set(hex); }
   resize() { this._resize(); }
 
   _lights() {
@@ -383,7 +385,7 @@ export class MahjongScene {
   }
 
   _material(kind, wild, emissive) {
-    if (kind == null) return this.green; // back face
+    if (kind == null) return this.back; // back face
     const key = kind + (wild ? 'w' : '') + (emissive ? 'e' : '');
     let m = this.faceMat.get(key);
     if (!m) {

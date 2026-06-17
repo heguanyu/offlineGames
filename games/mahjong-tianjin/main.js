@@ -1212,6 +1212,30 @@ function focusResultBtn() {
 
 bindUI();
 
+// Tile-back color palette (3D table only) — hidden by default; add ?palette=1 to show it. Pick a color
+// (or type a #rrggbb) to live-update the back via scene.setBackColor(), then copy the hex into scene.js
+// (`this.back` color). The setBackColor() API stays regardless, for changing the color dynamically.
+if (!FLAT && new URLSearchParams(location.search).get('palette')) {
+  const DEFAULT_BACK = '#4165af'; // current source value of the 3D tile back
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;background:rgba(4,18,12,0.9);' +
+    'border:1px solid #2c8160;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;' +
+    'font:12px system-ui,sans-serif;color:#eaf6f0;box-shadow:0 4px 14px rgba(0,0,0,0.5)';
+  box.innerHTML = '<b style="font-size:11px;letter-spacing:.05em">TILE BACK (temp)</b>' +
+    '<div style="display:flex;align-items:center;gap:8px">' +
+    `<input type="color" id="tb-color" value="${DEFAULT_BACK}" style="width:42px;height:30px;border:none;background:none;cursor:pointer">` +
+    `<input type="text" id="tb-hex" value="${DEFAULT_BACK}" spellcheck="false" style="width:84px;background:#06150f;border:1px solid #1c5a44;border-radius:6px;color:#eaf6f0;padding:5px 6px;font:12px monospace">` +
+    '</div>';
+  document.body.appendChild(box);
+  const color = box.querySelector('#tb-color'), hex = box.querySelector('#tb-hex');
+  const apply = (v) => { if (scene && scene.setBackColor) scene.setBackColor(v); };
+  color.addEventListener('input', () => { hex.value = color.value; apply(color.value); });
+  hex.addEventListener('input', () => {
+    const v = hex.value.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) { color.value = v; apply(v); }
+  });
+}
+
 // Online boot: no start overlay / difficulty — the lobby already started the table. Connect
 // and let the server drive. (Gated on ONLINE; the offline boot below the start overlay is
 // completely unchanged.)

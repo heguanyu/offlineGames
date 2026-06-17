@@ -644,7 +644,7 @@ function startHand() {
   saveSession();
   // Hand off to the backend: it deals (the 'deal' event plays the serving flourish), then drives
   // the bots, pausing on an 'await' for the human. Under ?fast=1 (tests) the deal animation is skipped.
-  backend.startHand({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan, level });
+  backend.startHand({ dealer: session.dealer, roundWind: session.roundWind, scores: session.scores, minFan: CFG.minFan, baseScore: CFG.baseScore, level });
 }
 function newGame() { game = null; session = { scores: [0, 0, 0, 0], dealer: 0, roundWind: 0, hand: 1 }; startHand(); }
 
@@ -735,14 +735,15 @@ startGamepad(onAction, { 14: 'left', 12: 'left', 15: 'right', 13: 'right', 0: 'c
 function openMenu() { $('menu-overlay').classList.remove('hidden'); }
 function closeOverlays() { for (const id of ['menu-overlay', 'rules-overlay']) $(id).classList.add('hidden'); }
 function fillRules() {
+  const base = CFG.baseScore ?? CFG.minFan;  // 底分: standard MCR follows minFan (8); 无定番 has its own
   $('rules-body').innerHTML = `
     <h3>基本</h3>136 张牌（无花）。可<b>吃、碰、杠</b>；和牌可<b>自摸</b>或<b>点炮</b>（食他人打出之牌）。
     <h3>起和</h3>${CFG.minFan > 0 ? `和牌至少 <b>${CFG.minFan} 番</b>（番种总和），不足则不可和。` : '<b>无定番</b>：任意番数（含 0 番）皆可和。'}
     <h3>番种</h3>采用国标 81 番的常见番种子集：清一色24、混一色6、碰碰和6、字一色88、清/混幺九、大小三元、大小四喜、
     四/三/双暗刻、三色三同顺8、花龙8、一色三步高16、平和2、门前清/不求人、五门齐6、箭/风/幺九刻、单钓/边/坎张等。
-    <h3>计分</h3>${CFG.minFan > 0
-      ? `和牌得 (番 + ${CFG.minFan})；自摸三家各付，点炮则点炮者付 (番+${CFG.minFan})，余两家各付 ${CFG.minFan}。`
-      : '无定番：和牌只按实际番数结算（无固定底分）；自摸三家各付 番，点炮则仅点炮者付 番。'}
+    <h3>计分</h3>${base > 0
+      ? `和牌得 (番 + ${base})；自摸三家各付，点炮则点炮者付 (番+${base})，余两家各付 ${base}。`
+      : '和牌只按实际番数结算（无固定底分）；自摸三家各付 番，点炮则仅点炮者付 番。'}
     <h3>操作</h3>点牌选中、再点该牌或按 <b>A</b> 出牌（听牌时可「打出并听牌」）。轮到可<b>胡/碰/杠/吃</b>时点对应按钮，或<b>过</b>。`;
 }
 function bindUI() {

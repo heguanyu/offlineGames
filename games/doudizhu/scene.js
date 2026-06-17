@@ -376,12 +376,14 @@ export class DouScene {
     panel.rotation.x = -Math.PI / 2; panel.position.set(0, 0.03, -0.4);
     g.add(panel); this._revealPanel = panel;
     // face-down (back up) while bidding, else face-up. For face-down, spin the card 180° about its own
-    // normal so the back's 斗 reads UPRIGHT (a plain X-flip leaves it upside-down).
+    // normal so the back's 斗 reads UPRIGHT (a plain X-flip leaves it upside-down). The back cap is seen
+    // from behind, so its 斗 is also laterally mirrored — a reflection no rotation can undo; negate the
+    // mesh's X scale to flip it back (the renderer corrects the winding for the negative determinant).
     const lie = new THREE.Quaternion().setFromEuler(new THREE.Euler(faceDown ? Math.PI / 2 : -Math.PI / 2, 0, 0));
     if (faceDown) lie.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI)));
     cards.forEach((card, i) => {
       const m = this._makeMesh(card);                       // _makeMesh adds to this.group; re-parent below
-      m.scale.setScalar(1.5); m.quaternion.copy(lie);
+      m.scale.set(faceDown ? -1.5 : 1.5, 1.5, 1.5); m.quaternion.copy(lie);
       m.position.set((i - 1) * 1.9, 0.08, 0.35);            // a row UNDER the title, with a gap to the bottom border
       g.add(m);
     });

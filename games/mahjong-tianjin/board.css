@@ -75,7 +75,10 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 
 .plate-left   { left: 8px; top: 22%; transform: translateY(-50%); }
 
-.plate-right  { right: 8px; top: 22%; transform: translateY(-50%); }
+/* 下家 (right): floor the top with a px minimum so on short (landscape tablet) tables it drops
+   clear of the top-right #score-stack (每圈成绩 button) instead of overlapping it; tall/large
+   screens keep the 22% seat position untouched. */
+.plate-right  { right: 8px; top: max(22%, 205px); transform: translateY(-50%); }
 
 /* The 庄家 crown, lifted out of the nameplate to sit above it. */
 .hud .crown { font-size: 3rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55)); }
@@ -116,8 +119,8 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 
 .tile.lg { --tw: 30px; --th: 41px; border-radius: 5px; }
 
-/* face-down tile (blind 拉庄: your own hand on the 2D board) — a plain green back */
-.tile.back { background: linear-gradient(155deg,#1f7a55,#125c3e); box-shadow: inset 0 1px 1px rgba(255,255,255,0.22), 0 1px 0 #0c3f2b, 0 2px 0 #0a3424, 0 3px 4px rgba(0,0,0,0.4); }
+/* face-down tile (blind 拉庄: your own hand on the 2D board) — a slate-blue back (clears the green felt) */
+.tile.back { background: linear-gradient(155deg,#4f74c0,#2c4684); box-shadow: inset 0 1px 1px rgba(255,255,255,0.22), 0 1px 0 #233a6e, 0 2px 0 #1c2f5a, 0 3px 4px rgba(0,0,0,0.4); }
 
 .tile .rk { font-size: calc(var(--th) * 0.44); font-weight: 800; }
 
@@ -426,7 +429,7 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
 
 .b2-backs { display: flex; align-items: center; }
 
-.b2-back { width: 14px; height: 19px; border-radius: 3px; background: linear-gradient(160deg,#1f7d5b,#125c42);
+.b2-back { width: 14px; height: 19px; border-radius: 3px; background: linear-gradient(160deg,#4f74c0,#2c4684);
   box-shadow: inset 0 1px 1px rgba(255,255,255,0.25), 0 1px 2px rgba(0,0,0,0.4); }
 
 .b2-back + .b2-back { margin-left: -8px; }

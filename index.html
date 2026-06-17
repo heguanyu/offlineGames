@@ -39,6 +39,11 @@
   }
   #update-btn:active:not(:disabled) { background: #0f3460; }
   #update-btn:disabled { color: #5a5a78; border-color: #232f52; cursor: default; }
+  /* download progress for an in-flight update — a bar + live percentage next to the button */
+  #update-progress { display: inline-flex; align-items: center; gap: 7px; margin-left: 10px; vertical-align: middle; }
+  #update-bar { display: inline-block; width: 90px; height: 7px; border-radius: 999px; background: #232f52; overflow: hidden; }
+  #update-fill { display: block; height: 100%; width: 0; border-radius: 999px; background: #9fb4ff; transition: width 0.2s ease; }
+  #update-pct { font-size: 0.78rem; color: #9fb4ff; font-variant-numeric: tabular-nums; }
   /* "Add to Home Screen" helper (iOS/iPadOS Safari has no install API → we guide instead) */
   #install-btn {
     font: inherit; font-size: 0.78rem; line-height: 1;
@@ -151,7 +156,7 @@
     <option value="en">English</option>
   </select>
   <h1 data-i18n="title">离线游戏</h1>
-  <p id="meta"><span id="app-version"></span><span id="net-status"></span><button id="update-btn" type="button" hidden></button><button id="install-btn" type="button" data-i18n="install_btn" hidden></button></p>
+  <p id="meta"><span id="app-version"></span><span id="net-status"></span><button id="update-btn" type="button" hidden></button><span id="update-progress" hidden><span id="update-bar"><span id="update-fill"></span></span><span id="update-pct">0%</span></span><button id="install-btn" type="button" data-i18n="install_btn" hidden></button></p>
 
   <div id="install-overlay" hidden>
     <div class="install-card" role="dialog" aria-modal="true" aria-labelledby="install-title">
@@ -316,6 +321,9 @@
     const picker = document.getElementById('lang-picker');
     const statusEl = document.getElementById('net-status');
     const btn = document.getElementById('update-btn');
+    const progress = document.getElementById('update-progress');
+    const progressFill = document.getElementById('update-fill');
+    const progressPct = document.getElementById('update-pct');
     const swSupported = 'serviceWorker' in navigator;
 
     let swReg = null;       // the service-worker registration
@@ -345,6 +353,24 @@
         if (updating || hadController) reloadOnce();
         else showVersion(); // first-ever claim (no prior controller) → just refresh the version tag
       });
+      // A new worker reports its asset-caching progress while it installs (see sw.js):
+      // reveal the bar and track the percentage until it activates and we reload.
+      navigator.serviceWorker.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'install-progress') setProgress(e.data.pct);
+      });
+    }
+
+    // Reveal/update the download progress bar (pct 0–100); pct === null hides it.
+    // On an update the page reloads at activation; on a first-ever install there's no
+    // reload, so hide the bar a beat after it fills.
+    let progressDone = null;
+    function setProgress(pct) {
+      clearTimeout(progressDone);
+      if (pct == null) { progress.hidden = true; return; }
+      progress.hidden = false;
+      progressFill.style.width = pct + '%';
+      progressPct.textContent = pct + '%';
+      if (pct >= 100) progressDone = setTimeout(() => setProgress(null), 800);
     }
 
     // Update-button phase → [i18n key, disabled]. Text is resolved through the dict
@@ -401,7 +427,7 @@
 
     async function checkForUpdate() {
       if (busy || updating || !navigator.onLine) return;
-      busy = true; setBtn('checking');
+      busy = true; setBtn('checking'); setProgress(null);
       try {
         swReg = swReg || await navigator.serviceWorker.getRegistration();
         if (!swReg) throw new Error('no service-worker registration');
@@ -414,7 +440,7 @@
         }
         trackUpdate(incoming);
       } catch {
-        busy = false; setBtn('error');
+        busy = false; setBtn('error'); setProgress(null);
       }
     }
 
@@ -428,12 +454,12 @@
       const onState = () => {
         if (worker.state === 'installed') nudge();         // waiting → ask it to take over
         else if (worker.state === 'activated') reloadOnce(); // active → reload to fresh assets
-        else if (worker.state === 'redundant') { updating = false; busy = false; setBtn('error'); }
+        else if (worker.state === 'redundant') { updating = false; busy = false; setBtn('error'); setProgress(null); }
       };
       worker.addEventListener('statechange', onState);
       onState();                                           // in case it already advanced
       setTimeout(() => {                                   // watchdog: never stay stuck
-        if (updating && !reloaded) { updating = false; busy = false; updateNetStatus(); }
+        if (updating && !reloaded) { updating = false; busy = false; updateNetStatus(); setProgress(null); }
       }, 15000);
     }
     btn.addEventListener('click', checkForUpdate);

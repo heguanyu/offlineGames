@@ -41,11 +41,11 @@ export class LocalBackend {
 
   async _emit(ev) { if (this._handler) await this._handler(ev); }
 
-  // Deal and play one hand. cfg: { dealer, roundWind, scores, minFan, level }.
+  // Deal and play one hand. cfg: { dealer, roundWind, scores, minFan, baseScore, level }.
   async startHand(cfg) {
     const gen = ++this._gen;
     if (cfg.level != null) this.level = cfg.level;
-    this._game = new Game({ rng: this.rng, dealer: cfg.dealer, roundWind: cfg.roundWind, scores: cfg.scores, minFan: cfg.minFan });
+    this._game = new Game({ rng: this.rng, dealer: cfg.dealer, roundWind: cfg.roundWind, scores: cfg.scores, minFan: cfg.minFan, baseScore: cfg.baseScore });
     await this._emit({ type: 'deal' });
     if (gen !== this._gen) return;
     await this._advance(gen);

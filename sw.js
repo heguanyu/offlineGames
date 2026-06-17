@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.5.24';
+const CACHE = 'offline-games-0.5.25';
 
 const ASSETS = [
   './',
@@ -439,12 +439,32 @@ const ASSETS = [
   './emulatorjs/data/src/storage.js',
 ];
 
+// Post a message to every window of this origin — including ones not yet
+// controlled by this worker (the hub that triggered the update is controlled by
+// the OLD worker while we install), so the progress bar can be driven live.
+function broadcast(msg) {
+  return self.clients.matchAll({ includeUncontrolled: true, type: 'window' })
+    .then((clients) => clients.forEach((c) => c.postMessage(msg)));
+}
+
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE)
-      .then((cache) => cache.addAll(ASSETS))
-      .then(() => self.skipWaiting())
-  );
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    const total = ASSETS.length;
+    let done = 0, lastPct = -1;
+    // Report progress only when the whole-number percent changes (≤101 messages,
+    // not one per asset). Fire-and-forget — progress is best-effort cosmetics.
+    const tick = () => {
+      const pct = Math.floor((done / total) * 100);
+      if (pct !== lastPct) { lastPct = pct; broadcast({ type: 'install-progress', done, total, pct }); }
+    };
+    tick();
+    // Per-asset cache.add (instead of cache.addAll) so we can count completions.
+    // Promise.all still rejects on any failure, so a broken asset fails the whole
+    // install exactly like addAll did — the cache never ends up half-populated.
+    await Promise.all(ASSETS.map((url) => cache.add(url).then(() => { done++; tick(); })));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (e) => {

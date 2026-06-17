@@ -77,7 +77,6 @@ body.flat .bid-btn { min-width: 50px; }
   background: linear-gradient(#06231a, #0a3526);
   box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
-#nav a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 #round-info { font-size: 0.82rem; color: #cdeadd; }
 #round-info b { color: var(--gold); }
 #nav .spacer { flex: 1; }
@@ -90,7 +89,6 @@ body.flat #nav {
   padding: max(10px, env(safe-area-inset-top)) 8px max(10px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
   box-shadow: 2px 0 8px rgba(0,0,0,0.4);
 }
-body.flat #nav a.back { font-size: 1.05rem; text-align: center; }
 body.flat #nav #round-info { text-align: center; line-height: 1.32; }
 body.flat #table { left: 86px; }
 
