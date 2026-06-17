@@ -57,8 +57,7 @@ body.flat .c2.h.hint { outline: 2px solid #2f9a5e; }
 /* 底牌展示 panel in flat mode */
 body.flat .b2-reveal {
   position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%); z-index: 7; text-align: center;
-  background: rgba(6,26,18,0.9); border: 3px solid var(--gold); border-radius: 14px; padding: 10px 16px 14px;
-  box-shadow: 0 10px 26px rgba(0,0,0,0.6);
+  background: transparent; border: 3px solid var(--gold); border-radius: 14px; padding: 10px 16px 14px;
 }
 body.flat .b2-reveal-t { color: var(--gold); font-weight: 800; letter-spacing: 0.14em; font-size: 0.95rem; margin-bottom: 8px; }
 body.flat .b2-reveal-row { display: flex; gap: 8px; }

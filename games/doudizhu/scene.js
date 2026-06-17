@@ -8,7 +8,7 @@
 import * as THREE from '../mahjong-tianjin/lib/three.module.min.js';
 import { rankLabel } from './engine.js';
 
-const CW = 1.0, CH = 1.45, CD = 0.02;   // card width / height / depth (thin cards)
+const CW = 1.0, CH = 1.45, CD = 0.014;  // card width / height / depth (very thin cards)
 const FELT = 15;
 const HAND_Y = 0.62;   // human hand sits ABOVE the felt (was clipping into the table)
 const OPP_Y = 1.45;    // opponents' upright fans stand on the table (raised so the 2× cards clear the felt)
@@ -93,6 +93,19 @@ function backTexture() {
   x.font = '900 70px -apple-system,"PingFang SC",sans-serif'; x.fillText('斗', W / 2, H / 2);
   backTex = new THREE.CanvasTexture(c); backTex.colorSpace = THREE.SRGBColorSpace; backTex.anisotropy = 4;
   return backTex;
+}
+// Felt fabric texture (same idea as the mahjong table) — speckled green so the table reads as cloth
+// instead of a flat, cheap-looking fill.
+let feltTex = null;
+function feltTexture() {
+  if (feltTex) return feltTex;
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const x = c.getContext('2d');
+  x.fillStyle = '#0f5e44'; x.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 26000; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * 0.028})`; x.fillRect(Math.random() * 512, Math.random() * 512, 1, 1); }
+  for (let i = 0; i < 14000; i++) { x.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`; x.fillRect(Math.random() * 512, Math.random() * 512, 1, 1); }
+  feltTex = new THREE.CanvasTexture(c); feltTex.colorSpace = THREE.SRGBColorSpace; feltTex.anisotropy = 4;
+  return feltTex;
 }
 
 // A rounded-corner card body: a rounded rectangle extruded by the card depth, so the face is a
@@ -193,7 +206,7 @@ export class DouScene {
       new THREE.MeshStandardMaterial({ color: 0x5a381e, roughness: 0.72 }));
     rim.position.y = -0.45; this.scene.add(rim);
     const felt = new THREE.Mesh(new THREE.CylinderGeometry(FELT / 2, FELT / 2, 0.5, 64),
-      new THREE.MeshStandardMaterial({ color: 0x0a5038, roughness: 0.96 }));   // darker green so the cards pop
+      new THREE.MeshStandardMaterial({ map: feltTexture(), roughness: 0.96 }));   // speckled cloth (not a flat fill)
     felt.position.y = -0.26; this.scene.add(felt);
   }
 
@@ -225,10 +238,10 @@ export class DouScene {
     const step = Math.min(0.64, n > 1 ? 11 / (n - 1) : 0);
     const x0 = -step * (n - 1) / 2;
     const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.faceCamRx, 0, 0));
-    // The card faces the camera, so a selected card lifts along the CAMERA's +Y axis (screen-up) — it
-    // slides straight up in view, staying square to the camera (no tilt, no slide toward/away).
-    this.camera.updateMatrixWorld();
-    const camUp = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
+    // A selected card slides along its OWN long edge — the card's local +Y axis (in a frame where its
+    // local +Z is the camera-facing normal). So it slides up/down across its own face, staying in its
+    // plane: no tilt, no motion toward/away from the camera.
+    const cardUp = new THREE.Vector3(0, 1, 0).applyQuaternion(tilt);
     hand.forEach((card, i) => {
       const sel = view.selected && view.selected.has(card.id);
       const hint = view.hint && view.hint.has(card.id);
@@ -236,7 +249,7 @@ export class DouScene {
       // per-card depth step lets overlapping neighbours layer cleanly without a visible slant.
       const z = 6.9 + i * 0.005;
       const pos = new THREE.Vector3(x0 + i * step, HAND_Y, z);
-      if (sel) pos.addScaledVector(camUp, 1.05);
+      if (sel) pos.addScaledVector(cardUp, 1.1);
       want.set('c' + card.id, { faceCard: card, pos, quat: tilt, scale: 1.1, pick: true, id: card.id, hint, sel });
     });
 
@@ -326,8 +339,7 @@ export class DouScene {
     // the border + title, drawn to a canvas and laid flat on the felt (reads upright from the player)
     const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 820; // taller → room for the cards
     const x = cv.getContext('2d'); const W = cv.width, H = cv.height;
-    rr(x, 12, 12, W - 24, H - 24, 44); x.fillStyle = 'rgba(6,26,18,0.82)'; x.fill();
-    x.lineWidth = 12; x.strokeStyle = '#e8c466'; x.stroke();                                  // outer gold frame
+    rr(x, 12, 12, W - 24, H - 24, 44); x.lineWidth = 12; x.strokeStyle = '#e8c466'; x.stroke(); // gold frame, TRANSPARENT inside
     rr(x, 30, 30, W - 60, H - 60, 32); x.lineWidth = 3; x.strokeStyle = 'rgba(232,196,102,0.45)'; x.stroke(); // inner bevel line
     x.fillStyle = '#f0d886'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.font = '800 88px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
@@ -337,10 +349,13 @@ export class DouScene {
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(pw, pd), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
     panel.rotation.x = -Math.PI / 2; panel.position.set(0, 0.03, -0.4);
     g.add(panel); this._revealPanel = panel;
-    const lie = new THREE.Euler(faceDown ? Math.PI / 2 : -Math.PI / 2, 0, 0); // face-down (back up) while bidding, else face-up
+    // face-down (back up) while bidding, else face-up. For face-down, spin the card 180° about its own
+    // normal so the back's 斗 reads UPRIGHT (a plain X-flip leaves it upside-down).
+    const lie = new THREE.Quaternion().setFromEuler(new THREE.Euler(faceDown ? Math.PI / 2 : -Math.PI / 2, 0, 0));
+    if (faceDown) lie.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI)));
     cards.forEach((card, i) => {
       const m = this._makeMesh(card);                       // _makeMesh adds to this.group; re-parent below
-      m.scale.setScalar(1.5); m.quaternion.setFromEuler(lie);
+      m.scale.setScalar(1.5); m.quaternion.copy(lie);
       m.position.set((i - 1) * 1.9, 0.08, 0.35);            // a row UNDER the title, with a gap to the bottom border
       g.add(m);
     });
