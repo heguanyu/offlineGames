@@ -12,6 +12,50 @@ html, body {
 #table { position: fixed; inset: 0; }
 #scene { width: 100%; height: 100%; display: block; touch-action: none; }
 
+/* ===== flat 2D board (phones) — a RECTANGLE table rendered in DOM (scene2d.js) ===== */
+#board2d { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+body.flat #scene { background: transparent; }              /* the transparent canvas is just the input overlay */
+body.flat #board2d::before {                                /* the rectangle felt with a wood rim */
+  content: ''; position: absolute; inset: 6px;
+  background: radial-gradient(circle at 50% 42%, #1f7250, #0c4530 76%);
+  border: 7px solid #6e4626; border-radius: 18px; box-shadow: inset 0 0 30px rgba(0,0,0,0.35);
+}
+body.flat .c2 {
+  position: absolute; width: 46px; height: 64px; border-radius: 6px; box-sizing: border-box;
+  background: #fff; border: 1px solid #cdc8b8; box-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  display: flex; flex-direction: column; align-items: flex-start; padding: 2px 0 0 4px; /* index in the top-LEFT corner so it's visible when cards overlap */
+  font-family: Arial, system-ui, sans-serif; font-weight: 900; line-height: 1;
+}
+body.flat .c2 .rk { font-size: 19px; }
+body.flat .c2 .su { font-size: 15px; margin-top: 1px; }
+body.flat .c2.red { color: #d11414; }
+body.flat .c2.blk { color: #141414; }
+body.flat .c2.jk .rk { font-size: 15px; }
+body.flat .c2.jk .su { font-size: 13px; }
+body.flat .c2.back {
+  background: repeating-linear-gradient(45deg, #9a1b2e 0 6px, #76121f 6px 12px); border-color: #5e0f1d;
+}
+body.flat .c2.mini { width: 24px; height: 33px; padding-top: 1px; }
+body.flat .c2.mini .rk { font-size: 11px; } body.flat .c2.mini .su { font-size: 9px; }
+body.flat .c2.play { width: 40px; height: 56px; }
+body.flat .c2.play.lead { box-shadow: 0 0 9px rgba(255,210,80,0.7); }
+body.flat .c2.h { bottom: 10px; transition: bottom 0.12s; }
+body.flat .c2.h.sel { bottom: 30px; box-shadow: 0 0 9px rgba(255,214,90,0.9); }
+body.flat .c2.h.hint { outline: 2px solid #2f9a5e; }
+/* 底牌展示 panel in flat mode */
+body.flat .b2-reveal {
+  position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%); z-index: 7; text-align: center;
+  background: rgba(6,26,18,0.9); border: 3px solid var(--gold); border-radius: 14px; padding: 10px 16px 14px;
+  box-shadow: 0 10px 26px rgba(0,0,0,0.6);
+}
+body.flat .b2-reveal-t { color: var(--gold); font-weight: 800; letter-spacing: 0.14em; font-size: 0.95rem; margin-bottom: 8px; }
+body.flat .b2-reveal-row { display: flex; gap: 8px; }
+body.flat .b2-reveal .c2 { position: relative; }
+body.flat .b2-reveal .c2.big { width: 58px; height: 81px; }
+body.flat .b2-reveal .c2.big .rk { font-size: 24px; } body.flat .b2-reveal .c2.big .su { font-size: 18px; }
+/* the play buttons sit a bit lower in flat mode (smaller cards) */
+body.flat #actions.play-bar { bottom: 18%; }
+
 /* top bar — solid header, matches the mahjong games */
 #nav {
   position: absolute; top: 0; left: 0; right: 0; z-index: 5;

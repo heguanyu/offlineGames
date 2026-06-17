@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.5.2';
+const CACHE = 'offline-games-0.5.3';
 
 const ASSETS = [
   './',
@@ -88,6 +88,7 @@ const ASSETS = [
   './games/doudizhu/ai.js',
   './games/doudizhu/backend.js',
   './games/doudizhu/scene.js',
+  './games/doudizhu/scene2d.js',
   './games/doudizhu/select.js',
   './games/doudizhu/sound.js',
   './games/doudizhu/main.js',

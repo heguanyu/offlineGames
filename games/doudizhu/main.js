@@ -5,12 +5,21 @@ import { createBackend, HUMAN } from './backend.js';
 import { legalMoves, classify, beats, rankLabel, COMBO } from './engine.js';
 import { chooseMove } from './ai.js';
 import { DouScene } from './scene.js';
+import { DouScene2D } from './scene2d.js';
 import { SmartSelection } from './select.js';
 import { sfx, speak, setMuted, isMuted, resume } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 // FAST is a hidden test override (?fast=1) — there's no user-facing 快速 mode.
 const FAST = new URLSearchParams(location.search).has('fast');
+// Phones use the flat 2D DOM board (rectangle table); desktops use the 3D scene. ?flat=1 / ?d3=1 override.
+const FLAT = (() => {
+  const p = new URLSearchParams(location.search);
+  if (p.has('d3')) return false;
+  if (p.has('flat')) return true;
+  return Math.min(screen.width, screen.height) < 600 || /iPhone|iPod/.test(navigator.userAgent);
+})();
+document.body.classList.toggle('flat', FLAT);
 const LS = {
   get level() { return +(localStorage.getItem('doudizhu-level') ?? 1); },
   set level(v) { localStorage.setItem('doudizhu-level', v); },
@@ -39,7 +48,7 @@ const state = {
 
 // ---- boot ------------------------------------------------------------------
 function boot() {
-  state.scene = new DouScene($('scene'));
+  state.scene = new (FLAT ? DouScene2D : DouScene)($('scene'));
   state.level = LS.level;
   setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊';
 
