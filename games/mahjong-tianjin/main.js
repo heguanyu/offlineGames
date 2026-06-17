@@ -642,6 +642,14 @@ function renderWinningHand(handEl, w, r) {
   if (pair) addGroup(pair, ' pair', handEl, pairG);
 }
 
+// Per-fan scoring gain shown on each result chip (e.g. 龙·4分). Additive fans show their
+// 分 (捉五+3, 龙+4, 本混龙 base 8, 天/地和 28); pure-multiplier fans show ×2. Mirrors the
+// FAN table + scoreFromDecomp() in engine.js — keep in sync if those values change.
+const FAN_GAIN = {
+  '捉五': '3分', '龙': '4分', '本混龙': '8分', '天和': '28分', '地和': '28分',
+  '素': '×2', '混吊': '×2', '双混吊': '×2', '杠开': '×2',
+};
+
 function showResult() {
   const r = game.result;
   const ov = $('result-overlay');
@@ -662,14 +670,16 @@ function showResult() {
     payEl.innerHTML = hasPay ? breakdownHtml(r) : '本局无人和牌';
   } else {
     const w = r.winner;
-    $('result-title').textContent = `${SEAT_LABEL[w]}（${WIND[game.seatWind(w)]}）自摸！`;
+    $('result-title').textContent = `本局结束，${SEAT_LABEL[w]} 获胜！`;
     for (const f of r.fans) {
-      const c = document.createElement('span'); c.className = 'fan-chip'; c.textContent = f;
+      const c = document.createElement('span'); c.className = 'fan-chip';
+      const gain = FAN_GAIN[f];                       // annotate each reason with its scoring gain, e.g. 龙·4分
+      c.textContent = gain ? `${f}·${gain}` : f;
       fansEl.appendChild(c);
     }
-    scoreEl.textContent = r.score + ' 分';
+    scoreEl.textContent = '';                          // total winning score removed; each fan chip carries its own gain
     if (r.winningTile != null) {
-      const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = '自摸 · 和这张';
+      const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = '和这张';
       winEl.appendChild(cap);
       winEl.appendChild(faceTileEl(r.winningTile, { lg: true, wild: game.isWild(r.winningTile) }));
       winEl.classList.add('show');
@@ -717,8 +727,7 @@ function breakdownHtml(r) {
     return `<span class="bd-all-seat${p === me ? ' me' : ''}" style="grid-row:${row};grid-column:${c}">` +
       `${p === dealer ? '👑' : ''}${SEAT_LABEL[p]} <b style="color:${col(r.payments[p])}">${sgn(r.payments[p])}</b></span>`;
   }).join('');
-  // your breakdown — net vs each opponent, with the 胡/杠 reasons as subitems
-  let total = 0;
+  // your breakdown — vs each opponent, with the 胡/杠 reasons as subitems (no per-opponent total)
   const grps = [1, 2, 3].map((off) => {
     const q = (me + off) % 4, factors = game.settlementFactors(me, q);
     const f = factors.reduce((m, x) => m * x.factor, 1);
@@ -733,16 +742,14 @@ function breakdownHtml(r) {
       if (mine) subs.push([label, mine * f]);                                  // my 杠 → this opponent pays me
       if (theirs) subs.push([`${SEAT_LABEL[q]}${label}`, -theirs * f]);        // their 杠 → I pay them
     }
-    const net = subs.reduce((s, [, v]) => s + v, 0); total += net;
     const tag = factors.map((x) => ` <span class="dbl">${x.label}x${x.factor}</span>`).join('');
     const subHtml = (subs.length ? subs : [['—', 0]]).map(([w, v]) =>
       `<div class="bd-sub"><span>${w}</span><span class="s-net" style="color:${col(v)}">${v ? sgn(v) : '—'}</span></div>`
     ).join('');
-    return `<div class="bd-grp"><div class="bd-row"><span class="bd-seat">${q === dealer ? '👑 ' : ''}${SEAT_LABEL[q]}${tag}</span>` +
-      `<span class="bd-net" style="color:${col(net)}">${sgn(net)}</span></div>${subHtml}</div>`;
+    return `<div class="bd-grp"><div class="bd-row"><span class="bd-seat">${q === dealer ? '👑 ' : ''}${SEAT_LABEL[q]}${tag}</span></div>${subHtml}</div>`;
   });
   return `<div class="bd-title">本局得分</div><div class="bd-all">${all}</div>` +
-    `<div class="bd-title">玩家明细 · <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${col(total)}">${sgn(total)}</span></div>` +
+    `<div class="bd-title">玩家明细</div>` +
     grps.join('');
 }
 
