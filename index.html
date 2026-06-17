@@ -133,6 +133,15 @@
   /* online section disabled while offline — its cards can't reach the server */
   .cat-section.section-disabled .cat-title { opacity: 0.55; }
   .cat-section.section-disabled nav .card { pointer-events: none; opacity: 0.4; filter: grayscale(0.7); }
+  /* phones: smaller, tighter cards (≈3 per row) so more games fit on screen — grouping kept */
+  @media (max-width: 600px) {
+    nav { gap: 9px; }
+    .card { width: 104px; height: 86px; font-size: 0.8rem; border-radius: 10px; }
+    .card .emoji { font-size: 1.7rem; margin-bottom: 5px; }
+    .card .wifi { font-size: 0.95rem; top: 5px; right: 6px; }
+    .cat-section { margin-bottom: 18px; }
+    .cat-title { font-size: 0.92rem; margin-bottom: 9px; padding-bottom: 6px; }
+  }
 </style>
 </head>
 <body>

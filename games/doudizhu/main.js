@@ -112,9 +112,11 @@ async function onEvent(ev) {
     case 'deal': {
       state.phase = 'bid'; state.trick = {}; state.discard = []; state.reveal = false; state.sel.clear(); state.hint.clear();
       state.bottom = null; clearBubbles();
-      const dealt = state.scene.beginDeal({ hand: g.hands[HUMAN], bottom: g.bottom, fast: FAST });
+      const dealt = state.scene.beginDeal({ hand: g.hands[HUMAN], fast: FAST });
       sfx.deal(); render();
-      await dealt; render(); break;
+      await dealt; render();
+      state.scene.showBottomReveal(g.bottom, { faceDown: true, title: '底 牌' }); // 底牌 box (face-down) shown through bidding
+      break;
     }
     case 'askBid':
       state.awaiting = 'bid'; showBidBar(g); render(); break;
@@ -135,7 +137,7 @@ async function onEvent(ev) {
       await wait(3200);
       hideBottomReveal(); render(); break;
     case 'redeal':
-      clearBubbles(); state.bottom = null; render(); await wait(500); break;
+      clearBubbles(); state.bottom = null; state.scene.hideBottomReveal(); render(); await wait(500); break;
     case 'play': {
       state.trick[ev.seat] = ev.cards;
       const dur = announcePlay(ev); clearBubble(ev.seat);
@@ -225,7 +227,6 @@ function render() {
   state.scene.sync({
     hand, selected: state.sel.selected, hint: state.hint,
     counts: g.handCounts, landlord: g.landlord, turn: g.phase === 'bid' ? g.bidTurn : g.turn, leadSeat: g.leadSeat, phase: g.phase,
-    bottomDown: g.phase === 'bid' ? g.bottom : null,   // 3 底牌 shown face-down on the table while bidding
     table, discard: state.discard,
     revealHands: state.reveal ? { 1: g.hands[1], 2: g.hands[2] } : null,
   });

@@ -21,23 +21,6 @@ const SEAT_ANCHOR = [new THREE.Vector3(0, 0, 7.4), new THREE.Vector3(8.2, 0, -2.
 // Where each seat's current play sits on the felt.
 const PLAY_SPOT = [new THREE.Vector3(0, 0, 2.6), new THREE.Vector3(3.7, 0, -0.4), new THREE.Vector3(-3.7, 0, -0.4)];
 const BOTTOM_SPOT = new THREE.Vector3(0, 0, -5.4);
-// Where the on-turn ring sits — on the felt, between each player and the centre.
-const TURN_SPOT = [new THREE.Vector3(0, 0, 5.5), new THREE.Vector3(4.7, 0, -1.6), new THREE.Vector3(-4.7, 0, -1.6)];
-
-// A flat ring whose glow is concentrated in a 120° arc (a conic gradient) — it spins and pulses to
-// mark whose turn it is.
-let ringTex = null;
-function turnRingTexture() {
-  if (ringTex) return ringTex;
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const x = c.getContext('2d'); const cx = 128;
-  const grad = x.createConicGradient(0, cx, cx);
-  const col = (a) => `rgba(255,214,110,${a})`;                          // warm gold — pops against the green felt
-  grad.addColorStop(0.00, col(1)); grad.addColorStop(0.166, col(0));   // bright over a 120° arc, fading out
-  grad.addColorStop(0.834, col(0)); grad.addColorStop(1.00, col(1));
-  x.strokeStyle = grad; x.lineWidth = 40; x.beginPath(); x.arc(cx, cx, 96, 0, Math.PI * 2); x.stroke();
-  ringTex = new THREE.CanvasTexture(c); ringTex.colorSpace = THREE.SRGBColorSpace; return ringTex;
-}
 
 // ---- card faces ------------------------------------------------------------
 const faceCache = new Map();   // key -> THREE.CanvasTexture
@@ -188,12 +171,22 @@ export class DouScene {
   _lights() {
     this.scene.add(new THREE.AmbientLight(0xffffff, 2.25));
   }
+  // A single glowing ONE-THIRD ring (120°) laid flat on the felt, centered at the table origin. It
+  // rotates in-plane (rotation.z) to point at whichever seat's turn it is, and pulses. (Same idea as
+  // the mahjong quarter-ring, with three 120° seats instead of four 90° ones.)
   _turnRing() {
-    const geo = new THREE.RingGeometry(1.35, 1.95, 64); geo.rotateX(-Math.PI / 2); // lie flat on the felt
-    const mat = new THREE.MeshBasicMaterial({ map: turnRingTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    const R = 4.5;
+    const geo = new THREE.RingGeometry(R - 0.22, R + 0.22, 48, 1, -Math.PI / 3, 2 * Math.PI / 3); // 120° centered on +X
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffd23a, transparent: true, opacity: 0,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
     this.turnRing = new THREE.Mesh(geo, mat);
-    this.turnRing.position.y = 0.02; this.turnRing.visible = false;
+    this.turnRing.rotation.set(-Math.PI / 2, 0, 0); // lie flat; rotation.z (3rd Euler) spins it in-plane
+    this.turnRing.position.set(0, 0.03, 0);
+    this.turnRing.visible = false;
     this.scene.add(this.turnRing);
+    // rotation.z that centers the arc on each seat's world direction (atan2(-z, x))
+    this._turnSpin = SEAT_ANCHOR.map((a) => Math.atan2(-a.z, a.x));
+    this._turnRingActive = -1;
   }
   _table() {
     const rim = new THREE.Mesh(new THREE.CylinderGeometry(FELT / 2 + 1.1, FELT / 2 + 1.1, 0.7, 64),
@@ -232,34 +225,25 @@ export class DouScene {
     const step = Math.min(0.64, n > 1 ? 11 / (n - 1) : 0);
     const x0 = -step * (n - 1) / 2;
     const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.faceCamRx, 0, 0));
-    // The camera's up axis = "straight up" on screen. Lifting a selected card along it is perpendicular
-    // to the view direction, so the card's distance to the camera is unchanged — it slides purely up,
-    // with NO movement toward the camera (it doesn't grow or pop out at the viewer).
-    this.camera.updateMatrixWorld();
-    const screenUp = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
     hand.forEach((card, i) => {
       const sel = view.selected && view.selected.has(card.id);
       const hint = view.hint && view.hint.has(card.id);
       // Flat, even row (no vertical slope), all cards at the same tilt facing the camera. A TINY
       // per-card depth step lets overlapping neighbours layer cleanly without a visible slant.
       const z = 6.9 + i * 0.005;
-      const pos = new THREE.Vector3(x0 + i * step, HAND_Y, z);
-      if (sel) pos.addScaledVector(screenUp, 1.15);
+      // a selected card lifts straight UP in world +Y only (no z/x change, no rotation) — it slides up,
+      // never tilts or slides back.
+      const pos = new THREE.Vector3(x0 + i * step, HAND_Y + (sel ? 1.0 : 0), z);
       want.set('c' + card.id, { faceCard: card, pos, quat: tilt, scale: 1.1, pick: true, id: card.id, hint, sel });
     });
 
-    // 底牌 — the 3 landlord cards. During bidding they sit FACE-DOWN at top centre (dealt last from the
-    // deck); once a landlord is chosen they're taken into a hand and the reveal panel shows them.
-    const flatDown = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)); // back up
-    if (view.bottomDown) view.bottomDown.forEach((card, i) => {
-      want.set('c' + card.id, { faceCard: card, pos: new THREE.Vector3(BOTTOM_SPOT.x + (i - 1) * 1.25, 0.06 + i * 0.004, BOTTOM_SPOT.z), quat: flatDown, scale: 0.95 });
-    });
+    const flatDown = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)); // back up (used by the discard pile)
 
-    // on-turn ring — placed at the active seat (bid or play), spun + glowed in the loop
+    // on-turn ring — aim at the active seat (bid OR play); the loop rotates it there + pulses
     if (this.turnRing) {
       const ts = (view.turn != null && (view.phase === 'bid' || view.phase === 'play')) ? view.turn : -1;
+      this._turnRingActive = ts;
       this.turnRing.visible = ts >= 0;
-      if (ts >= 0) { const sp = TURN_SPOT[ts]; this.turnRing.position.set(sp.x, 0.02, sp.z); }
     }
 
     // current plays on the felt, one cluster per seat. The CURRENT play (the lead to beat) is
@@ -331,9 +315,9 @@ export class DouScene {
   }
   seatScreen(seat, y = 1.2) { return this.worldToScreen(SEAT_ANCHOR[seat].clone().setY(y)); }
 
-  // 底牌展示 — carved INTO the 3D table: a bordered rectangle lying on the felt, the title text
-  // inside it, and the 3 landlord cards (double-sized, face-up) under the text.
-  showBottomReveal(cards) {
+  // 底牌 box — carved INTO the 3D table: a bordered rectangle lying on the felt, a title, and the 3
+  // 底牌 under it. Shown FACE-DOWN during bidding and flipped FACE-UP (展示) once the landlord is set.
+  showBottomReveal(cards, { faceDown = false, title = '底 牌 展 示' } = {}) {
     this.hideBottomReveal();
     const g = new THREE.Group();
     // the border + title, drawn to a canvas and laid flat on the felt (reads upright from the player)
@@ -344,16 +328,16 @@ export class DouScene {
     rr(x, 30, 30, W - 60, H - 60, 32); x.lineWidth = 3; x.strokeStyle = 'rgba(232,196,102,0.45)'; x.stroke(); // inner bevel line
     x.fillStyle = '#f0d886'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.font = '800 88px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
-    x.fillText('底 牌 展 示', W / 2, 96);
+    x.fillText(title, W / 2, 96);
     const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
     const pw = 7.4, pd = pw * H / W;
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(pw, pd), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
     panel.rotation.x = -Math.PI / 2; panel.position.set(0, 0.03, -0.4);
     g.add(panel); this._revealPanel = panel;
-    const flatUp = new THREE.Euler(-Math.PI / 2, 0, 0);
+    const lie = new THREE.Euler(faceDown ? Math.PI / 2 : -Math.PI / 2, 0, 0); // face-down (back up) while bidding, else face-up
     cards.forEach((card, i) => {
       const m = this._makeMesh(card);                       // _makeMesh adds to this.group; re-parent below
-      m.scale.setScalar(1.5); m.quaternion.setFromEuler(flatUp);
+      m.scale.setScalar(1.5); m.quaternion.setFromEuler(lie);
       m.position.set((i - 1) * 1.9, 0.08, 0.35);            // a row UNDER the title, with a gap to the bottom border
       g.add(m);
     });
@@ -411,9 +395,12 @@ export class DouScene {
       r.mesh.quaternion.slerp(r.target.quat, a);
       const s = r.target.scale; r.mesh.scale.lerp(new THREE.Vector3(s, s, s), a);
     }
-    if (this.turnRing && this.turnRing.visible) {           // on-turn ring: spin + pulse glow
-      this.turnRing.rotation.y += dt * 1.7;
-      this.turnRing.material.opacity = 0.7 + 0.3 * Math.sin(now * 0.005);
+    if (this._turnRingActive >= 0 && this.turnRing) {        // on-turn ring rotates (shortest path) to the active seat + pulses
+      const target = this._turnSpin[this._turnRingActive];
+      let d = target - this.turnRing.rotation.z;
+      d = Math.atan2(Math.sin(d), Math.cos(d));              // shortest signed delta
+      this.turnRing.rotation.z += d * a;
+      this.turnRing.material.opacity = 0.55 + 0.35 * Math.sin(now / 320);
     }
     if (this._fx.length) this._fx = this._fx.filter((fx) => fx(now, dt));   // run active effects
     // camera shake (bomb): jitter the camera off its base, decaying to zero
@@ -463,11 +450,10 @@ export class DouScene {
 
   // Deal animation: every card starts stacked at a centre "deck" and is served one at a time,
   // round-robin to the three players, flying to its final slot via the lerp loop. Returns a Promise
-  // that resolves when the deal has settled. The 3 底牌 are dealt last (face-down) off the deck's end.
-  beginDeal({ hand, bottom = [], fast = false }) {
+  // that resolves when the deal has settled. The 3 底牌 stay in the deck and show in the 底牌 box.
+  beginDeal({ hand, fast = false }) {
     const order = [];
     for (let r = 0; r < hand.length; r++) { order.push('c' + hand[r].id); order.push('b1_' + r); order.push('b2_' + r); }
-    for (const c of bottom) order.push('c' + c.id);   // the 3 底牌 are dealt LAST, off the end of the deck
     const SERVE = fast ? 9 : 20, FLIGHT = fast ? 140 : 240;
     const t0 = performance.now();
     const serveAt = new Map(), idx = new Map();

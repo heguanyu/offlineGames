@@ -63,14 +63,14 @@ export class DouScene2D {
   }
 
   // ---- 底牌展示 (DOM panel) ----
-  showBottomReveal(cards) {
+  showBottomReveal(cards, { faceDown = false, title = '底牌展示' } = {}) {
     this.hideBottomReveal();
     const p = document.createElement('div');
     p.className = 'b2-reveal';
-    const title = document.createElement('div'); title.className = 'b2-reveal-t'; title.textContent = '底牌展示';
+    const titleEl = document.createElement('div'); titleEl.className = 'b2-reveal-t'; titleEl.textContent = title;
     const row = document.createElement('div'); row.className = 'b2-reveal-row';
-    for (const c of cards) { const el = faceCard(c); el.classList.add('big'); row.appendChild(el); }
-    p.append(title, row);
+    for (const c of cards) { const el = faceDown ? backCard() : faceCard(c); el.classList.add('big'); row.appendChild(el); }
+    p.append(titleEl, row);
     this.mount.appendChild(p);
     this._reveal = p;
   }

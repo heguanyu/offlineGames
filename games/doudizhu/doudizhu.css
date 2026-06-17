@@ -13,7 +13,9 @@ html, body {
 #scene { width: 100%; height: 100%; display: block; touch-action: none; }
 
 /* ===== flat 2D board (phones) — a RECTANGLE table rendered in DOM (scene2d.js) ===== */
-#board2d { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+/* z-index:1 makes #board2d its own stacking context, so the cards' internal z-indices (10–117) stay
+   BELOW every UI overlay (nameplates, buttons, scoreboard, 底牌 box, and the result modal at z-index 10). */
+#board2d { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
 body.flat #scene { background: transparent; }              /* the transparent canvas is just the input overlay */
 body.flat #board2d::before {                                /* the rectangle felt with a wood rim */
   content: ''; position: absolute; inset: 6px;
