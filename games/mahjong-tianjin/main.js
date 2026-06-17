@@ -642,13 +642,12 @@ function renderWinningHand(handEl, w, r) {
   if (pair) addGroup(pair, ' pair', handEl, pairG);
 }
 
-// Per-fan scoring gain shown on each result chip (e.g. 龙·4分). Additive fans show their
-// 分 (捉五+3, 龙+4, 本混龙 base 8, 天/地和 28); pure-multiplier fans show ×2. Mirrors the
-// FAN table + scoreFromDecomp() in engine.js — keep in sync if those values change.
-const FAN_GAIN = {
-  '捉五': '3分', '龙': '4分', '本混龙': '8分', '天和': '28分', '地和': '28分',
-  '素': '×2', '混吊': '×2', '双混吊': '×2', '杠开': '×2',
-};
+// Per-fan scoring gain shown on each result chip. Additive fans add 分 into the base (joined with
+// ·, e.g. 龙·4分); multiplier fans multiply it (shown ` xN`, e.g. 素 x2, matching the 庄x2 tags).
+// When no additive fan is present the base is 1 (提溜/小和), shown as a 小和·1分 chip so the math
+// reads. Mirrors the FAN table + scoreFromDecomp() in engine.js — keep in sync if those change.
+const FAN_ADD = { '捉五': 3, '龙': 4, '本混龙': 8, '天和': 28, '地和': 28 };
+const FAN_MULT = { '素': 2, '混吊': 2, '双混吊': 2, '杠开': 2 };
 
 function showResult() {
   const r = game.result;
@@ -671,10 +670,16 @@ function showResult() {
   } else {
     const w = r.winner;
     $('result-title').textContent = `本局结束，${SEAT_LABEL[w]} 获胜！`;
+    // No additive fan → the base term is 1 (提溜/小和); lead with a 小和·1分 chip so the score reads.
+    const chips = [];
+    if (!r.fans.some((f) => FAN_ADD[f] != null)) chips.push('小和·1分');
     for (const f of r.fans) {
-      const c = document.createElement('span'); c.className = 'fan-chip';
-      const gain = FAN_GAIN[f];                       // annotate each reason with its scoring gain, e.g. 龙·4分
-      c.textContent = gain ? `${f}·${gain}` : f;
+      if (FAN_ADD[f] != null) chips.push(`${f}·${FAN_ADD[f]}分`);     // additive: 龙·4分
+      else if (FAN_MULT[f] != null) chips.push(`${f} x${FAN_MULT[f]}`); // multiplier: 素 x2
+      else chips.push(f);
+    }
+    for (const text of chips) {
+      const c = document.createElement('span'); c.className = 'fan-chip'; c.textContent = text;
       fansEl.appendChild(c);
     }
     scoreEl.textContent = '';                          // total winning score removed; each fan chip carries its own gain

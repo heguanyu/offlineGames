@@ -37,8 +37,8 @@ try {
 
   ok('title is "本局结束，… 获胜！"', /^本局结束，.+ 获胜！$/.test(m.title) && !m.title.includes('自摸'));
   ok('winning total score removed (#result-score empty)', m.score === '');
-  ok('every fan chip carries its gain (contains ·)', m.chips.length > 0 && m.chips.every((c) => c.includes('·')));
-  ok('混吊 chip shows ×2', m.chips.some((c) => c === '混吊·×2'));
+  ok('multiplier fan shows " xN" (混吊 x2)', m.chips.includes('混吊 x2'));
+  ok('no additive fan → 小和·1分 default chip leads', m.chips[0] === '小和·1分');
   ok('玩家明细 title has no trailing total', m.detailTitles.includes('玩家明细') && !m.detailTitles.some((t) => /玩家明细\s*·/.test(t)));
   ok('per-opponent total (.bd-net) removed', m.bdNetCount === 0);
   ok('opponent name rows + reason subitems still present', m.bdSeats.length === 3 && m.subCount > 0);
