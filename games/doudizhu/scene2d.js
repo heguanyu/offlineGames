@@ -48,8 +48,8 @@ export class DouScene2D {
   // so the overlays sit right even when the whole page is CSS-rotated to force landscape.
   seatScreen(seat) {
     const W = this.mount.clientWidth, H = this.mount.clientHeight;
-    if (seat === 1) return { x: W * 0.82, y: 90 };   // 下家 top-right (well below the nav)
-    if (seat === 2) return { x: W * 0.18, y: 90 };   // 上家 top-left
+    if (seat === 1) return { x: W * 0.82, y: 60 };   // 下家 top-right (no top bar in flat — nav is a side rail)
+    if (seat === 2) return { x: W * 0.18, y: 60 };   // 上家 top-left
     return { x: W * 0.5, y: H - 24 };                // 玩家 bottom (mostly unused)
   }
   worldToScreen() { return { x: this.mount.clientWidth / 2, y: this.mount.clientHeight / 2 }; }
@@ -107,7 +107,7 @@ export class DouScene2D {
         const el = c ? faceCard(c) : backCard();
         el.classList.add('mini');
         el.style.left = (x0 + i * step) + 'px';
-        el.style.top = '116px';                         // below the nameplate (which main places at y≈90)
+        el.style.top = '86px';                          // below the nameplate (which main places at y≈60)
         el.style.zIndex = 10 + i;
         b.appendChild(el);
       });

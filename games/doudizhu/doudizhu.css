@@ -83,6 +83,17 @@ body.flat .bid-btn { min-width: 50px; }
 #nav .spacer { flex: 1; }
 #mute-btn, #menu-btn { font: inherit; background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
 
+/* phones: the nav becomes a vertical LEFT rail (like the mahjong games); the table insets past it */
+body.flat #nav {
+  top: 0; bottom: 0; left: 0; right: auto; width: 86px;
+  flex-direction: column; align-items: stretch; gap: 9px; flex-wrap: nowrap; overflow-y: auto;
+  padding: max(10px, env(safe-area-inset-top)) 8px max(10px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  box-shadow: 2px 0 8px rgba(0,0,0,0.4);
+}
+body.flat #nav a.back { font-size: 1.05rem; text-align: center; }
+body.flat #nav #round-info { text-align: center; line-height: 1.32; }
+body.flat #table { left: 86px; }
+
 /* cumulative scoreboard — top-right corner (like the mahjong games) */
 #scores {
   position: absolute; top: max(52px, calc(env(safe-area-inset-top) + 46px)); right: 12px; z-index: 6;
@@ -98,7 +109,7 @@ body.flat .bid-btn { min-width: 50px; }
 #scores .sb-pt.s-neg { color: #ff7a7a; }
 /* flat landscape: a compact horizontal bar at top-CENTRE (the corners hold the opponent nameplates) */
 body.flat #scores {
-  top: 36px; right: auto; left: 50%; transform: translateX(-50%);
+  top: 8px; right: auto; left: 50%; transform: translateX(-50%);
   flex-direction: row; gap: 16px; padding: 4px 14px; font-size: 0.8rem; min-width: 0;
 }
 body.flat #scores .sb-row { gap: 6px; }
