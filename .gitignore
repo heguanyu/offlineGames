@@ -31,3 +31,7 @@ server/data/
 server/*.db
 server/*.db-journal
 server/*.legacy.bak
+
+# voice generation (run locally / on a GPU box)
+tools/__pycache__/
+tools/refs/
