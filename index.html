@@ -357,9 +357,11 @@
         else showVersion(); // first-ever claim (no prior controller) → just refresh the version tag
       });
       // A new worker reports its asset-caching progress while it installs (see sw.js):
-      // reveal the bar and track the percentage until it activates and we reload.
+      // reveal the bar and track the percentage until it activates and we reload. Gate it on an
+      // in-flight check/update (busy || updating) so a background install — or a broadcast when
+      // there's nothing for the user to update — never pops the bar up unbidden.
       navigator.serviceWorker.addEventListener('message', (e) => {
-        if (e.data && e.data.type === 'install-progress') setProgress(e.data.pct);
+        if (e.data && e.data.type === 'install-progress' && (busy || updating)) setProgress(e.data.pct);
       });
     }
 
