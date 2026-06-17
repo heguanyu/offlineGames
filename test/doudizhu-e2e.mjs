@@ -13,11 +13,11 @@ let shot = false;
 try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1024, height: 768 });
-  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('doudizhu-mute', '1'); localStorage.setItem('doudizhu-fast', '1'); } catch {} });
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('doudizhu-mute', '1'); } catch {} });
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
-  await page.goto(`http://localhost:${PORT}/games/doudizhu/`, { waitUntil: 'networkidle0' });
+  await page.goto(`http://localhost:${PORT}/games/doudizhu/?fast=1`, { waitUntil: 'networkidle0' });
 
   await page.waitForSelector('#start-btn');
   await page.click('#start-btn');

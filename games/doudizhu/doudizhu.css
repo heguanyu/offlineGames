@@ -12,19 +12,19 @@ html, body {
 #table { position: fixed; inset: 0; }
 #scene { width: 100%; height: 100%; display: block; touch-action: none; }
 
-/* top nav */
+/* top bar — solid header, matches the mahjong games */
 #nav {
   position: absolute; top: 0; left: 0; right: 0; z-index: 5;
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 10px 12px;
   padding: max(8px, env(safe-area-inset-top)) 14px 8px;
-  background: linear-gradient(rgba(4,16,11,0.7), rgba(4,16,11,0));
+  background: linear-gradient(#06231a, #0a3526);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
-#nav a, #nav button, #nav label {
-  font: inherit; font-size: 0.85rem; color: var(--ink); background: rgba(0,0,0,0.28);
-  border: 1px solid #2c8160; border-radius: 999px; padding: 5px 12px; cursor: pointer; text-decoration: none;
-}
+#nav a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
+#round-info { font-size: 0.82rem; color: #cdeadd; }
+#round-info b { color: var(--gold); }
 #nav .spacer { flex: 1; }
-#nav .badge { color: var(--gold); font-weight: 700; }
+#mute-btn { font: inherit; background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
 
 /* per-seat HTML overlays (count, role, bid bubble), positioned by main.js via worldToScreen */
 .seat-tag {

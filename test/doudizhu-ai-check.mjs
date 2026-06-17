@@ -35,6 +35,10 @@ function playHand(levels, rng, forceLandlord = -1, validate = false) {
       } else {
         const d = g.validatePlay(seat, mv.cardIds);
         ok(!!d, `move is legal (seat ${seat})`);
+        // never splits a 炸弹: no move uses 1-3 cards of a rank the hand holds 4 of
+        const cnt = {}; for (const c of g.hands[seat]) cnt[c.rank] = (cnt[c.rank] || 0) + 1;
+        const use = {}; for (const id of mv.cardIds) { const r = g.hands[seat].find((c) => c.id === id).rank; use[r] = (use[r] || 0) + 1; }
+        ok(!Object.keys(use).some((r) => cnt[r] === 4 && use[r] < 4), `move does not split a 炸弹 (seat ${seat})`);
       }
     }
     const okMove = g.play(seat, mv.pass ? [] : mv.cardIds);

@@ -9,13 +9,13 @@ import { SmartSelection } from './select.js';
 import { sfx, speak, setMuted, isMuted, resume } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
+// FAST is a hidden test override (?fast=1) — there's no user-facing 快速 mode.
+const FAST = new URLSearchParams(location.search).has('fast');
 const LS = {
   get level() { return +(localStorage.getItem('doudizhu-level') ?? 1); },
   set level(v) { localStorage.setItem('doudizhu-level', v); },
   get scores() { try { return JSON.parse(localStorage.getItem('doudizhu-scores')) || [0, 0, 0]; } catch { return [0, 0, 0]; } },
   set scores(v) { localStorage.setItem('doudizhu-scores', JSON.stringify(v)); },
-  get fast() { return localStorage.getItem('doudizhu-fast') !== '0'; },
-  set fast(v) { localStorage.setItem('doudizhu-fast', v ? '1' : '0'); },
   get mute() { return localStorage.getItem('doudizhu-mute') === '1'; },
   set mute(v) { localStorage.setItem('doudizhu-mute', v ? '1' : '0'); },
 };
@@ -42,7 +42,6 @@ function boot() {
   state.scene = new DouScene($('scene'));
   state.level = LS.level;
   setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊';
-  $('fast-toggle').checked = LS.fast;
 
   for (const b of document.querySelectorAll('.diff-btn')) {
     if (+b.dataset.level === state.level) markDiff(b);
@@ -51,7 +50,6 @@ function boot() {
   $('start-btn').addEventListener('click', () => { resume(); $('start-overlay').hidden = true; newGame(); });
   $('next-btn').addEventListener('click', () => { $('result-overlay').hidden = true; newGame(); });
   $('mute-btn').addEventListener('click', () => { LS.mute = !isMuted(); setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊'; });
-  $('fast-toggle').addEventListener('change', (e) => { LS.fast = e.target.checked; });
 
   $('scene').addEventListener('pointerdown', onPointerDown);
   window.addEventListener('keydown', onKey);
@@ -68,7 +66,7 @@ function newGame() {
   clearBubbles();
   state.backend.startHand();
 }
-function thinkMs() { return $('fast-toggle').checked ? 220 : 650; }
+function thinkMs() { return FAST ? 80 : 650; }
 
 // ---- backend events --------------------------------------------------------
 async function onEvent(ev) {
@@ -77,7 +75,7 @@ async function onEvent(ev) {
     case 'deal': {
       state.phase = 'bid'; state.trick = {}; state.discard = []; state.reveal = false; state.sel.clear(); state.hint.clear();
       state.bottom = null; clearBubbles();
-      const dealt = state.scene.beginDeal({ hand: g.hands[HUMAN], fast: $('fast-toggle').checked });
+      const dealt = state.scene.beginDeal({ hand: g.hands[HUMAN], fast: FAST });
       sfx.deal(); render();
       await dealt; render(); break;
     }
@@ -121,15 +119,14 @@ async function onEvent(ev) {
       // players can read the battle; a consecutive/uncontested free win (only the leader played)
       // clears in 1s, so a player running the table doesn't stall the game.
       const free = Object.keys(state.trick).length <= 1;
-      const fast = $('fast-toggle').checked;
-      await wait(fast ? (free ? 250 : 450) : (free ? 1000 : 3000));
+      await wait(FAST ? (free ? 250 : 450) : (free ? 1000 : 2000));
       flushTrickToDiscard(); clearBubbles(); render(); break;
     }
     case 'await': {
       state.awaiting = 'play'; state.cursor = Math.min(state.cursor, g.hands[HUMAN].length - 1);
       const against = g.leadSeat === HUMAN ? null : g.lead;
       state.sel.setHand(g.hands[HUMAN]);
-      state.sel.setContext({ following: against != null, legalMoves: legalMoves(g.hands[HUMAN].map((c) => c.rank), against) });
+      state.sel.setContext({ legalMoves: legalMoves(g.hands[HUMAN].map((c) => c.rank), against) });
       autoSelect(g);
       showPlayBar(); render(); break;
     }
@@ -194,15 +191,19 @@ function render() {
     revealHands: state.reveal ? { 1: g.hands[1], 2: g.hands[2] } : null,
   });
   positionOverlays();
-  updateMultiplier(g);
+  updateRoundInfo(g);
   if (state.awaiting === 'play') refreshPlayBar();
 }
 
-function updateMultiplier(g) {
-  const el = $('multiplier');
-  if (g.phase !== 'play' || g.bid === 0) { el.textContent = ''; return; }
-  const mult = Math.pow(2, g.bombs || 0);
-  el.textContent = `${g.bid} 分${mult > 1 ? ` · ${mult}倍` : ''}`;
+// Top-bar round info: difficulty, and during play the 底分 + 倍数.
+function updateRoundInfo(g) {
+  const diff = ['新手', '普通', '高手'][state.level] || '';
+  let s = `<b>${diff}</b>`;
+  if (g && g.phase === 'play' && g.bid > 0) {
+    const mult = Math.pow(2, g.bombs || 0);
+    s += ` · 底分 ${g.bid}` + (mult > 1 ? ` · ${mult}倍` : '');
+  }
+  $('round-info').innerHTML = s;
 }
 
 // per-seat name/count tags, landlord crown, turn highlight — DOM overlays placed via worldToScreen

@@ -155,7 +155,11 @@ function passScore(view) {
 // both the live bots and the rollouts.
 export function pickMoveRanks(view, level, rng) {
   const following = view.against != null;
-  const moves = legalMoves(view.handRanks, view.against);
+  const all = legalMoves(view.handRanks, view.against);
+  // Never break up a 炸弹: drop moves that use only part of a held 4-of-a-kind. The bomb stays whole
+  // for its trumping power (a forced lead falls back to the unfiltered set so it's never stuck).
+  let moves = all.filter((m) => !splitsBomb(m.ranks, view.counts));
+  if (!moves.length && !following) moves = all;
   if (following && moves.length === 0) return null;        // nothing beats the lead → forced pass
   if (level >= 2 && shouldMonteCarlo(view)) {
     try { return monteCarlo(view, moves, following, rng); } catch { /* fall through to heuristic */ }
@@ -163,6 +167,14 @@ export function pickMoveRanks(view, level, rng) {
   let best = null, bestS = following ? passScore(view) : -Infinity;
   for (const m of moves) { const s = scoreMove(view, m, level, rng); if (s > bestS) { bestS = s; best = m; } }
   return best ? best.ranks : null;
+}
+
+// A move "splits" a 炸弹 if it uses 1-3 cards of a rank the hand holds 4 of (a bomb), breaking it up.
+function splitsBomb(ranks, counts) {
+  const use = {};
+  for (const r of ranks) use[r] = (use[r] || 0) + 1;
+  for (const r in use) if ((counts[r] || 0) === 4 && use[r] < 4) return true;
+  return false;
 }
 
 // Run MC only in the back half of the hand (where card-reading decides outcomes and rollouts are

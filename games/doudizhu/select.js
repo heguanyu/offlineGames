@@ -1,17 +1,22 @@
-// Smart card selection for 斗地主 — a DEDICATED, swappable module so the selection UX can be
-// upgraded independently of the renderer/controller. The strategy here:
-//
-//   • tap an unselected card → select the whole NATURAL GROUP it belongs to, where "natural" is
-//     the card's role in the hand's fewest-hands decomposition (tap a card in a pair → the pair;
-//     in a trio → the trio; in a straight → the straight; a lone card → just it).
-//   • tap a selected card → remove just that one card (refine the group down).
-//   • swipe across cards → range-select exactly the swept cards (great for straights / custom combos).
-//
-// The decomposition is the optimal partition (same shape as ai.js's minSplit, but returning the
-// actual groups), so "tap = the combo this card is part of" matches how a human reads their hand.
-// Future upgrades (e.g. context-aware grouping vs the current lead, multi-tap cycling) live here.
+// Smart card selection for 斗地主 — a DEDICATED, swappable module. Tapping BUILDS the smallest legal
+// PATTERN from the selected cards: any valid combo on a free lead, a BEATING combo when following
+// (using the supplied legalMoves). So the selection is always something that can actually be played.
+//   • tap a card → smallest legal combo containing (current selection + that card); if they don't
+//     combine, switch to the smallest legal combo of the tapped card; a card that can't form any
+//     playable combo right now is ignored.
+//   • tap a selected card → remove just it.
+//   • swipe → paint cards on/off directly.
+// 串 (straight) tie-break: among same-size straights, prefer the one starting at the lowest selected
+// card (so it "starts with" the selected card; otherwise the selected card sits as early as possible).
+import { COMBO } from './engine.js';
 
 const partCache = new Map();
+
+// Sort legal moves by preference: smallest first; tie-break by lowest rank, EXCEPT straights, where a
+// HIGHER start wins (so the straight begins at/near the selected card → its position stays small).
+function costCmp(a, b) {
+  return a.size - b.size || (a.type === COMBO.STRAIGHT && b.type === COMBO.STRAIGHT ? b.rank - a.rank : a.rank - b.rank);
+}
 
 function countsOf(ranks) { const c = new Array(18).fill(0); for (const r of ranks) c[r]++; return c; }
 
@@ -75,11 +80,11 @@ export function decompose(hand) {
 }
 
 export class SmartSelection {
-  constructor() { this.selected = new Set(); this.hand = []; this._dec = { groups: [], cardGroup: new Map() }; this.following = false; this.legalMoves = []; }
-  setHand(hand) { this.hand = hand; this._dec = decompose(hand); }
-  // Context for context-aware taps: when `following` a lead, a tap selects a PLAYABLE combo
-  // (one of `legalMoves`) rather than the raw decomposition group.
-  setContext({ following, legalMoves } = {}) { this.following = !!following; this.legalMoves = legalMoves || []; }
+  constructor() { this.selected = new Set(); this.hand = []; this.legalMoves = []; }
+  setHand(hand) { this.hand = hand; }
+  // `legalMoves` are the patterns a tap may build toward: all valid combos on a free lead, only the
+  // BEATING combos when following (main.js computes legalMoves(hand, against) accordingly).
+  setContext({ legalMoves } = {}) { this.legalMoves = legalMoves || []; }
   clear() { this.selected.clear(); }
   has(id) { return this.selected.has(id); }
   get ids() { return [...this.selected]; }
@@ -87,32 +92,19 @@ export class SmartSelection {
   // paint a single card on/off — the granular op the swipe gesture drives.
   paint(id, on) { if (on) this.selected.add(id); else this.selected.delete(id); }
 
-  tap(id) { if (this.following) this._tapPlayable(id); else this._groupToggle(id); }
-
-  // leading: tap toggles the card's natural decomposition group; tapping a selected card refines it down.
-  _groupToggle(id) {
-    if (this.selected.has(id)) { this.selected.delete(id); return; }
-    const grp = this._dec.groups[this._dec.cardGroup.get(id)];
-    if (grp) grp.ids.forEach((x) => this.selected.add(x)); else this.selected.add(id);
-  }
-  // following: tapping a card BUILDS on the current selection.
-  //  • tap a selected card → remove just it (refine down)
-  //  • first card (empty selection) → auto-complete to the smallest legal combo using it
-  //  • cards already selected → the smallest legal combo containing ALL selected cards + the new one
-  //    (the selection isn't thrown away); if none fits, the new card is just added so the player can
-  //    keep building, and 出牌 validates the result.
-  _tapPlayable(id) {
+  // tap BUILDS the smallest legal pattern from the selection. Tapping a selected card removes it.
+  tap(id) {
     if (this.selected.has(id)) { this.selected.delete(id); return; }
     const rankOf = (cid) => this.hand.find((c) => c.id === cid).rank;
-    const byCost = (a, b) => a.size - b.size || a.rank - b.rank;
-    if (this.selected.size === 0) {
-      const cands = this.legalMoves.filter((m) => m.ranks.includes(rankOf(id))).sort(byCost);
-      this.selected = new Set(cands.length ? pickIds(this.hand, cands[0].ranks, [id]) : [id]);
-      return;
-    }
-    const anchors = [...this.selected, id];
-    const anchorRanks = anchors.map(rankOf);
-    const build = this.legalMoves.filter((m) => supersetOf(m.ranks, anchorRanks)).sort(byCost);
-    this.selected = build.length ? new Set(pickIds(this.hand, build[0].ranks, anchors)) : new Set(anchors);
+    // smallest legal combo containing all `anchorIds`, preferring those exact cards; null if none.
+    const combo = (anchorIds) => {
+      const ranks = anchorIds.map(rankOf);
+      const fits = this.legalMoves.filter((m) => supersetOf(m.ranks, ranks)).sort(costCmp);
+      return fits.length ? pickIds(this.hand, fits[0].ranks, anchorIds) : null;
+    };
+    // build on the existing selection (selected + new); else switch to the new card's own combo;
+    // if the card can't form any playable combo, ignore the tap (selection stays valid).
+    const next = (this.selected.size && combo([...this.selected, id])) || combo([id]);
+    if (next) this.selected = new Set(next);
   }
 }

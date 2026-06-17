@@ -24,25 +24,36 @@ console.log('decompose:');
   ok(new Set(gs).size === 1, 'the five straight cards share one group');
 }
 
-console.log('SmartSelection — leading (group tap / refine):');
+console.log('SmartSelection — leading (build valid patterns):');
 {
-  const h = hand([3, 3, 5, 6, 7, 8, 9, 13]);
-  const s = new SmartSelection(); s.setHand(h); s.setContext({ following: false });
-  const a3 = h.find((c) => c.rank === 3).id;
-  s.tap(a3);
-  ok(s.ids.length === 2, 'tapping a 3 selects the whole pair');
-  s.tap(a3);
-  ok(s.ids.length === 1 && !s.has(a3), 'tapping the same card again removes just it (refine)');
-  s.clear();
-  const straightIds = h.filter((c) => c.rank >= 5 && c.rank <= 9).map((c) => c.id);
-  s.tap(straightIds[2]);
-  ok(s.ids.length === 5, 'tapping a straight card selects the whole straight');
+  const h = hand([3, 3, 5, 6, 7, 8, 9]);
+  const lm = legalMoves(h.map((c) => c.rank), null); // free lead → all valid combos
+  const s = new SmartSelection(); s.setHand(h); s.setContext({ legalMoves: lm });
+  const threes = h.filter((c) => c.rank === 3).map((c) => c.id);
+  s.tap(threes[0]);
+  ok(s.ids.length === 1, 'first tap selects a single (smallest valid pattern)');
+  s.tap(threes[1]);
+  ok(s.ids.length === 2 && s.ids.every((id) => h.find((c) => c.id === id).rank === 3), 'tapping the second 3 builds the pair');
+  s.tap(threes[1]);
+  ok(s.ids.length === 1, 'tapping a selected card removes just it');
+}
+
+console.log('SmartSelection — straight tie-break (starts with the selected card):');
+{
+  const h = hand([5, 6, 7, 8, 9, 10]);
+  const lm = legalMoves(h.map((c) => c.rank), null);
+  const s = new SmartSelection(); s.setHand(h); s.setContext({ legalMoves: lm });
+  // {6} selected, tap 9 → a 5-straight covering 6..9; prefer 6-7-8-9-10 (starts with 6), not 5-6-7-8-9
+  s.set([h.find((c) => c.rank === 6).id]);
+  s.tap(h.find((c) => c.rank === 9).id);
+  const ranks = s.ids.map((id) => h.find((c) => c.id === id).rank).sort((a, b) => a - b);
+  ok(ranks.join() === [6, 7, 8, 9, 10].join(), `straight starts at the selected 6 (got ${ranks.join()})`);
 }
 
 console.log('SmartSelection — paint (swipe select + deselect):');
 {
   const h = hand([3, 3, 5, 6, 7]);
-  const s = new SmartSelection(); s.setHand(h); s.setContext({ following: false });
+  const s = new SmartSelection(); s.setHand(h); s.setContext({ legalMoves: [] });
   s.paint(h[0].id, true); s.paint(h[2].id, true);
   ok(s.ids.length === 2 && s.has(h[0].id) && s.has(h[2].id), 'paint(true) selects cards');
   s.paint(h[0].id, false);
@@ -55,15 +66,15 @@ console.log('SmartSelection — following (tap selects a PLAYABLE combo):');
   const h = hand([8, 8, 4, 6, 9, 9, 9]);
   const lead = classify([5, 5]);
   const lm = legalMoves(h.map((c) => c.rank), lead);
-  const s = new SmartSelection(); s.setHand(h); s.setContext({ following: true, legalMoves: lm });
+  const s = new SmartSelection(); s.setHand(h); s.setContext({ legalMoves: lm });
   const an8 = h.find((c) => c.rank === 8).id;
   s.tap(an8);
   ok(s.ids.length === 2 && s.ids.every((id) => h.find((c) => c.id === id).rank === 8), 'following a pair, tapping an 8 selects the pair of 8s');
-  // tapping a 4 (cannot form a beating pair) selects just the lone card (illegal, but registers)
+  // tapping a 4 (cannot form a beating pair) is ignored — the selection stays valid
   s.clear();
   const a4 = h.find((c) => c.rank === 4).id;
   s.tap(a4);
-  ok(s.ids.length === 1 && s.has(a4), 'a card with no playable combo toggles as a lone card');
+  ok(s.ids.length === 0, 'a card with no beating combo is ignored');
   // tapping a selected card removes just that card (refine down)
   s.clear(); s.tap(an8);                 // → pair of 8s
   s.tap(an8);
@@ -75,7 +86,7 @@ console.log('SmartSelection — following (build on the existing selection):');
   // lead is a 三带二 (trio 5 + pair 3). Hand has trios of 8 AND 9 plus a pair of K.
   const h = hand([8, 8, 8, 9, 9, 9, 13, 13]);
   const lm = legalMoves(h.map((c) => c.rank), classify([5, 5, 5, 3, 3]));
-  const s = new SmartSelection(); s.setHand(h); s.setContext({ following: true, legalMoves: lm });
+  const s = new SmartSelection(); s.setHand(h); s.setContext({ legalMoves: lm });
   // pre-select the trio of 9s, then tap a K. It must BUILD 9-9-9-K-K (keep the 9s), not switch to the
   // lower 8-8-8-K-K (which the old "best comp of this card" logic would have picked).
   s.set(h.filter((c) => c.rank === 9).map((c) => c.id));
