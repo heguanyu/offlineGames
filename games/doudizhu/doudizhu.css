@@ -54,7 +54,7 @@ body.flat .b2-reveal .c2 { position: relative; }
 body.flat .b2-reveal .c2.big { width: 58px; height: 81px; }
 body.flat .b2-reveal .c2.big .rk { font-size: 24px; } body.flat .b2-reveal .c2.big .su { font-size: 18px; }
 /* the play buttons sit a bit lower in flat mode (smaller cards) */
-body.flat #actions.play-bar { bottom: 18%; }
+body.flat #actions.play-bar, body.flat #actions.bid-bar { bottom: 18%; }
 
 /* top bar — solid header, matches the mahjong games */
 #nav {
@@ -116,8 +116,11 @@ body.flat #actions.play-bar { bottom: 18%; }
   display: flex; gap: 14px; justify-content: center; align-items: center;
 }
 #actions[hidden] { display: none; }
-/* during play the buttons sit ABOVE the hand row (bidding keeps them at the bottom) */
-#actions.play-bar { bottom: 33%; }
+/* both the play bar and the bid bar sit ABOVE the hand row */
+#actions.play-bar, #actions.bid-bar { bottom: 33%; }
+/* every enabled action button pulses a soft glow */
+@keyframes btnGlow { 0%, 100% { filter: drop-shadow(0 0 2px rgba(255,240,200,0.45)); } 50% { filter: drop-shadow(0 0 11px rgba(255,240,200,0.92)); } }
+#actions .act-btn:not(:disabled) { animation: btnGlow 1.5s ease-in-out infinite; }
 .act-btn {
   font: inherit; font-size: 1.15rem; font-weight: 800; color: #06250f;
   background: linear-gradient(#f3d785, #e3b94f); border: none; border-radius: 14px;

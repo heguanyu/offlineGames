@@ -21,6 +21,23 @@ const SEAT_ANCHOR = [new THREE.Vector3(0, 0, 7.4), new THREE.Vector3(8.2, 0, -2.
 // Where each seat's current play sits on the felt.
 const PLAY_SPOT = [new THREE.Vector3(0, 0, 2.6), new THREE.Vector3(3.7, 0, -0.4), new THREE.Vector3(-3.7, 0, -0.4)];
 const BOTTOM_SPOT = new THREE.Vector3(0, 0, -5.4);
+// Where the on-turn ring sits — on the felt, between each player and the centre.
+const TURN_SPOT = [new THREE.Vector3(0, 0, 5.5), new THREE.Vector3(4.7, 0, -1.6), new THREE.Vector3(-4.7, 0, -1.6)];
+
+// A flat ring whose glow is concentrated in a 120° arc (a conic gradient) — it spins and pulses to
+// mark whose turn it is.
+let ringTex = null;
+function turnRingTexture() {
+  if (ringTex) return ringTex;
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'); const cx = 128;
+  const grad = x.createConicGradient(0, cx, cx);
+  const col = (a) => `rgba(255,214,110,${a})`;                          // warm gold — pops against the green felt
+  grad.addColorStop(0.00, col(1)); grad.addColorStop(0.166, col(0));   // bright over a 120° arc, fading out
+  grad.addColorStop(0.834, col(0)); grad.addColorStop(1.00, col(1));
+  x.strokeStyle = grad; x.lineWidth = 40; x.beginPath(); x.arc(cx, cx, 96, 0, Math.PI * 2); x.stroke();
+  ringTex = new THREE.CanvasTexture(c); ringTex.colorSpace = THREE.SRGBColorSpace; return ringTex;
+}
 
 // ---- card faces ------------------------------------------------------------
 const faceCache = new Map();   // key -> THREE.CanvasTexture
@@ -131,8 +148,7 @@ export class DouScene {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = false;            // ambient-only lighting (no directional → no shadows)
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
 
@@ -147,7 +163,7 @@ export class DouScene {
     // hand's actual position, not the look point, so the cards face the camera directly)
     this.faceCamRx = -Math.atan2(this.camBase.y - HAND_Y, this.camBase.z - 6.9);
 
-    this._lights(); this._table();
+    this._lights(); this._table(); this._turnRing();
     this.geo = roundedCardGeo();
     this.sideMat = new THREE.MeshStandardMaterial({ color: 0xece9df, roughness: 0.85 });
 
@@ -167,22 +183,25 @@ export class DouScene {
   setRotated(r) { this.rotated = !!r; }
   resize() { this._resize(); }
 
+  // ONLY ambient light — flat, perfectly even illumination so the hand row has no left-to-right
+  // brightness gradient (a directional light made the near-side cards brighter than the far ones).
   _lights() {
-    this.scene.add(new THREE.HemisphereLight(0xbfe6d8, 0x223026, 1.2));
-    const key = new THREE.DirectionalLight(0xfff4d6, 2.6);
-    key.position.set(-5, 15, 7); key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    const s = 12; Object.assign(key.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 42 });
-    key.shadow.bias = -0.0004; this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0xa9c7ff, 0.5); fill.position.set(7, 9, -6); this.scene.add(fill);
+    this.scene.add(new THREE.AmbientLight(0xffffff, 2.25));
+  }
+  _turnRing() {
+    const geo = new THREE.RingGeometry(1.35, 1.95, 64); geo.rotateX(-Math.PI / 2); // lie flat on the felt
+    const mat = new THREE.MeshBasicMaterial({ map: turnRingTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    this.turnRing = new THREE.Mesh(geo, mat);
+    this.turnRing.position.y = 0.02; this.turnRing.visible = false;
+    this.scene.add(this.turnRing);
   }
   _table() {
     const rim = new THREE.Mesh(new THREE.CylinderGeometry(FELT / 2 + 1.1, FELT / 2 + 1.1, 0.7, 64),
-      new THREE.MeshStandardMaterial({ color: 0x6e4626, roughness: 0.72 }));
-    rim.position.y = -0.45; rim.receiveShadow = true; this.scene.add(rim);
+      new THREE.MeshStandardMaterial({ color: 0x5a381e, roughness: 0.72 }));
+    rim.position.y = -0.45; this.scene.add(rim);
     const felt = new THREE.Mesh(new THREE.CylinderGeometry(FELT / 2, FELT / 2, 0.5, 64),
-      new THREE.MeshStandardMaterial({ color: 0x178a63, roughness: 0.96 }));
-    felt.position.y = -0.26; felt.receiveShadow = true; this.scene.add(felt);
+      new THREE.MeshStandardMaterial({ color: 0x0a5038, roughness: 0.96 }));   // darker green so the cards pop
+    felt.position.y = -0.26; this.scene.add(felt);
   }
 
   // Build a card mesh. faceCard set → real face on the +z cap; else a back on both caps.
@@ -229,10 +248,19 @@ export class DouScene {
       want.set('c' + card.id, { faceCard: card, pos, quat: tilt, scale: 1.1, pick: true, id: card.id, hint, sel });
     });
 
-    // 底牌 — three face-up cards at top centre until the landlord takes them
-    if (view.bottom) view.bottom.forEach((card, i) => {
-      want.set('c' + card.id, { faceCard: card, pos: new THREE.Vector3(BOTTOM_SPOT.x + (i - 1) * 1.15, 0.06, BOTTOM_SPOT.z), quat: flatUp, scale: 0.9 });
+    // 底牌 — the 3 landlord cards. During bidding they sit FACE-DOWN at top centre (dealt last from the
+    // deck); once a landlord is chosen they're taken into a hand and the reveal panel shows them.
+    const flatDown = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)); // back up
+    if (view.bottomDown) view.bottomDown.forEach((card, i) => {
+      want.set('c' + card.id, { faceCard: card, pos: new THREE.Vector3(BOTTOM_SPOT.x + (i - 1) * 1.25, 0.06 + i * 0.004, BOTTOM_SPOT.z), quat: flatDown, scale: 0.95 });
     });
+
+    // on-turn ring — placed at the active seat (bid or play), spun + glowed in the loop
+    if (this.turnRing) {
+      const ts = (view.turn != null && (view.phase === 'bid' || view.phase === 'play')) ? view.turn : -1;
+      this.turnRing.visible = ts >= 0;
+      if (ts >= 0) { const sp = TURN_SPOT[ts]; this.turnRing.position.set(sp.x, 0.02, sp.z); }
+    }
 
     // current plays on the felt, one cluster per seat. The CURRENT play (the lead to beat) is
     // scaled up 1.5× so it stands out; earlier plays in the trick stay normal size. New play
@@ -269,7 +297,6 @@ export class DouScene {
     // They keep their SAME 'c'+id mesh from the table, with a face-down target here, so each one
     // flies over and FLIPS from its play spot into the pile (stable per-card jitter from the id).
     if (view.discard) {
-      const flatDown = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)); // back up
       view.discard.forEach((card, i) => {
         const jx = (((card.id * 37) % 100) / 100 - 0.5) * 1.7;
         const jz = (((card.id * 61) % 100) / 100 - 0.5) * 1.2;
@@ -384,6 +411,10 @@ export class DouScene {
       r.mesh.quaternion.slerp(r.target.quat, a);
       const s = r.target.scale; r.mesh.scale.lerp(new THREE.Vector3(s, s, s), a);
     }
+    if (this.turnRing && this.turnRing.visible) {           // on-turn ring: spin + pulse glow
+      this.turnRing.rotation.y += dt * 1.7;
+      this.turnRing.material.opacity = 0.7 + 0.3 * Math.sin(now * 0.005);
+    }
     if (this._fx.length) this._fx = this._fx.filter((fx) => fx(now, dt));   // run active effects
     // camera shake (bomb): jitter the camera off its base, decaying to zero
     if (this._shake) {
@@ -432,10 +463,11 @@ export class DouScene {
 
   // Deal animation: every card starts stacked at a centre "deck" and is served one at a time,
   // round-robin to the three players, flying to its final slot via the lerp loop. Returns a Promise
-  // that resolves when the deal has settled. (The 3 底牌 are not part of this — they reveal later.)
-  beginDeal({ hand, fast = false }) {
+  // that resolves when the deal has settled. The 3 底牌 are dealt last (face-down) off the deck's end.
+  beginDeal({ hand, bottom = [], fast = false }) {
     const order = [];
     for (let r = 0; r < hand.length; r++) { order.push('c' + hand[r].id); order.push('b1_' + r); order.push('b2_' + r); }
+    for (const c of bottom) order.push('c' + c.id);   // the 3 底牌 are dealt LAST, off the end of the deck
     const SERVE = fast ? 9 : 20, FLIGHT = fast ? 140 : 240;
     const t0 = performance.now();
     const serveAt = new Map(), idx = new Map();

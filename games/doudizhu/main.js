@@ -112,7 +112,7 @@ async function onEvent(ev) {
     case 'deal': {
       state.phase = 'bid'; state.trick = {}; state.discard = []; state.reveal = false; state.sel.clear(); state.hint.clear();
       state.bottom = null; clearBubbles();
-      const dealt = state.scene.beginDeal({ hand: g.hands[HUMAN], fast: FAST });
+      const dealt = state.scene.beginDeal({ hand: g.hands[HUMAN], bottom: g.bottom, fast: FAST });
       sfx.deal(); render();
       await dealt; render(); break;
     }
@@ -224,8 +224,9 @@ function render() {
   const table = Object.entries(state.trick).map(([seat, cards]) => ({ seat: +seat, cards }));
   state.scene.sync({
     hand, selected: state.sel.selected, hint: state.hint,
-    counts: g.handCounts, landlord: g.landlord, turn: g.turn, leadSeat: g.leadSeat,
-    bottom: state.bottom, table, discard: state.discard,
+    counts: g.handCounts, landlord: g.landlord, turn: g.phase === 'bid' ? g.bidTurn : g.turn, leadSeat: g.leadSeat, phase: g.phase,
+    bottomDown: g.phase === 'bid' ? g.bottom : null,   // 3 底牌 shown face-down on the table while bidding
+    table, discard: state.discard,
     revealHands: state.reveal ? { 1: g.hands[1], 2: g.hands[2] } : null,
   });
   positionOverlays();
@@ -289,7 +290,7 @@ function clearBubbles() { for (const b of $('overlays').querySelectorAll('.bubbl
 
 // ---- action bar: bidding ---------------------------------------------------
 function showBidBar(g) {
-  const bar = $('actions'); bar.hidden = false; bar.innerHTML = ''; bar.classList.remove('play-bar');
+  const bar = $('actions'); bar.hidden = false; bar.innerHTML = ''; bar.classList.remove('play-bar'); bar.classList.add('bid-bar');
   const labels = [['不叫', 0], ['1 分', 1], ['2 分', 2], ['3 分', 3]];
   for (const [lbl, val] of labels) {
     const btn = document.createElement('button'); btn.className = 'act-btn bid-btn' + (val === 0 ? ' no' : ''); btn.textContent = lbl;
@@ -301,7 +302,7 @@ function showBidBar(g) {
 
 // ---- action bar: play / pass / hint ---------------------------------------
 function showPlayBar() {
-  const bar = $('actions'); bar.hidden = false; bar.innerHTML = ''; bar.classList.add('play-bar');
+  const bar = $('actions'); bar.hidden = false; bar.innerHTML = ''; bar.classList.remove('bid-bar'); bar.classList.add('play-bar');
   const pass = mkBtn('不出', 'act-btn pass', () => doPass()); pass.id = 'pass-btn';
   const play = mkBtn('出牌', 'act-btn', () => doPlay()); play.id = 'play-btn';
   bar.append(pass, play);            // 提示 is gone — a playable combo is auto-selected each turn
