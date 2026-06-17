@@ -37,6 +37,15 @@ body.flat .c2.jk .su { font-size: 13px; }
 body.flat .c2.back {
   background: repeating-linear-gradient(45deg, #9a1b2e 0 6px, #76121f 6px 12px); border-color: #5e0f1d;
 }
+/* 2D on-turn ring — a glowing 120° gold arc (points up at rotate(0); render rotates it to the seat) */
+body.flat .turn2d {
+  position: absolute; width: 132px; height: 132px; border-radius: 50%; pointer-events: none; z-index: 2;
+  background: conic-gradient(from 300deg, rgba(255,212,82,0.95), rgba(255,212,82,0) 120deg, rgba(255,212,82,0) 360deg);
+  -webkit-mask: radial-gradient(closest-side, transparent 62%, #000 65%, #000 80%, transparent 84%);
+  mask: radial-gradient(closest-side, transparent 62%, #000 65%, #000 80%, transparent 84%);
+  animation: turn2dPulse 1.1s ease-in-out infinite;
+}
+@keyframes turn2dPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
 body.flat .c2.mini { width: 24px; height: 33px; padding-top: 1px; }
 body.flat .c2.mini .rk { font-size: 11px; } body.flat .c2.mini .su { font-size: 9px; }
 body.flat .c2.play { width: 40px; height: 56px; }

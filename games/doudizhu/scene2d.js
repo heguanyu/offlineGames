@@ -48,8 +48,8 @@ export class DouScene2D {
   // so the overlays sit right even when the whole page is CSS-rotated to force landscape.
   seatScreen(seat) {
     const W = this.mount.clientWidth, H = this.mount.clientHeight;
-    if (seat === 1) return { x: W * 0.82, y: 62 };   // 下家 top-right (below the nav)
-    if (seat === 2) return { x: W * 0.18, y: 62 };   // 上家 top-left
+    if (seat === 1) return { x: W * 0.82, y: 90 };   // 下家 top-right (well below the nav)
+    if (seat === 2) return { x: W * 0.18, y: 90 };   // 上家 top-left
     return { x: W * 0.5, y: H - 24 };                // 玩家 bottom (mostly unused)
   }
   worldToScreen() { return { x: this.mount.clientWidth / 2, y: this.mount.clientHeight / 2 }; }
@@ -84,6 +84,17 @@ export class DouScene2D {
     this.handRects = [];
     const W = this.mount.clientWidth, H = this.mount.clientHeight;
 
+    // on-turn ring — a glowing 1/3 arc in the play area, rotated to point at the active seat (bid/play)
+    const ts = (view.turn != null && (view.phase === 'bid' || view.phase === 'play')) ? view.turn : -1;
+    if (ts >= 0) {
+      const cx = W / 2, cy = H * 0.44, s = this.seatScreen(ts);
+      const ang = Math.atan2(s.x - cx, -(s.y - cy)) * 180 / Math.PI; // 0 = up, clockwise
+      const ring = document.createElement('div'); ring.className = 'turn2d';
+      ring.style.left = cx + 'px'; ring.style.top = cy + 'px';
+      ring.style.transform = `translate(-50%, -50%) rotate(${ang.toFixed(1)}deg)`;
+      b.appendChild(ring);
+    }
+
     // opponents: face-down fans (or revealed faces at game over), top-left / top-right
     for (const seat of [1, 2]) {
       const reveal = view.revealHands && view.revealHands[seat];
@@ -96,7 +107,7 @@ export class DouScene2D {
         const el = c ? faceCard(c) : backCard();
         el.classList.add('mini');
         el.style.left = (x0 + i * step) + 'px';
-        el.style.top = '90px';                          // below the nameplate (which main places at ~62)
+        el.style.top = '116px';                         // below the nameplate (which main places at y≈90)
         el.style.zIndex = 10 + i;
         b.appendChild(el);
       });
@@ -116,7 +127,7 @@ export class DouScene2D {
     }
 
     // current plays on the felt, one cluster per seat
-    const spot = { 0: { x: W * 0.5, y: H * 0.56 }, 1: { x: W * 0.7, y: H * 0.42 }, 2: { x: W * 0.3, y: H * 0.42 } };
+    const spot = { 0: { x: W * 0.5, y: H * 0.47 }, 1: { x: W * 0.7, y: H * 0.40 }, 2: { x: W * 0.3, y: H * 0.40 } };
     for (const t of (view.table || [])) {
       const s = spot[t.seat]; const m = t.cards.length;
       const lead = t.seat === view.leadSeat;

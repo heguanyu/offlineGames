@@ -225,15 +225,18 @@ export class DouScene {
     const step = Math.min(0.64, n > 1 ? 11 / (n - 1) : 0);
     const x0 = -step * (n - 1) / 2;
     const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.faceCamRx, 0, 0));
+    // The card faces the camera, so a selected card lifts along the CAMERA's +Y axis (screen-up) — it
+    // slides straight up in view, staying square to the camera (no tilt, no slide toward/away).
+    this.camera.updateMatrixWorld();
+    const camUp = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
     hand.forEach((card, i) => {
       const sel = view.selected && view.selected.has(card.id);
       const hint = view.hint && view.hint.has(card.id);
       // Flat, even row (no vertical slope), all cards at the same tilt facing the camera. A TINY
       // per-card depth step lets overlapping neighbours layer cleanly without a visible slant.
       const z = 6.9 + i * 0.005;
-      // a selected card lifts straight UP in world +Y only (no z/x change, no rotation) — it slides up,
-      // never tilts or slides back.
-      const pos = new THREE.Vector3(x0 + i * step, HAND_Y + (sel ? 1.0 : 0), z);
+      const pos = new THREE.Vector3(x0 + i * step, HAND_Y, z);
+      if (sel) pos.addScaledVector(camUp, 1.05);
       want.set('c' + card.id, { faceCard: card, pos, quat: tilt, scale: 1.1, pick: true, id: card.id, hint, sel });
     });
 
