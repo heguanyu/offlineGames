@@ -254,8 +254,7 @@ export class MahjongScene {
   }
 
   _table() {
-    const rim = new THREE.Mesh(new THREE.BoxGeometry(FELT + 2.4, 0.7, FELT + 2.4),
-      new THREE.MeshStandardMaterial({ color: 0x6e4626, roughness: 0.72 }));
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(FELT + 2.4, 0.7, FELT + 2.4), this._woodMaterial());
     rim.position.y = -0.45; rim.receiveShadow = true; this.scene.add(rim);
     const felt = new THREE.Mesh(new THREE.BoxGeometry(FELT, 0.5, FELT), this._feltMaterial());
     felt.position.y = -0.26; felt.receiveShadow = true; this.scene.add(felt);
@@ -318,23 +317,62 @@ export class MahjongScene {
     this._turnRingActive = p;
     if (this.turnRing) this.turnRing.visible = p >= 0;
   }
-  // Real green-baize felt: a CC0 wool-felt photo (ambientCG Fabric034, 512px) as color + normal +
-  // roughness maps, tiled and tinted green — so the directional key light catches the cloth weave
-  // instead of a flat fill. ~155 KB, bundled (offline). Replaces the old procedural canvas felt.
+  // Green-baize felt. The COLOR is a single non-tiling canvas (green + soft macro blotches + fine
+  // Gaussian grain) so there's NO visible repeat across the table; the weave detail comes from a CC0
+  // wool-felt photo (ambientCG Fabric034, 512px) as the tiled normal + roughness maps — so the key
+  // light catches the cloth. ~155 KB bundled (offline). (three r160 applies each map's own uv repeat.)
   _feltMaterial() {
+    const loader = new THREE.TextureLoader();
+    const tex = (file) => {
+      const t = loader.load(new URL(`./textures/${file}`, import.meta.url).href);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 4); t.anisotropy = 8;
+      t.colorSpace = THREE.NoColorSpace;
+      return t;
+    };
+    return new THREE.MeshStandardMaterial({
+      map: this._feltColorTexture(),
+      normalMap: tex('felt_normal.jpg'),
+      roughnessMap: tex('felt_rough.jpg'),
+      color: 0xffffff, roughness: 1.0, metalness: 0.0,
+      normalScale: new THREE.Vector2(0.5, 0.5),
+    });
+  }
+  // One big (non-tiling) felt-green canvas: base + low-frequency blotches (kill the tile repeat) +
+  // per-pixel Gaussian grain (sum of 3 uniforms ≈ normal distribution).
+  _feltColorTexture() {
+    const N = 1024, c = document.createElement('canvas'); c.width = c.height = N;
+    const x = c.getContext('2d');
+    x.fillStyle = '#1b6f4b'; x.fillRect(0, 0, N, N);
+    for (let i = 0; i < 60; i++) {
+      const cx = Math.random() * N, cy = Math.random() * N, r = 140 + Math.random() * 320;
+      const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, Math.random() < 0.5 ? 'rgba(74,170,124,0.10)' : 'rgba(0,46,28,0.12)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.fillRect(0, 0, N, N);
+    }
+    const im = x.getImageData(0, 0, N, N), d = im.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = (Math.random() + Math.random() + Math.random() - 1.5) * 22;
+      d[i] += n; d[i + 1] += n; d[i + 2] += n;
+    }
+    x.putImageData(im, 0, 0);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  }
+  // Wood rim — CC0 plank photo (ambientCG Wood066, 512px) tiled, so the table edge isn't a flat colour.
+  _woodMaterial() {
     const loader = new THREE.TextureLoader();
     const tex = (file, srgb) => {
       const t = loader.load(new URL(`./textures/${file}`, import.meta.url).href);
-      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(7, 7); t.anisotropy = 8;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3); t.anisotropy = 8;
       t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
       return t;
     };
     return new THREE.MeshStandardMaterial({
-      map: tex('felt_color.jpg', true),
-      normalMap: tex('felt_normal.jpg', false),
-      roughnessMap: tex('felt_rough.jpg', false),
-      color: 0x2f9e68, roughness: 1.0, metalness: 0.0,        // green tint over the grey felt photo
-      normalScale: new THREE.Vector2(0.55, 0.55),
+      map: tex('wood_color.jpg', true),
+      normalMap: tex('wood_normal.jpg', false),
+      roughnessMap: tex('wood_rough.jpg', false),
+      color: 0xa9794a, roughness: 0.8, metalness: 0.0,
+      normalScale: new THREE.Vector2(0.6, 0.6),
     });
   }
 
