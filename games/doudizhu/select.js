@@ -39,16 +39,26 @@ function bestPartition(counts) {
   return best.map((g) => g.slice());
 }
 
-// Map a move's ranks to concrete card ids from the hand, preferring `preferId` for its rank
-// (so the tapped card itself is the one selected when it qualifies).
-function pickIds(hand, ranks, preferId) {
+// Map a move's ranks to concrete card ids from the hand, preferring the `prefer` ids for their rank
+// (so already-selected / just-tapped cards stay in the selection).
+function pickIds(hand, ranks, prefer = []) {
   const pool = hand.slice(); const ids = [];
+  const pset = prefer instanceof Set ? prefer : new Set(prefer);
   for (const r of ranks) {
-    let i = preferId != null ? pool.findIndex((c) => c.id === preferId && c.rank === r) : -1;
+    let i = pool.findIndex((c) => pset.has(c.id) && c.rank === r);
     if (i < 0) i = pool.findIndex((c) => c.rank === r);
     if (i >= 0) { ids.push(pool[i].id); pool.splice(i, 1); }
   }
   return ids;
+}
+// Multiset superset: does `sup` contain every rank in `sub` with at least its multiplicity?
+function supersetOf(sup, sub) {
+  const need = new Map();
+  for (const r of sub) need.set(r, (need.get(r) || 0) + 1);
+  const have = new Map();
+  for (const r of sup) have.set(r, (have.get(r) || 0) + 1);
+  for (const [r, n] of need) if ((have.get(r) || 0) < n) return false;
+  return true;
 }
 
 // Decompose a concrete hand into groups of card ids + a card→group lookup.
@@ -85,15 +95,24 @@ export class SmartSelection {
     const grp = this._dec.groups[this._dec.cardGroup.get(id)];
     if (grp) grp.ids.forEach((x) => this.selected.add(x)); else this.selected.add(id);
   }
-  // following: tap selects the SMALLEST legal combo that uses this card (so one tap = a playable
-  // move). Tapping that same combo again clears it. A card that can't form any beating combo just
-  // toggles as a lone (illegal) card, so the tap still registers but 出牌 stays disabled.
+  // following: tapping a card BUILDS on the current selection.
+  //  • tap a selected card → remove just it (refine down)
+  //  • first card (empty selection) → auto-complete to the smallest legal combo using it
+  //  • cards already selected → the smallest legal combo containing ALL selected cards + the new one
+  //    (the selection isn't thrown away); if none fits, the new card is just added so the player can
+  //    keep building, and 出牌 validates the result.
   _tapPlayable(id) {
-    const card = this.hand.find((c) => c.id === id); if (!card) return;
-    const cands = this.legalMoves.filter((m) => m.ranks.includes(card.rank)).sort((a, b) => a.size - b.size || a.rank - b.rank);
-    if (!cands.length) { if (this.selected.has(id)) this.selected.delete(id); else this.selected = new Set([id]); return; }
-    const ids = pickIds(this.hand, cands[0].ranks, id);
-    const same = ids.length === this.selected.size && ids.every((x) => this.selected.has(x));
-    this.selected = same ? new Set() : new Set(ids);
+    if (this.selected.has(id)) { this.selected.delete(id); return; }
+    const rankOf = (cid) => this.hand.find((c) => c.id === cid).rank;
+    const byCost = (a, b) => a.size - b.size || a.rank - b.rank;
+    if (this.selected.size === 0) {
+      const cands = this.legalMoves.filter((m) => m.ranks.includes(rankOf(id))).sort(byCost);
+      this.selected = new Set(cands.length ? pickIds(this.hand, cands[0].ranks, [id]) : [id]);
+      return;
+    }
+    const anchors = [...this.selected, id];
+    const anchorRanks = anchors.map(rankOf);
+    const build = this.legalMoves.filter((m) => supersetOf(m.ranks, anchorRanks)).sort(byCost);
+    this.selected = build.length ? new Set(pickIds(this.hand, build[0].ranks, anchors)) : new Set(anchors);
   }
 }

@@ -64,9 +64,24 @@ console.log('SmartSelection — following (tap selects a PLAYABLE combo):');
   const a4 = h.find((c) => c.rank === 4).id;
   s.tap(a4);
   ok(s.ids.length === 1 && s.has(a4), 'a card with no playable combo toggles as a lone card');
-  // tapping the playable combo again clears it
-  s.clear(); s.tap(an8); s.tap(an8);
-  ok(s.ids.length === 0, 'tapping the playable combo again clears it');
+  // tapping a selected card removes just that card (refine down)
+  s.clear(); s.tap(an8);                 // → pair of 8s
+  s.tap(an8);
+  ok(s.ids.length === 1 && !s.has(an8), 'tapping a selected card removes just it');
+}
+
+console.log('SmartSelection — following (build on the existing selection):');
+{
+  // lead is a 三带二 (trio 5 + pair 3). Hand has trios of 8 AND 9 plus a pair of K.
+  const h = hand([8, 8, 8, 9, 9, 9, 13, 13]);
+  const lm = legalMoves(h.map((c) => c.rank), classify([5, 5, 5, 3, 3]));
+  const s = new SmartSelection(); s.setHand(h); s.setContext({ following: true, legalMoves: lm });
+  // pre-select the trio of 9s, then tap a K. It must BUILD 9-9-9-K-K (keep the 9s), not switch to the
+  // lower 8-8-8-K-K (which the old "best comp of this card" logic would have picked).
+  s.set(h.filter((c) => c.rank === 9).map((c) => c.id));
+  s.tap(h.find((c) => c.rank === 13).id);
+  const ranks = s.ids.map((id) => h.find((c) => c.id === id).rank).sort((a, b) => a - b);
+  ok(ranks.join() === [9, 9, 9, 13, 13].join(), `builds 9-9-9-K-K on the selected trio (got ${ranks.join()})`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

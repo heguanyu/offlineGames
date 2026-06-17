@@ -6,7 +6,7 @@ import { legalMoves, classify, beats, rankLabel, COMBO } from './engine.js';
 import { chooseMove } from './ai.js';
 import { DouScene } from './scene.js';
 import { SmartSelection } from './select.js';
-import { sfx, say, setMuted, isMuted, resume } from './sound.js';
+import { sfx, speak, setMuted, isMuted, resume } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const LS = {
@@ -83,15 +83,18 @@ async function onEvent(ev) {
     }
     case 'askBid':
       state.awaiting = 'bid'; showBidBar(g); render(); break;
-    case 'bid':
+    case 'bid': {
       bubble(ev.seat, ev.call > 0 ? `叫 ${ev.call} 分` : '不叫', ev.call === 0);
-      if (!isMuted()) say(ev.call > 0 ? `叫${ev.call}分` : '不叫', ev.seat);
-      hideActions(); render(); break;
+      const dur = speak(ev.call > 0 ? [`${ev.call}分`] : ['过'], ev.seat);
+      hideActions(); render();
+      if (dur) await wait(dur);                  // let the call finish before the next seat bids
+      break;
+    }
     case 'bidEnd':
       state.bottom = null; state.phase = 'play'; state.trick = {};
       clearBubbles(); render();
       bubble(ev.landlord, '地主', false);
-      if (!isMuted()) say('我是地主', ev.landlord);
+      if (!isMuted()) speak(['我是地主'], ev.landlord);
       // reveal the three 底牌, double-sized in a labelled box at table centre, for ≥3s
       showBottomReveal(ev.bottom);
       await wait(3200);
@@ -100,18 +103,28 @@ async function onEvent(ev) {
       clearBubbles(); state.bottom = null; render(); await wait(500); break;
     case 'play': {
       state.trick[ev.seat] = ev.cards;
-      announcePlay(ev); clearBubble(ev.seat);
+      const dur = announcePlay(ev); clearBubble(ev.seat);
       if (ev.seat === HUMAN) { state.sel.clear(); state.hint.clear(); }
-      render(); break;
+      render();
+      if (dur) await wait(dur);                  // wait for the call to finish before the next turn
+      break;
     }
-    case 'pass':
+    case 'pass': {
       bubble(ev.seat, '不出', true);
-      if (!isMuted()) say('不出', ev.seat); render(); break;
-    case 'trickEnd':
-      // a trick was won → free play is confirmed. Hold the finished trick for ~3s so players can
-      // read it, then sweep all its cards (flipping) into the face-down discard pile.
-      await wait($('fast-toggle').checked ? 450 : 3000);
+      const dur = speak(['过'], ev.seat);
+      render();
+      if (dur) await wait(dur);
+      break;
+    }
+    case 'trickEnd': {
+      // a trick was won → free play. A CONTESTED trick (more than one seat played) holds ~3s so
+      // players can read the battle; a consecutive/uncontested free win (only the leader played)
+      // clears in 1s, so a player running the table doesn't stall the game.
+      const free = Object.keys(state.trick).length <= 1;
+      const fast = $('fast-toggle').checked;
+      await wait(fast ? (free ? 250 : 450) : (free ? 1000 : 3000));
       flushTrickToDiscard(); clearBubbles(); render(); break;
+    }
     case 'await': {
       state.awaiting = 'play'; state.cursor = Math.min(state.cursor, g.hands[HUMAN].length - 1);
       const against = g.leadSeat === HUMAN ? null : g.lead;
@@ -135,11 +148,37 @@ function flushTrickToDiscard() {
 function showBottomReveal(cards) { state.scene.showBottomReveal(cards); }
 function hideBottomReveal() { state.scene.hideBottomReveal(); }
 
+// Speak a rank: say its number, with the 斗地主 nicknames J→勾, Q→圈, A→尖 (jokers say 小王/大王).
+function rankSpeak(r) {
+  return { 3: '三', 4: '四', 5: '五', 6: '六', 7: '七', 8: '八', 9: '九', 10: '十', 11: '勾', 12: '圈', 13: 'K', 14: '尖', 15: '二', 16: '小王', 17: '大王' }[r] || '';
+}
+// Build the spoken token sequence for a played combo (pattern recognition). Tokens are concatenated
+// by sound.js: e.g. ['仨','五','带','俩','九'] → 仨五带俩九.
+//   single→[N] · pair→[对,N] · trio→[仨,N] · 3+1→[仨,N,带,M] · 3+2→[仨,N,带,俩,M]
+//   顺/连对→[串] · 飞机→[飞机] · 四带二→[四带二] · 炸弹→[炸弹] · 王炸→[王炸]
+function speakMove(d) {
+  const R = rankSpeak;
+  switch (d.type) {
+    case COMBO.SINGLE: return [R(d.rank)];
+    case COMBO.PAIR: return ['对', R(d.rank)];
+    case COMBO.TRIO: return ['仨', R(d.rank)];
+    case COMBO.TRIO_SINGLE: return ['仨', R(d.rank), '带', R(d.ranks.find((r) => r !== d.rank))];
+    case COMBO.TRIO_PAIR: return ['仨', R(d.rank), '带', '俩', R(d.ranks.find((r) => r !== d.rank))];
+    case COMBO.STRAIGHT: case COMBO.DOUBLE_STRAIGHT: return ['串'];
+    case COMBO.PLANE: case COMBO.PLANE_SINGLE: case COMBO.PLANE_PAIR: return ['飞机'];
+    case COMBO.FOUR_SINGLE: case COMBO.FOUR_PAIR: return ['四带二'];
+    case COMBO.BOMB: return ['炸弹'];
+    case COMBO.ROCKET: return ['王炸'];
+    default: return [];
+  }
+}
+// Announce a play and return the voice duration (ms) so the caller can wait for it to finish.
 function announcePlay(ev) {
   const d = ev.move;
-  if (d.type === COMBO.BOMB) { sfx.bomb(); if (!isMuted()) say('炸弹', ev.seat); }
-  else if (d.type === COMBO.ROCKET) { sfx.rocket(); if (!isMuted()) say('王炸', ev.seat); }
-  else { sfx.play(); }
+  if (d.type === COMBO.BOMB) sfx.bomb();
+  else if (d.type === COMBO.ROCKET) sfx.rocket();
+  else sfx.play();
+  return speak(speakMove(d), ev.seat);
 }
 
 // ---- rendering -------------------------------------------------------------
