@@ -68,18 +68,18 @@ body.flat #actions.play-bar { bottom: 18%; }
 #round-info { font-size: 0.82rem; color: #cdeadd; }
 #round-info b { color: var(--gold); }
 #nav .spacer { flex: 1; }
-#mute-btn { font: inherit; background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
+#mute-btn, #menu-btn { font: inherit; background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
 
 /* cumulative scoreboard — top-right corner (like the mahjong games) */
 #scores {
-  position: absolute; top: max(46px, calc(env(safe-area-inset-top) + 40px)); right: 8px; z-index: 6;
-  display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; border-radius: 12px;
-  background: rgba(4,18,12,0.66); border: 1px solid #1c5a44; backdrop-filter: blur(3px);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.45); font-size: 0.76rem; pointer-events: none;
+  position: absolute; top: max(52px, calc(env(safe-area-inset-top) + 46px)); right: 12px; z-index: 6;
+  display: flex; flex-direction: column; gap: 5px; padding: 11px 16px; border-radius: 14px;
+  background: rgba(4,18,12,0.7); border: 1px solid #2c8160; backdrop-filter: blur(3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5); font-size: 1.02rem; pointer-events: none; min-width: 8.5em;
 }
 #scores:empty { display: none; }
-#scores .sb-row { display: flex; justify-content: space-between; gap: 14px; line-height: 1.25; }
-#scores .sb-name { color: #9fd3bf; }
+#scores .sb-row { display: flex; justify-content: space-between; gap: 18px; line-height: 1.3; }
+#scores .sb-name { color: #bfe6d8; }
 #scores .sb-pt { font-weight: 800; }
 #scores .sb-pt.s-pos { color: #7ddf8a; }
 #scores .sb-pt.s-neg { color: #ff7a7a; }
@@ -88,14 +88,18 @@ body.flat #actions.play-bar { bottom: 18%; }
 .seat-tag {
   position: absolute; transform: translate(-50%, -50%); z-index: 4; text-align: center;
   pointer-events: none; transition: opacity 0.2s;
+  background: rgba(4,18,12,0.62); border: 1px solid #1c5a44; border-radius: 11px;
+  padding: 4px 11px; box-shadow: 0 3px 10px rgba(0,0,0,0.45); white-space: nowrap;
 }
 .seat-tag .name { font-size: 0.9rem; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
 .seat-tag .count { font-size: 0.78rem; color: #bfe6d8; }
+.seat-tag.turn { border-color: var(--gold); box-shadow: 0 0 12px rgba(232,196,102,0.5); }
 .seat-tag.turn .name { color: var(--gold); }
-.role-crown {
-  position: absolute; transform: translate(-50%, -50%); z-index: 4; font-size: 1.5rem;
-  pointer-events: none; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
-}
+/* landlord crown — OUTSIDE the bordered card: above for opponents, to the right for YOU */
+.seat-tag .crown { position: absolute; display: none; font-size: 1.4rem; line-height: 1; pointer-events: none;
+  left: 50%; top: -24px; transform: translateX(-50%); filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6)); }
+.seat-tag.landlord .crown { display: block; }
+.seat-tag.me .crown { left: auto; right: -32px; top: 50%; transform: translateY(-50%); }
 .bubble {
   position: absolute; transform: translate(-50%, -50%); z-index: 6;
   background: #fff; color: #1a1a2e; font-weight: 800; font-size: 0.95rem;
@@ -122,6 +126,7 @@ body.flat #actions.play-bar { bottom: 18%; }
 .act-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #b8902f, 0 4px 10px rgba(0,0,0,0.45); }
 .act-btn.ghost { background: rgba(255,255,255,0.14); color: var(--ink); box-shadow: none; border: 1px solid #2c8160; }
 .act-btn.pass { background: linear-gradient(#cfd6e0, #aab3c2); color: #1a1a2e; box-shadow: 0 4px 0 #7c8696, 0 8px 16px rgba(0,0,0,0.45); }
+.act-btn.no { background: linear-gradient(#ff6b6b, #d62828); color: #fff; box-shadow: 0 4px 0 #9e1b1b, 0 8px 16px rgba(0,0,0,0.45); }
 .act-btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; transform: none; }
 
 /* bidding bar reuses #actions; the score buttons are compact */

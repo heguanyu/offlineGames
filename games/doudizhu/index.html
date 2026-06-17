@@ -20,6 +20,7 @@
       <div id="round-info"></div>
       <span class="spacer"></span>
       <button id="mute-btn" type="button">🔊</button>
+      <button id="menu-btn" type="button">≡</button>
     </header>
 
     <!-- cumulative scoreboard, top-right (like the mahjong games) -->
@@ -53,6 +54,15 @@
         <div id="result-score"></div>
         <div class="scorebar" id="result-scorebar"></div>
         <button class="act-btn" id="next-btn" style="width:100%">再来一局</button>
+      </div>
+    </div>
+
+    <!-- menu (≡): Continue / Return to main page -->
+    <div id="menu-overlay" class="overlay" hidden>
+      <div class="panel">
+        <h1>菜单</h1>
+        <button class="act-btn" id="menu-continue" style="width:100%;margin-bottom:12px">继续</button>
+        <button class="act-btn ghost" id="menu-home" style="width:100%">返回主页</button>
       </div>
     </div>
   </div>

@@ -83,6 +83,9 @@ function boot() {
   $('start-btn').addEventListener('click', () => { resume(); $('start-overlay').hidden = true; newGame(); });
   $('next-btn').addEventListener('click', () => { $('result-overlay').hidden = true; newGame(); });
   $('mute-btn').addEventListener('click', () => { LS.mute = !isMuted(); setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊'; });
+  $('menu-btn').addEventListener('click', () => { $('menu-overlay').hidden = false; });
+  $('menu-continue').addEventListener('click', () => { $('menu-overlay').hidden = true; });
+  $('menu-home').addEventListener('click', () => { location.href = '../../index.html'; });
 
   $('scene').addEventListener('pointerdown', onPointerDown);
   window.addEventListener('keydown', onKey);
@@ -259,26 +262,17 @@ function positionOverlays() {
   const host = $('overlays');
   for (const seat of [0, 1, 2]) {
     let tag = host.querySelector(`.seat-tag[data-seat="${seat}"]`);
-    if (!tag) { tag = document.createElement('div'); tag.className = 'seat-tag'; tag.dataset.seat = seat; tag.innerHTML = '<div class="name"></div><div class="count"></div>'; host.appendChild(tag); }
-    // opponents' tags use a raised world anchor (y=2.7) so they sit ABOVE their upright card fans
-    const p = state.scene.seatScreen(seat, 2.7);
-    // seat 0 (you) is pinned to the bottom-LEFT corner so it never overlaps the centred hand row;
-    // the opponents follow their (raised) seat anchor.
-    if (seat === 0) { tag.style.left = '16px'; tag.style.top = 'auto'; tag.style.bottom = '14%'; tag.style.transform = 'none'; tag.style.textAlign = 'left'; }
-    else { tag.style.left = p.x + 'px'; tag.style.top = (p.y - 8) + 'px'; tag.style.bottom = 'auto'; tag.style.transform = 'translate(-50%, -50%)'; tag.style.textAlign = 'center'; }
-    const role = g.landlord === seat ? '（地主）' : (g.landlord >= 0 ? '（农民）' : '');
+    if (!tag) { tag = document.createElement('div'); tag.className = 'seat-tag'; tag.dataset.seat = seat; tag.innerHTML = '<span class="crown">👑</span><div class="name"></div><div class="count"></div>'; host.appendChild(tag); }
+    tag.classList.toggle('me', seat === 0);
+    // YOU sit at the bottom-CENTRE, under the hand row; the opponents follow their (raised) seat anchor.
+    if (seat === 0) { tag.style.left = '50%'; tag.style.top = 'auto'; tag.style.bottom = '6px'; tag.style.transform = 'translateX(-50%)'; }
+    else { const p = state.scene.seatScreen(seat, 2.7); tag.style.left = p.x + 'px'; tag.style.top = (p.y - 8) + 'px'; tag.style.bottom = 'auto'; tag.style.transform = 'translate(-50%, -50%)'; }
+    const isLL = g.landlord === seat;
+    const role = isLL ? '（地主）' : (g.landlord >= 0 ? '（农民）' : '');
+    tag.classList.toggle('landlord', isLL); // 👑 shown via CSS — right of YOUR card, above the opponents'
     tag.querySelector('.name').textContent = SEAT_NAME[seat] + (g.landlord >= 0 ? role : '');
     tag.querySelector('.count').textContent = g.phase === 'play' ? `${g.handCounts[seat]} 张` : '';
     tag.classList.toggle('turn', g.phase === 'play' && g.turn === seat);
-
-    let crown = host.querySelector(`.role-crown[data-seat="${seat}"]`);
-    const isLL = g.landlord === seat;
-    if (isLL && !crown) { crown = document.createElement('div'); crown.className = 'role-crown'; crown.dataset.seat = seat; crown.textContent = '👑'; host.appendChild(crown); }
-    if (crown) {
-      crown.style.display = isLL ? 'block' : 'none';
-      if (isLL && seat === 0) { crown.style.left = '20px'; crown.style.top = 'auto'; crown.style.bottom = 'calc(14% + 34px)'; crown.style.transform = 'none'; }
-      else if (isLL) { crown.style.left = p.x + 'px'; crown.style.top = (p.y - 26) + 'px'; crown.style.bottom = 'auto'; crown.style.transform = 'translate(-50%, -50%)'; }
-    }
   }
 }
 
@@ -298,7 +292,7 @@ function showBidBar(g) {
   const bar = $('actions'); bar.hidden = false; bar.innerHTML = ''; bar.classList.remove('play-bar');
   const labels = [['不叫', 0], ['1 分', 1], ['2 分', 2], ['3 分', 3]];
   for (const [lbl, val] of labels) {
-    const btn = document.createElement('button'); btn.className = 'act-btn bid-btn' + (val === 0 ? ' ghost' : ''); btn.textContent = lbl;
+    const btn = document.createElement('button'); btn.className = 'act-btn bid-btn' + (val === 0 ? ' no' : ''); btn.textContent = lbl;
     if (val !== 0 && val <= g.highBid) btn.disabled = true; // must outbid
     btn.addEventListener('click', () => { state.awaiting = null; bar.hidden = true; state.backend.decideBid(val); });
     bar.appendChild(btn);

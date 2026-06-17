@@ -11,7 +11,7 @@ import { rankLabel } from './engine.js';
 const CW = 1.0, CH = 1.45, CD = 0.02;   // card width / height / depth (thin cards)
 const FELT = 15;
 const HAND_Y = 0.62;   // human hand sits ABOVE the felt (was clipping into the table)
-const OPP_Y = 0.95;    // opponents' upright fans stand on the table
+const OPP_Y = 1.45;    // opponents' upright fans stand on the table (raised so the 2× cards clear the felt)
 const SUIT_CHAR = ['♠', '♥', '♣', '♦'];
 const SUIT_RED = [false, true, false, true];
 
@@ -36,9 +36,9 @@ function rr(x, X, Y, W, H, r) {
 // glyphs, bold corner indices — so it reads clearly even small and under the 3D lighting.
 function drawCardFace(c, card) {
   const x = c.getContext('2d'); const W = c.width, H = c.height;
-  x.clearRect(0, 0, W, H);
-  x.fillStyle = '#ffffff'; rr(x, 2, 2, W - 4, H - 4, 26); x.fill();
-  x.lineWidth = 3; x.strokeStyle = '#cac6ba'; x.stroke();
+  // fill the WHOLE canvas white — the rounded geometry does the corner shaping, so there are no
+  // transparent texture corners showing through as black.
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
   const RED = '#d11414', BLACK = '#101014';
   if (card.rank >= 16) {            // jokers
     const red = card.rank === 17;
@@ -100,7 +100,7 @@ function backTexture() {
 // face texture maps cleanly and centred (no crop). Three contiguous material groups by face normal:
 // 0 = front cap (the face), 1 = back cap (the back), 2 = the sides.
 function roundedCardGeo() {
-  const w = CW, h = CH, r = Math.min(w, h) * 0.06;
+  const w = CW, h = CH, r = Math.min(w, h) * 0.095;
   const x0 = -w / 2, y0 = -h / 2;
   const s = new THREE.Shape();
   s.moveTo(x0 + r, y0);
@@ -143,8 +143,9 @@ export class DouScene {
     this.camLook = new THREE.Vector3(0, -1.0, 0.4);
     this.camera.position.copy(this.camBase);
     this.camera.lookAt(this.camLook);
-    // tilt that stands a flat card up to face the down-pitched camera
-    this.faceCamRx = -Math.atan2(this.camBase.y - this.camLook.y, this.camBase.z - this.camLook.z);
+    // tilt that stands a hand card up so its face points straight at the camera (computed from the
+    // hand's actual position, not the look point, so the cards face the camera directly)
+    this.faceCamRx = -Math.atan2(this.camBase.y - HAND_Y, this.camBase.z - 6.9);
 
     this._lights(); this._table();
     this.geo = roundedCardGeo();
@@ -220,12 +221,12 @@ export class DouScene {
     hand.forEach((card, i) => {
       const sel = view.selected && view.selected.has(card.id);
       const hint = view.hint && view.hint.has(card.id);
-      // Each card sits slightly nearer the camera than the one to its left (a real fan stack) so
-      // overlapping neighbours layer cleanly via the depth buffer.
-      const z = 6.9 + i * 0.022;
-      const pos = new THREE.Vector3(x0 + i * step, HAND_Y + i * 0.004, z);
+      // Flat, even row (no vertical slope), all cards at the same tilt facing the camera. A TINY
+      // per-card depth step lets overlapping neighbours layer cleanly without a visible slant.
+      const z = 6.9 + i * 0.005;
+      const pos = new THREE.Vector3(x0 + i * step, HAND_Y, z);
       if (sel) pos.addScaledVector(screenUp, 1.15);
-      want.set('c' + card.id, { faceCard: card, pos, quat: tilt, scale: 1, pick: true, id: card.id, hint, sel });
+      want.set('c' + card.id, { faceCard: card, pos, quat: tilt, scale: 1.1, pick: true, id: card.id, hint, sel });
     });
 
     // 底牌 — three face-up cards at top centre until the landlord takes them
@@ -239,7 +240,7 @@ export class DouScene {
     for (const t of (view.table || [])) {
       const spot = PLAY_SPOT[t.seat]; const m = t.cards.length;
       const isCurrent = t.seat === view.leadSeat;
-      const sc = isCurrent ? 1.5 : 1.0;
+      const sc = isCurrent ? 1.8 : 1.2;   // played cards ~20% bigger (current lead larger still)
       const cs = Math.min(0.5 * sc, m > 1 ? 2.6 * sc / (m - 1) : 0); const cx0 = -cs * (m - 1) / 2;
       const from = SEAT_ANCHOR[t.seat].clone().setY(1.1);
       t.cards.forEach((card, i) => {
@@ -252,15 +253,15 @@ export class DouScene {
     for (const seat of [1, 2]) {
       const reveal = view.revealHands && view.revealHands[seat];
       const cnt = reveal ? reveal.length : (view.counts || [0, 0, 0])[seat];
-      const cx = SEAT_ANCHOR[seat].x * 0.8, cz = -2.4;
-      const cs = Math.min(0.3, cnt > 1 ? 3.2 / (cnt - 1) : 0); const cx0 = -cs * (cnt - 1) / 2;
+      const cx = SEAT_ANCHOR[seat].x * 0.72, cz = -2.5;       // pulled in a touch — the cards are 2× bigger now
+      const cs = Math.min(0.34, cnt > 1 ? 3.6 / (cnt - 1) : 0); const cx0 = -cs * (cnt - 1) / 2;
       const fan = 0.42;
       for (let i = 0; i < cnt; i++) {
         const t = cnt > 1 ? (i / (cnt - 1) - 0.5) : 0;          // -0.5..0.5 across the fan
         const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.12, 0, -t * fan)); // near-vertical, fanned
         const face = reveal ? reveal[i] : null;
         const key = reveal ? 'c' + reveal[i].id : `b${seat}_${i}`;
-        want.set(key, { faceCard: face, pos: new THREE.Vector3(cx + cx0 + i * cs, OPP_Y + i * 0.004, cz), quat, scale: 0.8 });
+        want.set(key, { faceCard: face, pos: new THREE.Vector3(cx + cx0 + i * cs, OPP_Y + i * 0.004, cz), quat, scale: 1.6 });
       }
     }
 
@@ -274,7 +275,7 @@ export class DouScene {
         const jz = (((card.id * 61) % 100) / 100 - 0.5) * 1.2;
         const rot = (((card.id * 53) % 100) / 100 - 0.5) * 0.9;
         const quat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot).multiply(flatDown);
-        want.set('c' + card.id, { faceCard: card, pos: new THREE.Vector3(jx, 0.04 + i * 0.003, -1.0 + jz), quat, scale: 0.52 });
+        want.set('c' + card.id, { faceCard: card, pos: new THREE.Vector3(jx, 0.04 + i * 0.003, -1.0 + jz), quat, scale: 0.73 });
       });
     }
 
