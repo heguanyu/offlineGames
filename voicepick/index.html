@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>选声音 · Qwen3-TTS</title>
+<title>选声音 · 男声</title>
 <style>
   body { margin: 0; padding: 18px 16px 40px; background: #0d1b14; color: #eaf6f0;
     font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
@@ -19,30 +19,29 @@
 </style>
 </head>
 <body>
-  <h1>选声音 — 只剩女声要定</h1>
-  <p class="sub">男声已定 <span class="ok">✓</span>：东/年轻男 = <b>Dylan</b>，西/成熟男 = <b>Uncle_Fu</b>（仅供回听）。<br>
-     女声用 Qwen3-TTS <b>VoiceDesign</b>（按描述生成，不是之前那俩怪声）。每条有整句 + <b>对儿三</b> + <b>对三</b>（对比“对儿…三”是否还断）。<br>
-     告诉我：年轻女选哪个、成熟女选哪个，以及“对儿三”还是“对三”更顺。</p>
+  <h1>选声音 — 男声对比</h1>
+  <p class="sub">女声已定 <span class="ok">✓</span>：年轻女 = <b>fy1</b>，成熟女 = <b>fm1</b>（成熟女将 +30% 语速）。<br>
+     男声：之前的预设 <b>Dylan / Uncle_Fu</b> vs 新的 VoiceDesign 候选（按描述生成，已固定种子=声音一致）。<br>
+     告诉我年轻男、成熟男各选哪个；“对儿三 / 对三”也可一并定。</p>
 
-  <h2>男声（已定，回听）</h2>
-  <div class="v"><b>Dylan</b> — 东 / 年轻男<div class="clip"><span>整句</span><audio controls preload="none" src="./Dylan_line.wav"></audio></div></div>
-  <div class="v"><b>Uncle_Fu</b> — 西 / 成熟男<div class="clip"><span>整句</span><audio controls preload="none" src="./Uncle_Fu_line.wav"></audio></div></div>
-
-  <h2>年轻女（南 / 斗地主下家）— 选一个</h2>
+  <h2>年轻男（东 / 斗地主你）</h2>
   <div id="young"></div>
-  <h2>成熟女（北）— 选一个</h2>
+  <h2>成熟男（西 / 上家）</h2>
   <div id="mature"></div>
 <script>
-  const rows = (host, list) => list.forEach(([id, d]) => {
+  const clip = (id, sub, label) => `<div class="clip"><span>${label}</span><audio controls preload="none" src="./${id}_${sub}.wav"></audio></div>`;
+  const row = (host, id, desc, subs) => {
     const el = document.createElement('div'); el.className = 'v';
-    el.innerHTML = `<b>${id}</b><div class="d">${d}</div>`
-      + `<div class="clip"><span>整句</span><audio controls preload="none" src="./${id}_line.wav"></audio></div>`
-      + `<div class="clip"><span>对儿三</span><audio controls preload="none" src="./${id}_dui.wav"></audio></div>`
-      + `<div class="clip"><span>对三</span><audio controls preload="none" src="./${id}_dui2.wav"></audio></div>`;
+    el.innerHTML = `<b>${id}</b><div class="d">${desc}</div>` + subs.map(([s, l]) => clip(id, s, l)).join('');
     document.getElementById(host).appendChild(el);
-  });
-  rows('young', [['fy1', '年轻、明亮活泼、清晰普通话'], ['fy2', '年轻、甜美温柔、自然普通话']]);
-  rows('mature', [['fm1', '约45岁、温暖成熟、沉稳'], ['fm2', '中年、优雅从容']]);
+  };
+  const full = [['line', '整句'], ['dui', '对儿三'], ['dui2', '对三']];
+  row('young', 'Dylan', '预设：年轻男，北京腔清亮', [['line', '整句'], ['dui', '对儿三']]);
+  row('young', 'my1', 'VoiceDesign：约25岁，明亮有活力', full);
+  row('young', 'my2', 'VoiceDesign：年轻，温暖友好、自信', full);
+  row('mature', 'Uncle_Fu', '预设：成熟男，低沉醇厚', [['line', '整句'], ['dui', '对儿三']]);
+  row('mature', 'mm1', 'VoiceDesign：约45岁，低沉醇厚、沉稳', full);
+  row('mature', 'mm2', 'VoiceDesign：中年，磁性低音、从容', full);
 </script>
 </body>
 </html>
