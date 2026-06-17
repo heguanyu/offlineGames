@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>声音体检 · Voice clip audit</title>
+<style>
+  body { margin: 0; padding: 16px 18px 48px; background: #10131c; color: #e7ecf5;
+    font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  p.sub { color: #9aa3bd; margin: 0 0 14px; font-size: 0.88rem; line-height: 1.5; }
+  h2 { margin-top: 26px; border-bottom: 1px solid #2c3a63; padding-bottom: 4px; font-size: 1.05rem; }
+  h2.warn { border: 0; color: #ff9d6b; }
+  h3 { color: #9fb4ff; margin: 14px 0 6px; font-size: 0.95rem; }
+  #status { color: #9fb4ff; margin: 8px 0 14px; }
+  .clip, .comp { display: inline-flex; align-items: center; gap: 6px; background: #1a2236; border: 1px solid #2c3a63;
+    border-radius: 8px; padding: 4px 9px; margin: 3px; font-size: 0.82rem; white-space: nowrap; vertical-align: middle; }
+  .comp { opacity: 0.9; background: #161c2c; }
+  .clip code, .comp code { color: #8a93ad; font-size: 0.74rem; } .clip i, .comp i { color: #6f88c0; font-style: normal; font-size: 0.72rem; }
+  button.play { background: #23365e; color: #cfe0ff; border: none; border-radius: 5px; padding: 3px 9px; cursor: pointer; font-size: 0.82rem; }
+  button.play:hover { background: #2f4a82; }
+  .flag-long { color: #ff9d6b; font-weight: 700; } .flag-short { color: #ffd23a; font-weight: 700; }
+  .clip.flag-long { border-color: #ff9d6b; } .clip.flag-short { border-color: #ffd23a; }
+  .o-card { background: #161c2c; border: 1px solid #2c3a63; border-radius: 11px; padding: 10px 12px; margin: 8px 0; }
+  .o-head { margin-bottom: 6px; } .comps { margin-top: 6px; color: #8a93ad; font-size: 0.8rem; }
+  .fam { margin: 6px 0 14px; } .fam-name { font-weight: 700; color: #cfe0ff; } .fam-med { color: #8a93ad; font-size: 0.78rem; margin-left: 8px; }
+  code { background: none; }
+</style>
+</head>
+<body>
+<h1>🎙️ 声音体检 — clip play-time outliers</h1>
+<p class="sub">
+  Measures every shipped voice clip (both games, all voices) live in your browser and flags duration
+  <b>outliers</b> vs the same word in the other voices (tempo-normalized). <b class="flag-long">Long</b> =
+  likely an extra tone; <b class="flag-short">short</b> = possibly clipped. ▶ plays the clip; each outlier
+  lists its comparison clips. Listen, then tell me which to fix.
+</p>
+<div id="status">加载中… measuring clips</div>
+<div id="content" hidden>
+  <h2 class="warn">⚠️ Outliers (<span id="ocount">0</span>)</h2>
+  <div id="outliers"></div>
+  <h2>All clips (browse / spot-check)</h2>
+  <div id="all"></div>
+</div>
+
+<script>
+// ---- manifest (slug -> text), mirrors games/*/voice + gen-voice-oss in the sibling gen project ----
+const DIGITS = '一二三四五六七八九';
+const vMahjong = {};
+for (let i = 1; i <= 9; i++) { vMahjong['m'+i] = DIGITS[i-1]+'万'; vMahjong['p'+i] = DIGITS[i-1]+'筒'; vMahjong['s'+i] = DIGITS[i-1]+'条'; }
+Object.assign(vMahjong, { w0:'东', w1:'南', w2:'西', w3:'北', d0:'中', d1:'發', d2:'白',
+  pung:'碰', chi:'吃', mingkong:'明杠', ankong:'暗杠', jinkong:'金杠', hula:'胡啦', dianpao:'点炮', zimo:'自摸' });
+const RANKS = { r3:'三', r4:'四', r5:'五', r6:'六', r7:'七', r8:'八', r9:'九', r10:'十', rJ:'勾', rQ:'圈', rK:'K', rA:'尖', r2:'二' };
+const vDou = Object.assign({}, RANKS, { sa:'仨' });
+['3','4','5','6','7','8','9','10','J','Q','K','A','2'].forEach((l, i) => vDou['dui'+l] = '俩' + Object.values(RANKS)[i]);
+Object.assign(vDou, { tri1:'三带一', tri2:'三带二', chuan:'串', plane:'飞机', bomb:'炸弹', rocket:'王炸', four2:'四带二',
+  jokerS:'小王', jokerB:'大王', bid1:'1分', bid2:'2分', bid3:'3分', guo:'过', landlord:'我是地主' });
+
+const GAMES = {
+  'mahjong-common': { vocab: vMahjong, personas: { 0:'0 · 东 young man', 1:'1 · 南 young woman', 2:'2 · 西 mature man', 3:'3 · 北 mature woman' },
+    families: ['数牌','字牌','叫牌'] },
+  'doudizhu': { vocab: vDou, personas: { 0:'0 · 你 young man', 1:'1 · 下家 young woman', 2:'2 · 上家 mature man' },
+    families: ['点数','对子','牌型其他'] },
+};
+const LONG = 1.6, SHORT = 0.55, FLOOR = 0.12; // outlier thresholds (ratio vs expected; absolute floor)
+
+function fam(game, slug) {
+  if (game === 'mahjong-common') {
+    if (/^[mps][1-9]$/.test(slug)) return '数牌';
+    if (/^(w[0-3]|d[0-2])$/.test(slug)) return '字牌';
+    return '叫牌';
+  }
+  if (slug.startsWith('dui')) return '对子';
+  if (slug[0] === 'r') return '点数';
+  return '牌型其他';
+}
+const median = (xs) => { if (!xs.length) return 0; const a = xs.slice().sort((x,y)=>x-y); const m = a.length>>1; return a.length%2 ? a[m] : (a[m-1]+a[m])/2; };
+const esc = (t) => (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const pname = (game, p) => { const l = GAMES[game].personas[p]; return l.includes(' · ') ? l.split(' · ')[1] : ('v'+p); };
+
+// measure a clip's duration from its WAV metadata
+function measure(url) {
+  return new Promise((res) => {
+    const a = new Audio(); a.preload = 'metadata';
+    a.onloadedmetadata = () => res(isFinite(a.duration) ? a.duration : null);
+    a.onerror = () => res(null);
+    a.src = url;
+  });
+}
+
+(async function () {
+  const clips = [];
+  for (const [game, gc] of Object.entries(GAMES))
+    for (const p of Object.keys(gc.personas).map(Number))
+      for (const slug of Object.keys(gc.vocab))
+        clips.push({ game, persona: p, slug, text: gc.vocab[slug], fam: fam(game, slug),
+          url: `../games/${game}/voice/${p}/${slug}.wav` });
+
+  let done = 0;
+  const status = document.getElementById('status');
+  await Promise.all(clips.map(async (c) => {
+    c.dur = await measure(c.url);
+    if (++done % 25 === 0) status.textContent = `加载中… ${done}/${clips.length}`;
+  }));
+  const ok = clips.filter((c) => c.dur != null);
+  const missing = clips.length - ok.length;
+
+  // baselines: per-persona median (tempo proxy) + per-word cross-voice normalized median
+  const personaMed = {}, slugNormMed = {};
+  for (const [game, gc] of Object.entries(GAMES))
+    for (const p of Object.keys(gc.personas).map(Number))
+      personaMed[game+'/'+p] = median(ok.filter((c)=>c.game===game && c.persona===p).map((c)=>c.dur));
+  for (const [game, gc] of Object.entries(GAMES))
+    for (const slug of Object.keys(gc.vocab)) {
+      const norms = ok.filter((c)=>c.game===game && c.slug===slug).map((c)=>c.dur / personaMed[game+'/'+c.persona]);
+      if (norms.length) slugNormMed[game+'/'+slug] = median(norms);
+    }
+  // family medians per persona (for the browse table)
+  const famMed = {};
+  for (const [game, gc] of Object.entries(GAMES))
+    for (const p of Object.keys(gc.personas).map(Number))
+      for (const f of gc.families)
+        famMed[`${game}/${p}/${f}`] = median(ok.filter((c)=>c.game===game && c.persona===p && c.fam===f).map((c)=>c.dur));
+
+  for (const c of ok) {
+    const pm = personaMed[c.game+'/'+c.persona], snm = slugNormMed[c.game+'/'+c.slug] || 1;
+    c.base = snm * pm;                                   // expected duration for this word in this voice
+    c.ratio = (pm && snm) ? (c.dur / pm) / snm : 1;
+    c.flag = null;
+    if (c.ratio >= LONG && (c.dur - c.base) >= FLOOR) c.flag = 'long';
+    else if (c.ratio <= SHORT && (c.base - c.dur) >= FLOOR) c.flag = 'short';
+  }
+
+  const outliers = ok.filter((c)=>c.flag).sort((a,b)=> b.ratio - a.ratio);
+  const chip = (c, comp) => `<span class="${comp?'comp':('clip'+(c.flag?' flag-'+c.flag:''))}">`
+    + `<button class="play" data-u="${c.url}">▶</button> <b>${esc(c.text)}</b> <code>${c.slug}</code> `
+    + `<i>v${c.persona}</i> ${c.dur.toFixed(3)}s</span>`;
+
+  // outlier cards
+  document.getElementById('outliers').innerHTML = outliers.map((c) => {
+    const comps = ok.filter((x)=>x.game===c.game && x.slug===c.slug && x !== c).sort((a,b)=>a.persona-b.persona);
+    return `<div class="o-card"><div class="o-head">${c.game} · ${esc(GAMES[c.game].personas[c.persona])} · `
+      + `<b>${esc(c.text)}</b> <code>${c.slug}</code> — <span class="flag-${c.flag}">${c.dur.toFixed(3)}s `
+      + `(${c.flag}, ${c.ratio.toFixed(2)}× vs ${c.base.toFixed(3)}s)</span></div>`
+      + `<div>${chip(c)}</div><div class="comps">comps: ${comps.map((x)=>chip(x,true)).join('')}</div></div>`;
+  }).join('') || '<p>No outliers flagged. 🎉</p>';
+  document.getElementById('ocount').textContent =
+    `${outliers.filter((c)=>c.flag==='long').length} long / ${outliers.filter((c)=>c.flag==='short').length} short`;
+
+  // full browse table grouped game -> persona -> family
+  let html = '';
+  for (const [game, gc] of Object.entries(GAMES)) {
+    html += `<h2>${game}</h2>`;
+    for (const p of Object.keys(gc.personas).map(Number)) {
+      html += `<h3>${esc(gc.personas[p])}</h3>`;
+      for (const f of gc.families) {
+        const fc = ok.filter((c)=>c.game===game && c.persona===p && c.fam===f).sort((a,b)=>a.dur-b.dur);
+        if (!fc.length) continue;
+        html += `<div class="fam"><span class="fam-name">${f}</span>`
+          + `<span class="fam-med">median ${famMed[`${game}/${p}/${f}`].toFixed(3)}s</span>`
+          + `<div>${fc.map((c)=>chip(c)).join('')}</div></div>`;
+      }
+    }
+  }
+  document.getElementById('all').innerHTML = html;
+
+  // one shared audio element for playback
+  let cur = null;
+  document.body.addEventListener('click', (e) => {
+    const b = e.target.closest('button.play'); if (!b) return;
+    if (cur) cur.pause();
+    cur = new Audio(b.dataset.u); cur.play();
+  });
+
+  status.textContent = `${ok.length} clips measured${missing?` (${missing} missing)`:''} · ${outliers.length} outlier(s)`;
+  document.getElementById('content').hidden = false;
+})();
+</script>
+</body>
+</html>
