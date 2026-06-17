@@ -53,8 +53,8 @@ VOCAB_MAHJONG = {
     **{f"s{i}": f"{'一二三四五六七八九'[i-1]}条" for i in range(1, 10)},
     "w0": "东", "w1": "南", "w2": "西", "w3": "北",
     "d0": "中", "d1": "發", "d2": "白",
-    "pung": "碰", "mingkong": "明杠", "ankong": "暗杠", "jinkong": "金杠",
-    "hula": "胡啦", "dianpao": "点炮", "zimo": "自摸",
+    "pung": "碰！", "mingkong": "明杠！", "ankong": "暗杠！", "jinkong": "金杠！",
+    "hula": "胡啦！", "dianpao": "点炮！", "zimo": "自摸！",
 }
 
 # DOUDIZHU — singles use the rank clips (rN); a plain trio is still 仨+rN; pairs + trio-with are now
