@@ -41,6 +41,9 @@
   #update-btn:disabled { color: #5a5a78; border-color: #232f52; cursor: default; }
   /* download progress for an in-flight update — a bar + live percentage next to the button */
   #update-progress { display: inline-flex; align-items: center; gap: 7px; margin-left: 10px; vertical-align: middle; }
+  /* the id-selector display above would beat the UA [hidden] rule, leaving the bar permanently
+     shown at 0%; this restores hide-ability (id+attr specificity wins). */
+  #update-progress[hidden] { display: none; }
   #update-bar { display: inline-block; width: 90px; height: 7px; border-radius: 999px; background: #232f52; overflow: hidden; }
   #update-fill { display: block; height: 100%; width: 0; border-radius: 999px; background: #9fb4ff; transition: width 0.2s ease; }
   #update-pct { font-size: 0.78rem; color: #9fb4ff; font-variant-numeric: tabular-nums; }
