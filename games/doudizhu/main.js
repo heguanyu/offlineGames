@@ -265,8 +265,10 @@ function positionOverlays() {
     let tag = host.querySelector(`.seat-tag[data-seat="${seat}"]`);
     if (!tag) { tag = document.createElement('div'); tag.className = 'seat-tag'; tag.dataset.seat = seat; tag.innerHTML = '<span class="crown">👑</span><div class="name"></div><div class="count"></div>'; host.appendChild(tag); }
     tag.classList.toggle('me', seat === 0);
-    // YOU sit at the bottom-CENTRE, under the hand row; the opponents follow their (raised) seat anchor.
-    if (seat === 0) { tag.style.left = '50%'; tag.style.top = 'auto'; tag.style.bottom = '6px'; tag.style.transform = 'translateX(-50%)'; }
+    // YOU: bottom-CENTRE under the hand row in 3D, but the bottom-LEFT corner in flat landscape (the
+    // hand fills the whole bottom edge there, so centre would overlap it). Opponents follow their anchor.
+    if (seat === 0 && FLAT) { tag.style.left = '8px'; tag.style.top = 'auto'; tag.style.bottom = '6px'; tag.style.transform = 'none'; }
+    else if (seat === 0) { tag.style.left = '50%'; tag.style.top = 'auto'; tag.style.bottom = '6px'; tag.style.transform = 'translateX(-50%)'; }
     else { const p = state.scene.seatScreen(seat, 2.7); tag.style.left = p.x + 'px'; tag.style.top = (p.y - 8) + 'px'; tag.style.bottom = 'auto'; tag.style.transform = 'translate(-50%, -50%)'; }
     const isLL = g.landlord === seat;
     const role = isLL ? '（地主）' : (g.landlord >= 0 ? '（农民）' : '');

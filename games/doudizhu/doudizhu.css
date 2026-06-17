@@ -39,8 +39,9 @@ body.flat .c2.mini { width: 24px; height: 33px; padding-top: 1px; }
 body.flat .c2.mini .rk { font-size: 11px; } body.flat .c2.mini .su { font-size: 9px; }
 body.flat .c2.play { width: 40px; height: 56px; }
 body.flat .c2.play.lead { box-shadow: 0 0 9px rgba(255,210,80,0.7); }
-body.flat .c2.h { bottom: 10px; transition: bottom 0.12s; }
-body.flat .c2.h.sel { bottom: 30px; box-shadow: 0 0 9px rgba(255,214,90,0.9); }
+body.flat .c2.h { width: 42px; height: 59px; bottom: 5px; transition: bottom 0.12s; }
+body.flat .c2.h.sel { bottom: 24px; box-shadow: 0 0 9px rgba(255,214,90,0.9); }
+body.flat .c2.h .rk { font-size: 17px; } body.flat .c2.h .su { font-size: 13px; }
 body.flat .c2.h.hint { outline: 2px solid #2f9a5e; }
 /* 底牌展示 panel in flat mode */
 body.flat .b2-reveal {
@@ -53,8 +54,10 @@ body.flat .b2-reveal-row { display: flex; gap: 8px; }
 body.flat .b2-reveal .c2 { position: relative; }
 body.flat .b2-reveal .c2.big { width: 58px; height: 81px; }
 body.flat .b2-reveal .c2.big .rk { font-size: 24px; } body.flat .b2-reveal .c2.big .su { font-size: 18px; }
-/* the play buttons sit a bit lower in flat mode (smaller cards) */
-body.flat #actions.play-bar, body.flat #actions.bid-bar { bottom: 18%; }
+/* flat landscape is short (~390px): the action bar sits just above the hand row, with smaller buttons */
+body.flat #actions.play-bar, body.flat #actions.bid-bar { bottom: 86px; gap: 9px; }
+body.flat .act-btn { font-size: 0.92rem; padding: 8px 18px; border-radius: 11px; }
+body.flat .bid-btn { min-width: 50px; }
 
 /* top bar — solid header, matches the mahjong games */
 #nav {
@@ -83,6 +86,12 @@ body.flat #actions.play-bar, body.flat #actions.bid-bar { bottom: 18%; }
 #scores .sb-pt { font-weight: 800; }
 #scores .sb-pt.s-pos { color: #7ddf8a; }
 #scores .sb-pt.s-neg { color: #ff7a7a; }
+/* flat landscape: a compact horizontal bar at top-CENTRE (the corners hold the opponent nameplates) */
+body.flat #scores {
+  top: 36px; right: auto; left: 50%; transform: translateX(-50%);
+  flex-direction: row; gap: 16px; padding: 4px 14px; font-size: 0.8rem; min-width: 0;
+}
+body.flat #scores .sb-row { gap: 6px; }
 
 /* per-seat HTML overlays (count, role, bid bubble), positioned by main.js via worldToScreen */
 .seat-tag {
