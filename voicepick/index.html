@@ -3,43 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>选声音 · Qwen3-TTS 中文音色</title>
+<title>选声音 · Qwen3-TTS</title>
 <style>
   body { margin: 0; padding: 18px 16px 40px; background: #0d1b14; color: #eaf6f0;
     font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
-  h1 { font-size: 1.25rem; margin: 0 0 4px; }
-  p.sub { color: #9fd3bf; margin: 0 0 18px; font-size: 0.9rem; line-height: 1.5; }
-  .v { border-bottom: 1px solid #163528; padding: 12px 0; }
-  .v h2 { font-size: 1.02rem; margin: 0 0 3px; color: #e8c466; }
-  .v .desc { color: #9fd3bf; font-size: 0.82rem; margin-bottom: 7px; }
-  .v .tag { display: inline-block; font-size: 0.72rem; color: #0d1b14; background: #e8c466; border-radius: 5px; padding: 1px 6px; margin-left: 6px; }
-  .clip { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
-  .clip span { width: 4.5em; color: #bfe6d8; font-size: 0.82rem; }
-  audio { flex: 1; height: 34px; }
-  code { background: #12342a; padding: 1px 6px; border-radius: 5px; color: #e8c466; }
+  h1 { font-size: 1.22rem; margin: 0 0 4px; }
+  p.sub { color: #9fd3bf; margin: 0 0 14px; font-size: 0.9rem; line-height: 1.5; }
+  h2 { font-size: 1rem; color: #e8c466; border-bottom: 1px solid #2c8160; padding-bottom: 6px; margin: 22px 0 8px; }
+  .v { border-bottom: 1px solid #163528; padding: 9px 0; }
+  .v b { font-size: 0.98rem; } .v .d { color: #9fd3bf; font-size: 0.8rem; margin: 2px 0 5px; }
+  .clip { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
+  .clip span { width: 4.2em; color: #bfe6d8; font-size: 0.8rem; }
+  audio { flex: 1; height: 32px; }
+  .ok { color: #7ddf8a; }
 </style>
 </head>
 <body>
-  <h1>选声音 — Qwen3-TTS 中文音色（普通话最强项）</h1>
-  <p class="sub">每个音色两条：<b>整句</b>“三万，九条。碰！自摸，胡啦！” + <b>短词</b>“对儿三”（确认没有 Kokoro 那种拖尾）。<br>
-     我的建议分配见下面的 <span class="tag">建议</span> 标签。确认或改动后告诉我即可，我再批量生成全部 287 条。</p>
-  <div id="list"></div>
+  <h1>选声音 — 只剩女声要定</h1>
+  <p class="sub">男声已定 <span class="ok">✓</span>：东/年轻男 = <b>Dylan</b>，西/成熟男 = <b>Uncle_Fu</b>（仅供回听）。<br>
+     女声用 Qwen3-TTS <b>VoiceDesign</b>（按描述生成，不是之前那俩怪声）。每条有整句 + <b>对儿三</b> + <b>对三</b>（对比“对儿…三”是否还断）。<br>
+     告诉我：年轻女选哪个、成熟女选哪个，以及“对儿三”还是“对三”更顺。</p>
+
+  <h2>男声（已定，回听）</h2>
+  <div class="v"><b>Dylan</b> — 东 / 年轻男<div class="clip"><span>整句</span><audio controls preload="none" src="./Dylan_line.wav"></audio></div></div>
+  <div class="v"><b>Uncle_Fu</b> — 西 / 成熟男<div class="clip"><span>整句</span><audio controls preload="none" src="./Uncle_Fu_line.wav"></audio></div></div>
+
+  <h2>年轻女（南 / 斗地主下家）— 选一个</h2>
+  <div id="young"></div>
+  <h2>成熟女（北）— 选一个</h2>
+  <div id="mature"></div>
 <script>
-  const V = [
-    ['Dylan',    '年轻男声（北京腔，清亮自然）', '东 / 年轻男 · 斗地主：你'],
-    ['Vivian',   '年轻女声（明亮、略带个性）',   '南 / 年轻女 · 斗地主：下家'],
-    ['Uncle_Fu', '成熟男声（低沉醇厚）',         '西 / 成熟男 · 斗地主：上家'],
-    ['Serena',   '温暖柔和女声',                 '北 / 成熟女（无更年长女声，用它）'],
-    ['Eric',     '成都腔男声（略沙哑）',         '备选（四川口音，非标准普通话）'],
-  ];
-  const host = document.getElementById('list');
-  V.forEach(([v, desc, role]) => {
-    const d = document.createElement('div'); d.className = 'v';
-    d.innerHTML = `<h2>${v}<span class="tag">建议：${role}</span></h2><div class="desc">${desc}</div>`
-      + `<div class="clip"><span>整句</span><audio controls preload="none" src="./${v}_line.wav"></audio></div>`
-      + `<div class="clip"><span>对儿三</span><audio controls preload="none" src="./${v}_dui.wav"></audio></div>`;
-    host.appendChild(d);
+  const rows = (host, list) => list.forEach(([id, d]) => {
+    const el = document.createElement('div'); el.className = 'v';
+    el.innerHTML = `<b>${id}</b><div class="d">${d}</div>`
+      + `<div class="clip"><span>整句</span><audio controls preload="none" src="./${id}_line.wav"></audio></div>`
+      + `<div class="clip"><span>对儿三</span><audio controls preload="none" src="./${id}_dui.wav"></audio></div>`
+      + `<div class="clip"><span>对三</span><audio controls preload="none" src="./${id}_dui2.wav"></audio></div>`;
+    document.getElementById(host).appendChild(el);
   });
+  rows('young', [['fy1', '年轻、明亮活泼、清晰普通话'], ['fy2', '年轻、甜美温柔、自然普通话']]);
+  rows('mature', [['fm1', '约45岁、温暖成熟、沉稳'], ['fm2', '中年、优雅从容']]);
 </script>
 </body>
 </html>
