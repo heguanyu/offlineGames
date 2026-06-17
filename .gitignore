@@ -12,7 +12,18 @@ package-lock.json
 test/cl/
 test/*.log
 test/_*.mjs
+test/*.mp3
 test/_commitmsg.txt
+
+# local AI/TTS model weights — used at BUILD time only (e.g. on-GPU voice generation).
+# Never commit or deploy them; only the generated clips (games/**/voice/*.mp3) are bundled.
+tools/models/
+*.onnx
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
 
 # online server runtime data (lifetime scores + the SQLite database)
 server/scores.json
