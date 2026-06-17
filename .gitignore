@@ -15,9 +15,9 @@ test/_*.mjs
 test/*.mp3
 test/_commitmsg.txt
 
-# local AI/TTS model weights — used at BUILD time only (e.g. on-GPU voice generation).
-# Never commit or deploy them; only the generated clips (games/**/voice/*.mp3) are bundled.
-tools/models/
+# Voice/TTS generation tooling + model weights now live in the SIBLING project
+# E:\projects\voiceAIGeneration (see its CLAUDE.md). Only the generated clips
+# (games/**/voice/*.wav) are bundled here. These weight patterns are kept just in case.
 *.onnx
 *.safetensors
 *.ckpt
@@ -31,7 +31,3 @@ server/data/
 server/*.db
 server/*.db-journal
 server/*.legacy.bak
-
-# voice generation (run locally / on a GPU box)
-tools/__pycache__/
-tools/refs/
