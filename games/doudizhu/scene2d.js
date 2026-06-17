@@ -44,14 +44,15 @@ export class DouScene2D {
   // The deal has no flight animation in 2D — just render the hand and resolve after a beat.
   beginDeal({ fast } = {}) { return new Promise((r) => setTimeout(r, fast ? 80 : 250)); }
 
-  // Anchor where main.js places a seat's nameplate / crown / bubble. Client coords.
+  // Anchor where main.js places a seat's nameplate / crown / bubble. MOUNT-LOCAL coords (not visual)
+  // so the overlays sit right even when the whole page is CSS-rotated to force landscape.
   seatScreen(seat) {
-    const r = this.mount.getBoundingClientRect();
-    if (seat === 1) return { x: r.left + r.width * 0.82, y: r.top + 62 };   // 下家 top-right (below the nav)
-    if (seat === 2) return { x: r.left + r.width * 0.18, y: r.top + 62 };   // 上家 top-left
-    return { x: r.left + r.width * 0.5, y: r.bottom - 24 };                 // 玩家 bottom (mostly unused)
+    const W = this.mount.clientWidth, H = this.mount.clientHeight;
+    if (seat === 1) return { x: W * 0.82, y: 62 };   // 下家 top-right (below the nav)
+    if (seat === 2) return { x: W * 0.18, y: 62 };   // 上家 top-left
+    return { x: W * 0.5, y: H - 24 };                // 玩家 bottom (mostly unused)
   }
-  worldToScreen() { const r = this.mount.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+  worldToScreen() { return { x: this.mount.clientWidth / 2, y: this.mount.clientHeight / 2 }; }
 
   pick(clientX, clientY) {
     for (let i = this.handRects.length - 1; i >= 0; i--) { // topmost (right-most) card wins

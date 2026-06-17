@@ -47,8 +47,32 @@ const state = {
 };
 
 // ---- boot ------------------------------------------------------------------
+// On a phone held PORTRAIT, CSS-rotate <body> 90° so the game fills the screen as landscape (iOS
+// Safari has no orientation-lock). Only ever rotated one way; calls apply(isPortrait) on each change.
+function forceLandscape(apply) {
+  const b = document.body;
+  const update = () => {
+    const portrait = window.innerHeight > window.innerWidth;
+    if (portrait) {
+      const w = window.innerWidth, h = window.innerHeight;
+      Object.assign(b.style, { position: 'fixed', top: '0', left: '0', overflow: 'hidden', width: h + 'px', height: w + 'px', transformOrigin: '0 0', transform: `translateX(${w}px) rotate(90deg)` });
+    } else {
+      for (const k of ['position', 'top', 'left', 'overflow', 'width', 'height', 'transformOrigin', 'transform']) b.style[k] = '';
+    }
+    apply(portrait);
+  };
+  addEventListener('resize', update);
+  addEventListener('orientationchange', () => setTimeout(update, 50));
+  const resume = () => { update(); setTimeout(update, 150); setTimeout(update, 450); };
+  addEventListener('pageshow', resume); addEventListener('focus', resume);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) resume(); });
+  update();
+}
+
 function boot() {
   state.scene = new (FLAT ? DouScene2D : DouScene)($('scene'));
+  // mobile (flat) mode is always landscape — rotate the page when the phone is held portrait
+  if (FLAT) forceLandscape((portrait) => { state.scene.setRotated(portrait); state.scene.resize(); if (state.backend) render(); });
   state.level = LS.level;
   setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊';
 
