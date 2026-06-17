@@ -257,8 +257,7 @@ export class MahjongScene {
     const rim = new THREE.Mesh(new THREE.BoxGeometry(FELT + 2.4, 0.7, FELT + 2.4),
       new THREE.MeshStandardMaterial({ color: 0x6e4626, roughness: 0.72 }));
     rim.position.y = -0.45; rim.receiveShadow = true; this.scene.add(rim);
-    const felt = new THREE.Mesh(new THREE.BoxGeometry(FELT, 0.5, FELT),
-      new THREE.MeshStandardMaterial({ map: this._feltTexture(), color: 0x178a63, roughness: 0.96 }));
+    const felt = new THREE.Mesh(new THREE.BoxGeometry(FELT, 0.5, FELT), this._feltMaterial());
     felt.position.y = -0.26; felt.receiveShadow = true; this.scene.add(felt);
     this._turnRing();
     this._turnTimer();
@@ -319,12 +318,24 @@ export class MahjongScene {
     this._turnRingActive = p;
     if (this.turnRing) this.turnRing.visible = p >= 0;
   }
-  _feltTexture() {
-    const c = document.createElement('canvas'); c.width = c.height = 256;
-    const x = c.getContext('2d'); x.fillStyle = '#157a57'; x.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 9000; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * 0.03})`; x.fillRect(Math.random() * 256, Math.random() * 256, 1, 1); }
-    x.strokeStyle = 'rgba(255,255,255,0.06)'; x.lineWidth = 3; x.beginPath(); x.arc(128, 128, 78, 0, 7); x.stroke();
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  // Real green-baize felt: a CC0 wool-felt photo (ambientCG Fabric034, 512px) as color + normal +
+  // roughness maps, tiled and tinted green — so the directional key light catches the cloth weave
+  // instead of a flat fill. ~155 KB, bundled (offline). Replaces the old procedural canvas felt.
+  _feltMaterial() {
+    const loader = new THREE.TextureLoader();
+    const tex = (file, srgb) => {
+      const t = loader.load(new URL(`./textures/${file}`, import.meta.url).href);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(7, 7); t.anisotropy = 8;
+      t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+      return t;
+    };
+    return new THREE.MeshStandardMaterial({
+      map: tex('felt_color.jpg', true),
+      normalMap: tex('felt_normal.jpg', false),
+      roughnessMap: tex('felt_rough.jpg', false),
+      color: 0x2f9e68, roughness: 1.0, metalness: 0.0,        // green tint over the grey felt photo
+      normalScale: new THREE.Vector2(0.55, 0.55),
+    });
   }
 
   _material(kind, wild, emissive) {
