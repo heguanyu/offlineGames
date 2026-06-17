@@ -64,7 +64,7 @@ _RANKS = {"r3": "三", "r4": "四", "r5": "五", "r6": "六", "r7": "七", "r8":
 VOCAB_DOUDIZHU = {
     **_RANKS,
     "sa": "仨",                                                   # plain trio: 仨 + rN
-    **{f"dui{lbl}": f"对儿{txt}" for lbl, txt in                  # PRESET pairs (was 对 + rN)
+    **{f"dui{lbl}": f"俩{txt}" for lbl, txt in                    # PRESET pairs — 俩X (对儿X was unstable in TTS)
        zip(["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"], _RANKS.values())},
     "tri1": "三带一",                                             # was 仨A带B
     "tri2": "三带二",                                             # was 仨A带俩B

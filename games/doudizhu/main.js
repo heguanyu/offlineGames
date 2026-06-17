@@ -191,13 +191,13 @@ function rankSpeak(r) {
   return { 3: '三', 4: '四', 5: '五', 6: '六', 7: '七', 8: '八', 9: '九', 10: '十', 11: '勾', 12: '圈', 13: 'K', 14: '尖', 15: '二', 16: '小王', 17: '大王' }[r] || '';
 }
 // Build the spoken token sequence for a played combo. Most are now single preset clips (no combining):
-//   single→[N] · pair→[对儿N] · trio→[仨,N] · 3+1→[三带一] · 3+2→[三带二]
+//   single→[N] · pair→[俩N] · trio→[仨,N] · 3+1→[三带一] · 3+2→[三带二]
 //   顺/连对→[串] · 飞机→[飞机] · 四带二→[四带二] · 炸弹→[炸弹] · 王炸→[王炸]
 function speakMove(d) {
   const R = rankSpeak;
   switch (d.type) {
     case COMBO.SINGLE: return [R(d.rank)];
-    case COMBO.PAIR: return ['对儿' + R(d.rank)];
+    case COMBO.PAIR: return ['俩' + R(d.rank)];
     case COMBO.TRIO: return ['仨', R(d.rank)];
     case COMBO.TRIO_SINGLE: return ['三带一'];
     case COMBO.TRIO_PAIR: return ['三带二'];
