@@ -2,6 +2,29 @@
 // offline with zero extra assets and no licensing. The tile "clack" is a short
 // band-passed noise burst (sounds like a tile hitting the table); calls and the
 // win jingle are simple tone blips layered on a clack.
+//
+// VOICE uses pre-rendered Kokoro clips (tools/gen-voice-kokoro.py), bundled per persona = WIND
+// 0..3 (东南西北): 东 young man, 南 young woman, 西 mature man, 北 mature woman. Tiles + 碰/吃/明杠/
+// 暗杠/金杠 + 胡啦(天津)/点炮·自摸(国标). Missing/unloaded clips fall back to SpeechSynthesis.
+const CLIP_BASE = new URL('./voice/', import.meta.url).href;
+function tileSlug(id) {
+  if (id < 9) return 'm' + (id + 1);
+  if (id < 18) return 'p' + (id - 8);
+  if (id < 27) return 's' + (id - 17);
+  if (id < 31) return 'w' + (id - 27);
+  return 'd' + (id - 31);
+}
+const _N = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+const CLIP_TEXT = { // slug -> Chinese, for the TTS fallback
+  ..._N.reduce((o, c, i) => (o['m' + (i + 1)] = c + '万', o), {}),
+  ..._N.reduce((o, c, i) => (o['p' + (i + 1)] = c + '筒', o), {}),
+  ..._N.reduce((o, c, i) => (o['s' + (i + 1)] = c + '条', o), {}),
+  w0: '东', w1: '南', w2: '西', w3: '北', d0: '中', d1: '發', d2: '白',
+  pung: '碰', chi: '吃', mingkong: '明杠', ankong: '暗杠', jinkong: '金杠',
+  hula: '胡啦', dianpao: '点炮', zimo: '自摸',
+};
+const CLIP_SLUGS = Object.keys(CLIP_TEXT);
+
 export class Sound {
   constructor() {
     this.ctx = null;
@@ -18,12 +41,15 @@ export class Sound {
     // pitch/rate carry the differentiation otherwise. Indexed by seat 0..3.
     // Pitches are pushed toward the 0..2 extremes so the three bots are clearly
     // distinct even when the device has only one zh voice.
+    // Indexed by WIND 0..3 (东南西北) — matches the Kokoro clip personas; only used as the TTS fallback.
     this.voiceProfiles = [
-      { pitch: 1.0, rate: 1.0, gender: 'any' },      // 0 玩家 — neutral
-      { pitch: 1.9, rate: 1.12, gender: 'female' },  // 1 下家 — young lady (very high, brisk)
-      { pitch: 1.25, rate: 1.0, gender: 'male' },    // 2 对家 — young man (clearly above neutral)
-      { pitch: 0.5, rate: 0.85, gender: 'male' },    // 3 上家 — mid-age man (deep, slow)
+      { pitch: 1.15, rate: 1.05, gender: 'male' },   // 0 东 — young man
+      { pitch: 1.7, rate: 1.1, gender: 'female' },   // 1 南 — young woman
+      { pitch: 0.7, rate: 0.92, gender: 'male' },    // 2 西 — mature man
+      { pitch: 1.0, rate: 0.98, gender: 'female' },  // 3 北 — mature woman
     ];
+    this._clip = [{}, {}, {}, {}];   // _clip[wind][slug] = AudioBuffer
+    this._clipLoaded = false; this._clipLoading = false;
     this._zhVoices = [];
     const synth = window.speechSynthesis;
     if (synth) {
@@ -69,6 +95,32 @@ export class Sound {
     try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch {}
   }
 
+  // ---- Kokoro voice clips (preferred over TTS) ----
+  // Fetch + decode every persona's clips once (after a gesture-driven resume()).
+  async preloadClips() {
+    if (this._clipLoaded || this._clipLoading || !this.ctx) return;
+    this._clipLoading = true;
+    const ctx = this.ctx;
+    const dec = (ab) => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.then) p.then(res, rej); });
+    const jobs = [];
+    for (let v = 0; v < 4; v++) for (const slug of CLIP_SLUGS) {
+      jobs.push(fetch(`${CLIP_BASE}${v}/${slug}.wav`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject())).then(dec)
+        .then((buf) => { this._clip[v][slug] = buf; }).catch(() => {}));
+    }
+    await Promise.all(jobs);
+    this._clipLoaded = true; this._clipLoading = false;
+  }
+  // Play clip `slug` in voice `vi` (0..3 = 东南西北 persona); fall back to TTS if the clip isn't ready.
+  _playClip(slug, vi = 0) {
+    if (this.muted) return;
+    const ctx = this.resume();
+    const buf = ctx && this._clip[vi] && this._clip[vi][slug];
+    if (buf) { try { const s = ctx.createBufferSource(); s.buffer = buf; s.connect(ctx.destination); s.start(); } catch {} }
+    else this.say(CLIP_TEXT[slug] || slug, vi);
+  }
+  sayTile(id, vi = 0) { this._playClip(tileSlug(id), vi); }   // speak a discarded tile by id
+  call(slug, vi = 0) { this._playClip(slug, vi); }            // 碰/吃/明杠/暗杠/金杠/胡啦/点炮/自摸
+
   // Lazily create / resume the context — must be kicked off from a user gesture
   // (e.g. the 开始牌局 button) to satisfy browser autoplay policies.
   resume() {
@@ -83,6 +135,7 @@ export class Sound {
       this._spoke = true;
       try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } catch {}
     }
+    if (!this.muted) this.preloadClips();   // warm the Kokoro voice clips
     return this.ctx;
   }
   setMuted(m) {

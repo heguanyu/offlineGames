@@ -307,6 +307,11 @@ function mkChowBtn(opt, claimed) {
 }
 function isClaimPhase() { return game.phase === PHASE.AWAIT_CLAIM && game.currentClaim() && game.currentClaim().player === HUMAN; }
 
+// Which 杠: 暗杠 (concealed) else 明杠 — read off the seat's latest kong meld (国标 has no 金杠).
+function kongSlug(seat) {
+  const km = (game.melds[seat] || []).filter((m) => m.type === 'kong').pop();
+  return km && km.concealed ? 'ankong' : 'mingkong';
+}
 function flushLog() {
   for (let i = lastLogLen; i < game.log.length; i++) {
     const line = game.log[i];
@@ -314,11 +319,15 @@ function flushLog() {
     // the call is spoken in that seat's voice.
     const tok = line.split(' ')[0];
     let seat = 0; for (let p = 0; p < 4; p++) if (WIND[game.seatWind(p)] === tok) { seat = p; break; }
-    if (/自摸|和牌/.test(line)) { toast(line, true); (game.result && game.result.winner === HUMAN ? sound.win() : sound.lose()); }
+    const w = game.seatWind(seat);   // voice persona = the seat's wind (0..3 东南西北)
+    if (/自摸|和牌/.test(line)) {
+      toast(line, true); (game.result && game.result.winner === HUMAN ? sound.win() : sound.lose());
+      if (game.result) sound.call(game.result.byDiscard ? 'dianpao' : 'zimo', game.seatWind(game.result.winner));
+    }
     else if (/荒牌/.test(line)) { toast(line, true); sound.drawGame(); }
-    else if (/杠/.test(line)) { toast(line, false); sound.kong(); sound.voice('kong', seat); }
-    else if (/碰/.test(line)) { toast(line, false); sound.pung(); sound.voice('pung', seat); }
-    else if (/吃/.test(line)) { toast(line, false); sound.select(); sound.voice('chow', seat); }
+    else if (/杠/.test(line)) { toast(line, false); sound.kong(); sound.call(kongSlug(seat), w); }
+    else if (/碰/.test(line)) { toast(line, false); sound.pung(); sound.call('pung', w); }
+    else if (/吃/.test(line)) { toast(line, false); sound.select(); sound.call('chi', w); }
   }
   lastLogLen = game.log.length;
 }
@@ -361,14 +370,14 @@ async function onBackendEvent(ev) {
       // The manually-declared 听 discard (报听) is a normal hand discard, so it animates below.
       if (human && tsumogiriPending) {
         tsumogiriPending = false;
-        if (!fastMode) sound.say(tileName(ev.tile), HUMAN);
+        if (!fastMode) sound.sayTile(ev.tile, game.seatWind(HUMAN));
         tingRevealIdx = ev.discardIndex; render(); tingRevealIdx = -1;
         return;
       }
       if (human) selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
-      else if (!fastMode) sound.say(tileName(ev.tile), ev.player); // bot speaks its discard
+      else if (!fastMode) sound.sayTile(ev.tile, game.seatWind(ev.player)); // bot speaks its discard
       if (scene && !FAST && !fastMode) { // fly to the center halt, hold, drop into the pool
-        if (human) sound.say(tileName(ev.tile), HUMAN);
+        if (human) sound.sayTile(ev.tile, game.seatWind(HUMAN));
         animating = true;
         try {
           scene.beginDiscardDemo(ev.player, ev.discardIndex, DISCARD_DEMO_MS);

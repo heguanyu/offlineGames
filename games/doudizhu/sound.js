@@ -45,7 +45,10 @@ const VOICE_BASE = new URL('./voice/', import.meta.url).href;
 const SLUG = {
   '三': 'r3', '四': 'r4', '五': 'r5', '六': 'r6', '七': 'r7', '八': 'r8', '九': 'r9', '十': 'r10',
   '勾': 'rJ', '圈': 'rQ', 'K': 'rK', '尖': 'rA', '二': 'r2', '小王': 'jokerS', '大王': 'jokerB',
-  '对': 'dui', '仨': 'sa', '带': 'dai', '俩': 'lia',
+  '仨': 'sa',                                                    // plain trio still says 仨 + rank
+  '对儿三': 'dui3', '对儿四': 'dui4', '对儿五': 'dui5', '对儿六': 'dui6', '对儿七': 'dui7', '对儿八': 'dui8',
+  '对儿九': 'dui9', '对儿十': 'dui10', '对儿勾': 'duiJ', '对儿圈': 'duiQ', '对儿K': 'duiK', '对儿尖': 'duiA', '对儿二': 'dui2',
+  '三带一': 'tri1', '三带二': 'tri2',
   '串': 'chuan', '飞机': 'plane', '炸弹': 'bomb', '王炸': 'rocket', '四带二': 'four2',
   '1分': 'bid1', '2分': 'bid2', '3分': 'bid3', '过': 'guo', '我是地主': 'landlord',
 };

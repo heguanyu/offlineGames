@@ -348,6 +348,13 @@ function syncTurnTimer(ev) {
 // ---------------------------------------------------------------------------
 // Toasts for 碰 / 杠 / 自摸 / 荒
 // ---------------------------------------------------------------------------
+// Which 杠: 金杠 (a kong of 混儿), 暗杠 (concealed), else 明杠 — read off the seat's latest kong meld.
+function kongSlug(seat) {
+  const km = (game.melds[seat] || []).filter((m) => m.type === 'kong').pop();
+  if (!km) return 'mingkong';
+  if (game.isWild && game.isWild(km.kind)) return 'jinkong';
+  return km.concealed ? 'ankong' : 'mingkong';
+}
 function flushLogToasts() {
   if (!game || !game.log) return; // online views carry no engine log (toasts ride events instead)
   for (let i = lastLogLen; i < game.log.length; i++) {
@@ -356,10 +363,11 @@ function flushLogToasts() {
     // seat index so the call is spoken in that seat's voice.
     const tok = line.split(' ')[0];
     let seat = 0; for (let p = 0; p < 4; p++) if (WIND[game.seatWind(p)] === tok) { seat = p; break; }
-    if (/自摸/.test(line)) { toast(line, true); (game.result && game.result.winner === HUMAN ? sound.win() : sound.lose()); }
+    const w = game.seatWind(seat);   // voice persona = the seat's wind (0..3 东南西北)
+    if (/自摸/.test(line)) { toast(line, true); (game.result && game.result.winner === HUMAN ? sound.win() : sound.lose()); sound.call('hula', w); }
     else if (/荒牌/.test(line)) { toast(line, true); sound.drawGame(); }
-    else if (/杠/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.kong(); sound.voice('kong', seat); }
-    else if (/碰/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.pung(); sound.voice('pung', seat); }
+    else if (/杠/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.kong(); sound.call(kongSlug(seat), w); }
+    else if (/碰/.test(line)) { toast(line.split(' ').slice(1).join(' ')); sound.pung(); sound.call('pung', w); }
   }
   lastLogLen = game.log.length;
 }
@@ -426,9 +434,9 @@ async function onBackendEvent(ev) {
       const human = ev.player === HUMAN;
       sound.discard();
       if (human) selIndex = Math.min(selIndex, selectableHandIndices().length - 1);
-      else if (!fastMode) sound.say(tileName(ev.tile), ev.player); // bot speaks its discard
+      else if (!fastMode) sound.sayTile(ev.tile, game.seatWind(ev.player)); // bot speaks its discard
       if (scene && !FAST && !fastMode) { // fly to the center halt, hold, drop into the pool
-        if (human) sound.say(tileName(ev.tile), HUMAN);
+        if (human) sound.sayTile(ev.tile, game.seatWind(HUMAN));
         animating = true;
         try {
           scene.beginDiscardDemo(ev.player, ev.discardIndex, DISCARD_DEMO_MS);
