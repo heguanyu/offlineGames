@@ -197,7 +197,15 @@ export class MahjongScene {
     this.ivory = new THREE.MeshStandardMaterial({
       color: 0xc6c0b1, roughness: 0.92, metalness: 0.0, transparent: true, opacity: 0.8,
     });
-    this.green = new THREE.MeshStandardMaterial({ color: 0x1c855f, roughness: 0.5, metalness: 0.03 });
+    // tile BACK: a CC0 onyx photo (ambientCG Onyx015, 256px) tinted jade-green + low roughness, so
+    // the back reads as polished jade resin (a glossy highlight from the key light) not flat paint.
+    this.green = (() => {
+      const loader = new THREE.TextureLoader();
+      const url = (f) => new URL(`./textures/${f}`, import.meta.url).href;
+      const map = loader.load(url('back_color.jpg')); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
+      const nrm = loader.load(url('back_normal.jpg'));
+      return new THREE.MeshStandardMaterial({ map, normalMap: nrm, color: 0x33a374, roughness: 0.34, metalness: 0.06, normalScale: new THREE.Vector2(0.25, 0.25) });
+    })();
     this.faceMat = new Map();   // faceKey -> material
     this.faceRecords = [];      // { canvas, tex, kind, wild } for async redraw on load
     onDesignLoad = (k) => this._redrawKind(k);
@@ -342,17 +350,18 @@ export class MahjongScene {
   _feltColorTexture() {
     const N = 1024, c = document.createElement('canvas'); c.width = c.height = N;
     const x = c.getContext('2d');
-    x.fillStyle = '#1b6f4b'; x.fillRect(0, 0, N, N);
+    x.fillStyle = '#247c57'; x.fillRect(0, 0, N, N);          // lifted base (was too dark)
     for (let i = 0; i < 60; i++) {
       const cx = Math.random() * N, cy = Math.random() * N, r = 140 + Math.random() * 320;
       const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
-      g.addColorStop(0, Math.random() < 0.5 ? 'rgba(74,170,124,0.10)' : 'rgba(0,46,28,0.12)');
+      // gentler, less-black variation: light blotch or a soft dark-GREEN (not near-black) blotch
+      g.addColorStop(0, Math.random() < 0.5 ? 'rgba(90,180,135,0.09)' : 'rgba(18,72,50,0.07)');
       g.addColorStop(1, 'rgba(0,0,0,0)');
       x.fillStyle = g; x.fillRect(0, 0, N, N);
     }
     const im = x.getImageData(0, 0, N, N), d = im.data;
     for (let i = 0; i < d.length; i += 4) {
-      const n = (Math.random() + Math.random() + Math.random() - 1.5) * 22;
+      const n = (Math.random() + Math.random() + Math.random() - 1.5) * 13;   // softer grain (was 22 — no near-black speckles)
       d[i] += n; d[i + 1] += n; d[i + 2] += n;
     }
     x.putImageData(im, 0, 0);
@@ -371,7 +380,7 @@ export class MahjongScene {
       map: tex('wood_color.jpg', true),
       normalMap: tex('wood_normal.jpg', false),
       roughnessMap: tex('wood_rough.jpg', false),
-      color: 0xa9794a, roughness: 0.8, metalness: 0.0,
+      color: 0xcaa67a, roughness: 0.8, metalness: 0.0,        // light walnut tint
       normalScale: new THREE.Vector2(0.6, 0.6),
     });
   }

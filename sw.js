@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.5.15';
+const CACHE = 'offline-games-0.5.16';
 
 const ASSETS = [
   './',
@@ -36,6 +36,8 @@ const ASSETS = [
   './games/mahjong-tianjin/textures/wood_color.jpg',
   './games/mahjong-tianjin/textures/wood_normal.jpg',
   './games/mahjong-tianjin/textures/wood_rough.jpg',
+  './games/mahjong-tianjin/textures/back_color.jpg',
+  './games/mahjong-tianjin/textures/back_normal.jpg',
   './games/mahjong-tianjin/sounds/pung.wav',
   './games/mahjong-tianjin/sounds/chow.wav',
   './games/mahjong-tianjin/sounds/kong.wav',
