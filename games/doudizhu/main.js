@@ -318,6 +318,12 @@ function showPlayBar() {
 // pre-pick a combo for them.
 function autoSelect(g) {
   state.userTouched = false; resetHint();
+  const hand = g.hands[HUMAN] || [];
+  // QoL: if the whole remaining hand is itself a legal play right now (valid pattern that also
+  // beats the lead, or any pattern on a free lead), that single play empties the hand and wins —
+  // so auto-select every card. Takes priority over the normal follow-pick, and applies even when
+  // leading. validatePlay already enforces turn/phase/beat rules.
+  if (hand.length && g.validatePlay(HUMAN, hand.map((c) => c.id))) { state.sel.set(hand.map((c) => c.id)); return; }
   if (g.leadSeat === HUMAN) { state.sel.clear(); return; }   // freeplay → no smart-select
   const mv = chooseMove(g, HUMAN, 1, Math.random);
   if (mv.pass || !mv.cardIds.length) state.sel.clear(); else state.sel.set(mv.cardIds);
