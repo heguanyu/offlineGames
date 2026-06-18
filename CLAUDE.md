@@ -2,7 +2,9 @@
 
 PWA hub of offline games for airplane-mode iPad play, plus an online 麻将 mode. The same
 Node process (`server/index.js`) serves BOTH the static site AND the WebSocket lobby/game
-backend; GitHub Pages (`deploy.yml`) is a static-only mirror.
+backend; GitHub Pages (`deploy.yml`) is a static-only mirror. Pages is built in **"GitHub
+Actions" mode** (not legacy branch-serving), so `deploy.yml` — including its `tools/pack-voice.js`
+step — is what actually gets published; serving the raw branch would 404 on CI-generated files.
 
 ## Online server endpoint — single source of truth
 The WebSocket backend host is defined in ONE place: `games/mahjong-common-online/server-url.js`
@@ -14,6 +16,21 @@ allowlist is `ALLOWED` in `server/index.js` (env `ALLOWED_ORIGINS`) — update i
 
 Current backend: `offlinegames.azurewebsites.net` (Azure App Service, West Central US). Deploy
 workflow: `.github/workflows/main_offlinegames.yml`.
+
+## Navigation — ALWAYS `location.replace`, never push a history entry
+The hub, lobby, and each game/tool are separate pages. On iPad/iOS the edge-swipe just walks
+the browser history, so any pushed entry becomes an accidental "go back/forward" mid-game. The
+rule, repo-wide:
+- **Every page loads `app-nav.js`** (`<script src="…/app-nav.js"></script>` in `<head>`, path
+  relative to the page). It intercepts same-origin `<a>` clicks and converts them to
+  `location.replace` (leaving `#` anchors, `target="_blank"`, downloads, and external/`tel:` links
+  alone). A new page → add the script tag, or its links push history.
+- **Never assign `location.href = …` / `window.location = …` / `location.assign(…)`** for
+  in-app jumps. Use `location.replace(url)`. On-screen back buttons use
+  `onclick="event.preventDefault(); location.replace('../')"` (see `voicepick`, `tourguide`) so
+  they work even before `app-nav.js` runs.
+There should be **zero** `location.href=`/`window.location=` assignments in the repo (grep before
+adding one). `app-nav.js` itself is the only allowed place that calls `location.replace` on clicks.
 
 ## Before every push
 Bump the `CACHE` patch version in `sw.js` (it busts the offline asset cache). When adding a new
