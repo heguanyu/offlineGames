@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0a6e6e">
-<title>Tahoe 行程单 · 6/21–6/22</title>
+<title>Tahoe 行程单 · 06/21–06/22</title>
 <style>
   :root{
     --bg:#f3f6f7; --card:#ffffff; --ink:#102a2a; --sub:#5d7373;
@@ -29,8 +29,9 @@
   header.top .meta{margin-top:10px; font-size:12.5px; opacity:.9; display:flex; gap:14px; justify-content:center; flex-wrap:wrap;}
   header.top .meta span{background:rgba(255,255,255,.16); padding:3px 10px; border-radius:20px;}
 
+  #topbar{position:fixed; top:0; left:0; right:0; z-index:25;}
   nav.tabs{
-    position:sticky; top:0; z-index:20; display:flex; background:#fff;
+    display:flex; background:#fff;
     border-bottom:1px solid var(--line); box-shadow:0 1px 6px rgba(16,42,42,.05);
   }
   nav.tabs a{
@@ -39,7 +40,7 @@
   }
   nav.tabs a.active{color:var(--teal); box-shadow:inset 0 -3px 0 var(--teal);}
 
-  main{max-width:680px; margin:0 auto; padding:16px 14px 60px;}
+  main{max-width:680px; margin:0 auto; padding:16px 14px 60px; padding-top:calc(var(--topbar, 120px) + 14px);}
   .daytitle{
     display:flex; align-items:baseline; gap:10px; margin:18px 2px 6px;
   }
@@ -72,6 +73,49 @@
   .card ul{margin:9px 0 0; padding-left:18px; font-size:13.5px;}
   .card ul li{margin:3px 0;}
   .card .hot{color:var(--warn); font-weight:600;}
+  /* per-step 已完成 toggle + completed state */
+  .cardchk{
+    display:flex; align-items:center; justify-content:flex-end; gap:8px;
+    margin-top:11px; padding-top:9px; border-top:1px dashed var(--line);
+    font-size:13px; font-weight:600; color:var(--sub); cursor:pointer;
+    -webkit-user-select:none; user-select:none;
+  }
+  .cardchk input{width:20px; height:20px; accent-color:var(--good); flex:none;}
+  .card.done-step{opacity:.6;}
+  .card.done-step h3{text-decoration:line-through; text-decoration-color:var(--good);}
+
+  /* location-aware weather as a vertical dial side-rail */
+  .wxrail{position:fixed; left:6px; top:var(--topbar, 120px); bottom:0;
+    width:64px; z-index:15; overflow:hidden;
+    background:rgba(255,255,255,.82); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+    border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); display:flex;}
+  .wxrail[hidden]{display:none;}
+  .wxdial{flex:1; position:relative; overflow-y:auto; scroll-snap-type:y mandatory; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+  .wxdial::-webkit-scrollbar{display:none;}
+  /* .wxtick height MUST equal WXH in the script (104) for the needle to frame a block */
+  .wxtick{height:104px; scroll-snap-align:center; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:6px; line-height:1.1;
+    opacity:.4; transform:scale(.84); transition:opacity .15s, transform .15s;}
+  .wxtick .wh{font-size:12px; color:var(--sub); font-variant-numeric:tabular-nums;}
+  .wxtick .wi{font-size:21px;}
+  .wxtick .wt{font-size:14px; font-weight:700;}
+  .wxtick .wc{font-size:11px; color:var(--teal); font-weight:600;}
+  .wxtick.active{opacity:1; transform:scale(1.05);}
+  .wxtick.active .wt{color:var(--good);}
+  /* fixed center needle that the dial rotates under — height matches a block */
+  .wxneedle{position:absolute; left:0; top:50%; transform:translateY(-50%);
+    width:100%; height:104px; pointer-events:none;
+    border-top:2px solid var(--good); border-bottom:2px solid var(--good);
+    background:linear-gradient(90deg, rgba(19,122,75,.12), rgba(19,122,75,0));}
+  .wxneedle::before{content:"▶"; position:absolute; left:1px; top:50%; transform:translateY(-50%);
+    color:var(--good); font-size:12px; line-height:1;}
+  /* sunset marker, positioned at its true clock time between two blocks */
+  .wxsun{position:absolute; left:0; width:100%; height:0; border-top:2px dashed #e08a2b; pointer-events:none; z-index:2;}
+  .wxsun span{position:absolute; left:50%; top:-8px; transform:translateX(-50%); white-space:nowrap;
+    font-size:9px; color:#b06a1b; background:rgba(255,255,255,.92); padding:0 3px; border-radius:5px;}
+  /* reserve a gutter so the rail never covers content on narrower screens */
+  @media (max-width: 860px){ main{ padding-left:78px; } }
+  @media (max-width: 600px){ .wxrail{ width:54px; } main{ padding-left:64px; } }
 
   .navbtns{display:flex; gap:8px; margin-top:11px; flex-wrap:wrap;}
   .navbtns a{
@@ -96,6 +140,10 @@
   .check li:last-child{border-bottom:none;}
   .check input{width:20px; height:20px; margin-top:2px; accent-color:var(--teal); flex:none;}
   .check li.done label{text-decoration:line-through; color:#9bb0b0;}
+  .check li .tel{margin-left:auto; flex:none; white-space:nowrap; text-decoration:none;
+    color:var(--teal); font-weight:700; padding:3px 9px; border:1px solid #cfe9e9;
+    border-radius:8px; background:#eaf6f6;}
+  .check li .tel:active{opacity:.6;}
   .check .key{color:var(--warn); font-weight:600;}
   .subhead{font-size:12.5px; color:var(--sub); margin:12px 0 2px; font-weight:700; letter-spacing:.5px;}
 
@@ -106,32 +154,26 @@
 </head>
 <body>
 
+<div id="topbar">
 <header class="top">
   <h1>🌲 Lake Tahoe 周末行程 + 海牙认证</h1>
   <div class="dates">2026 / 06 / 21（周日）– 06 / 22（周一）</div>
-  <div class="meta">
-    <span>🚗 Chevrolet Equinox</span>
-    <span>👥 3 人</span>
-    <span>🏨 Hampton Inn SLT</span>
-  </div>
 </header>
 
 <nav class="tabs" id="tabs">
-  <a href="#day1" class="active">周日 · 玩湖</a>
-  <a href="#day2">周一 · 沙滩+认证</a>
-  <a href="#packing">清单</a>
+  <a href="#" data-tab="day1" class="active">周日 · 玩湖</a>
+  <a href="#" data-tab="day2">周一 · 沙滩+认证</a>
+  <a href="#" data-tab="checklist">清单</a>
 </nav>
+</div>
 
 <main>
 
   <!-- ================= DAY 1 ================= -->
-  <div class="daytitle" id="day1">
-    <h2>周日 6/21</h2><span class="tag">Sunnyvale → Tahoe，玩一整天</span>
+  <div class="daytitle" id="day1" data-date="2026-06-21">
+    <h2>周日 06/21</h2><span class="tag">Sunnyvale → Tahoe，玩一整天</span>
   </div>
 
-  <div class="banner">
-    ☀️ 天气：高 ~22°C / 低 ~12°C，风小、适合户外。<b>高原紫外线极强，必带防晒+墨镜+外套</b>。湖水冰（~10°C）。
-  </div>
   <div class="banner">
     🅿️ <b>Emerald Bay 停车位上午10点后常爆满</b>——我们下午到，更紧张，看到空位立刻停；实在没位就在 Inspiration Point 路边轮候。
   </div>
@@ -154,12 +196,17 @@
 
     <div class="card move">
       <span class="time">~9:30 AM</span>
-      <h3><span class="emoji">☕</span>途中休息（可选）</h3>
-      <div class="addr">Placerville / Pollock Pines 一带（US-50 沿线）</div>
+      <h3><span class="emoji">⛽</span>途中休息 · Placerville 加油</h3>
+      <div class="addr">Chevron · 3943 Missouri Flat Rd, Placerville, CA 95667（US-50 Missouri Flat 出口）</div>
+      <div class="dur">上厕所、买水/零食、伸展，并把油加满。</div>
       <ul>
-        <li>上厕所、买水/零食、伸展。满油的话<b>去程无需加油</b>。</li>
-        <li>翻 Echo Summit 后湖区站点少、油价高，若表显已不足半箱，可在 Placerville 顺手加满。</li>
+        <li>选这家 <b>Chevron</b>：US-50 沿线较便宜的 Chevron（06/18 约 $4.99/加仑 regular；当天以 GasBuddy 实时为准）。</li>
+        <li>翻 Echo Summit 后湖区站点少、油价高，<b>在此加满</b>可覆盖湖区两天。</li>
       </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Chevron%203943%20Missouri%20Flat%20Rd%20Placerville%20CA%2095667">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Chevron%203943%20Missouri%20Flat%20Rd%20Placerville">Apple 地图</a>
+      </div>
     </div>
 
     <div class="card meal">
@@ -220,7 +267,7 @@
       <span class="time">2:30 PM</span>
       <h3><span class="emoji">🏰</span>古堡 Vikingsholm 导览</h3>
       <div class="addr">Vikingsholm Castle, Emerald Bay 湾底</div>
-      <div class="dur">导览 30 min · $15/成人、$12/儿童 · 先到先得不预约</div>
+      <div class="dur">导览 30 min · $15/成人、$12/儿童 · 可刷卡/现金 · 先到先得不预约</div>
       <ul>
         <li>到湾底先在 Visitor Center 买票，<span class="hot">赶 2:30 这班</span>（每半小时一场）。</li>
         <li>外观/沙滩/小岛免费自由拍，导览后留 ~25 min 在湾底取景。</li>
@@ -254,6 +301,7 @@
         <li>1994 年明轮观光船，3 层甲板，复古风、非高端邮轮。</li>
         <li>含上桌式套餐（开船前 24h 选主菜）。靠窗位更佳。</li>
         <li>11 岁以下白天船免费——但这是晚餐船，按晚餐儿童价。</li>
+        <li>🎫 <b>船票（3 张成人票，含 QR）存在手机相册/钱包里</b>，登船时每人出示一张二维码。</li>
       </ul>
     </div>
 
@@ -262,6 +310,11 @@
       <h3><span class="emoji">🏨</span>下船回酒店 Hampton Inn</h3>
       <div class="addr">3838 Lake Tahoe Blvd, South Lake Tahoe, CA 96150 · ☎ (530) 541-5400</div>
       <div class="dur">Zephyr Cove → 酒店 ~25 min · ~9:00 到酒店休息</div>
+      <ul>
+        <li>Queen Room · 2 张大床 · 3 人 · <b>含早餐</b> · 入住 06/21 16:00 起 / 退房 06/22 11:00 前。</li>
+        <li>入住需出示 <span class="hot">带照片证件 + 信用卡</span>；自助停车 $15/晚（无需预订）；全区免费 WiFi。</li>
+        <li>🏨 <b>订单确认号 / PIN 见手机里的预订邮件或 App</b>（出于隐私不放在本页）。</li>
+      </ul>
       <div class="navbtns">
         <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Hampton%20Inn%20Suites%20South%20Lake%20Tahoe%203838%20Lake%20Tahoe%20Blvd">Google 导航</a>
         <a class="a" target="_blank" href="https://maps.apple.com/?q=Hampton%20Inn%20Suites%20South%20Lake%20Tahoe">Apple 地图</a>
@@ -271,8 +324,8 @@
   </div>
 
   <!-- ================= DAY 2 ================= -->
-  <div class="daytitle" id="day2">
-    <h2>周一 6/22</h2><span class="tag">沙滩 → Sacramento 办认证 → 回家</span>
+  <div class="daytitle" id="day2" data-date="2026-06-22">
+    <h2>周一 06/22</h2><span class="tag">沙滩 → Sacramento 办认证 → 回家</span>
   </div>
 
   <div class="banner">
@@ -309,8 +362,12 @@
       <div class="addr">US-50 一路向西下山</div>
       <div class="dur">到 Placerville ~1h</div>
       <ul>
-        <li>⛽ <b>下山后在 Placerville 或 Sacramento 加一次油</b>（比 Tahoe 便宜不少），这一箱足够办完认证再开回家（Sacramento→家 ~120 mi）。</li>
+        <li>⛽ <b>下山后在 Placerville 的 Chevron 加一次油</b>（比 Tahoe 便宜不少），这一箱足够办完认证再开回家（Sacramento→家 ~120 mi）。</li>
       </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Chevron%203943%20Missouri%20Flat%20Rd%20Placerville%20CA%2095667">Google · Chevron 加油</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Chevron%203943%20Missouri%20Flat%20Rd%20Placerville">Apple 地图</a>
+      </div>
     </div>
 
     <div class="card star">
@@ -375,10 +432,10 @@
 
     <div class="subhead">🔴 海牙认证 · 周一别忘带</div>
     <ul class="check" data-group="apostille">
-      <li><label><input type="checkbox"><span class="key">结婚证 certified copy 原件（带签名+钢印）</span></label></li>
-      <li><label><input type="checkbox"><span class="key">Cover Sheet（打印 apostille-request-form.pdf，国家填 China）</span></label></li>
-      <li><label><input type="checkbox"><span class="key">$26 付款（信用卡 / 现金 / 支票）</span></label></li>
-      <li><label><input type="checkbox">身份证件 / 驾照</label></li>
+      <li><label><input type="checkbox"><span class="key">结婚证书 certified copy 原件 —— 须由<b>加州 County Recorder / CDPH Vital Records</b> 出具（带签名+钢印，复印件无效）</span></label></li>
+      <li><label><input type="checkbox"><span class="key">Cover Sheet：打印 Sacramento 版 <b>apostille-request-sac.pdf</b>，目的国写 <b>China</b>（中国大陆；勿选 Hong Kong / Macau。也可到现场手填）</span></label></li>
+      <li><label><input type="checkbox"><span class="key">$26/份 付款 = $20 + $6 手续费；信用卡仅限 <b>Visa / Mastercard</b>，或 现金 / 支票 / 汇票</span></label></li>
+      <li><label><input type="checkbox">身份证件 / 驾照（备用）</label></li>
     </ul>
 
     <div class="subhead">🎒 通用 / 户外</div>
@@ -386,18 +443,18 @@
       <li><label><input type="checkbox">防晒霜 + 墨镜 + 帽子（高原紫外线强）</label></li>
       <li><label><input type="checkbox">外套（昼夜温差大，夜低 ~12°C）</label></li>
       <li><label><input type="checkbox">走路/徒步鞋（Vikingsholm 上下坡 1 mi）</label></li>
-      <li><label><input type="checkbox">泳衣 / 毛巾 / 换洗（Baldwin Beach 玩水）</label></li>
       <li><label><input type="checkbox">水 + 零食</label></li>
-      <li><label><input type="checkbox">现金 $15/人（古堡门票现场买）+ 停车零钱</label></li>
-      <li><label><input type="checkbox">游船订单/确认（已选好主菜）</label></li>
-      <li><label><input type="checkbox">手机充电线 / 车充</label></li>
+      <li><label><input type="checkbox">古堡门票现场买 $15/人（可刷卡；付现金不收 $20 以上大钞）+ 停车小额现金/卡</label></li>
+      <li><label><input type="checkbox">游船订单/确认</label></li>
+      <li><label><input type="checkbox">手机充电线 / 充电宝</label></li>
+      <li><label><input type="checkbox">iPad</label></li>
     </ul>
 
     <div class="subhead">📞 关键联系方式</div>
     <ul class="check" data-group="phones">
-      <li><label><input type="checkbox">游船 Zephyr Cove (800) 238-2463（6PM 开船 / 5PM check-in）</label></li>
-      <li><label><input type="checkbox">Hampton Inn (530) 541-5400</label></li>
-      <li><label><input type="checkbox">My Thai (530) 544-3232</label></li>
+      <li><label><input type="checkbox"><span>游船 Zephyr Cove · 6PM 开船 / 5PM check-in</span></label><a class="tel" href="tel:+18002382463">📞 (800) 238-2463</a></li>
+      <li><label><input type="checkbox"><span>Hampton Inn 酒店</span></label><a class="tel" href="tel:+15305415400">📞 (530) 541-5400</a></li>
+      <li><label><input type="checkbox"><span>My Thai 午餐</span></label><a class="tel" href="tel:+15305443232">📞 (530) 544-3232</a></li>
     </ul>
   </section>
 
@@ -416,16 +473,6 @@
 </footer>
 
 <script>
-  // 高亮当前 Tab
-  const tabs=[...document.querySelectorAll('nav.tabs a')];
-  const targets=tabs.map(a=>document.querySelector(a.getAttribute('href')));
-  const onScroll=()=>{
-    let i=0;
-    targets.forEach((t,idx)=>{ if(t && t.getBoundingClientRect().top<120) i=idx; });
-    tabs.forEach((a,idx)=>a.classList.toggle('active', idx===i));
-  };
-  window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
-
   // 勾选状态本地保存
   document.querySelectorAll('.check').forEach(ul=>{
     const g=ul.dataset.group;
@@ -439,6 +486,192 @@
       });
     });
   });
+
+  // ===== location-aware weather, shown as a vertical dial side-rail =====
+  // Forecast fetched 2026-06-18 (Open-Meteo) for every city on the route, matched to
+  // the itinerary's hour→city plan so each tick is the temp where you'll be. The rail
+  // centers a needle on the current hour; slide the dial to read other hours.
+  // Tuple: [hour, city, °C, WMO code, precip%]. Ask me to refresh before departure.
+  const WEATHER = {
+    fetched: '2026-06-18',
+    // Sun: home → valley → foothills → Tahoe (lunch, Emerald Bay, cruise, hotel)
+    // sr/ss = sunrise / first dark hour (Tahoe sunset ~8:28pm → 9pm is night)
+    day1: { sr:6, ss:21, sunset:20.47, sunsetTxt:'8:28p', hours:[
+      [7,'湾区',15,0,0],[8,'萨城',17,0,0],[9,'普镇',24,0,0],[10,'太浩',21,0,0],[11,'太浩',23,0,0],
+      [12,'太浩',24,0,0],[13,'太浩',26,0,0],[14,'太浩',27,0,0],[15,'太浩',27,3,0],[16,'太浩',27,3,0],
+      [17,'太浩',26,3,0],[18,'太浩',25,3,0],[19,'太浩',23,0,0],[20,'太浩',20,0,0],[21,'太浩',16,0,0] ] },
+    // Mon: Tahoe beach → Placerville → Sacramento (apostille) → home
+    day2: { sr:6, ss:21, hours:[
+      [7,'太浩',17,0,0],[8,'太浩',20,0,0],[9,'太浩',22,0,0],[10,'太浩',24,0,0],[11,'普镇',28,0,0],
+      [12,'普镇',30,0,0],[13,'萨城',33,0,0],[14,'萨城',34,0,0],[15,'萨城',35,0,0],[16,'湾区',30,0,0],[17,'湾区',29,0,0] ] }
+  };
+  const wxIcon = (c,night) => {
+    if (night){                                   // after sunset / before sunrise → moon
+      if (c===0||c===1) return '🌙';
+      if (c===2) return '☁️🌙';
+      if (c===3) return '☁️';
+    }
+    return c===0?'☀️':c===1?'🌤️':c===2?'⛅':c===3?'☁️':(c>=45&&c<=48)?'🌫️':
+      (c>=51&&c<=57)?'🌦️':(c>=61&&c<=67)?'🌧️':(c>=71&&c<=77)?'🌨️':(c>=80&&c<=82)?'🌧️':
+      (c>=85&&c<=86)?'🌨️':(c>=95)?'⛈️':'❓';
+  };
+  let wxOv = new URLSearchParams(location.search).get('now');
+  if (wxOv && /^\d{4}-\d{2}-\d{2}$/.test(wxOv)) wxOv += 'T00:00';
+  const wxNow = wxOv ? new Date(wxOv) : new Date();
+  const wxOK = !isNaN(+wxNow);
+  const wxNowKey = wxOK ? wxNow.getFullYear()*10000+(wxNow.getMonth()+1)*100+wxNow.getDate() : 0;
+  const wxNowHr  = wxOK ? wxNow.getHours() : -1;
+  const wxHlabel = h => h===0?'12a':h<12?h+'a':h===12?'12p':(h-12)+'p';
+  const WXH = 104;  // must match .wxtick / .wxneedle height in CSS
+
+  const wxRail = document.createElement('div'); wxRail.className='wxrail'; wxRail.hidden=true;
+  const wxDial = document.createElement('div'); wxDial.className='wxdial';
+  const wxNeedle = document.createElement('div'); wxNeedle.className='wxneedle';
+  wxRail.appendChild(wxDial); wxRail.appendChild(wxNeedle);
+  document.body.appendChild(wxRail);
+  let wxRaf=null, wxCurrentDay=null, wxResizeT=null;
+
+  // measure the fixed top bar (title + tabs) → drives main's top padding and the dial's top
+  const wxTopbar=document.getElementById('topbar');
+  function setTopbar(){ if(wxTopbar) document.documentElement.style.setProperty('--topbar', wxTopbar.offsetHeight+'px'); }
+  setTopbar(); addEventListener('load', setTopbar);
+
+  // dial spans the sliding panel → re-measure top bar, re-pad and re-center on viewport change
+  addEventListener('resize', ()=>{ clearTimeout(wxResizeT); wxResizeT=setTimeout(()=>{ setTopbar(); renderRail(wxCurrentDay); }, 150); });
+
+  // the day to show when no specific day is active (e.g. checklist tab) — today,
+  // clamped to the trip range: before → first day, after → last day.
+  function clampedDayId(){
+    const ids=['day1','day2']; let pick=ids[0];
+    if (wxOK) for (const id of ids){
+      const el=document.getElementById(id); if(!el||!el.dataset.date) continue;
+      const [Y,Mo,D]=el.dataset.date.split('-').map(Number);
+      if (wxNowKey >= Y*10000+Mo*100+D) pick=id;
+    }
+    return pick;
+  }
+
+  function renderRail(dayId){
+    wxCurrentDay = dayId;
+    if (!dayId || !WEATHER[dayId]){ wxRail.hidden=true; return; }
+    const data=WEATHER[dayId], title=document.getElementById(dayId);
+    const [Y,Mo,D]=title.dataset.date.split('-').map(Number);
+    const dayKey=Y*10000+Mo*100+D;
+    const firstHr=data.hours[0][0], lastHr=data.hours[data.hours.length-1][0];
+    wxDial.innerHTML='';
+    data.hours.forEach(([h,city,t,c])=>{
+      const night = (h>=data.ss || h<data.sr);
+      const tk=document.createElement('div'); tk.className='wxtick';
+      tk.innerHTML='<div class="wh">'+wxHlabel(h)+'</div><div class="wi">'+wxIcon(c,night)+'</div><div class="wt">'+t+'°</div><div class="wc">'+city+'</div>';
+      wxDial.appendChild(tk);
+    });
+    wxRail.hidden=false;
+    const ticks=[...wxDial.children];
+    const setActive=i=>ticks.forEach((t,k)=>t.classList.toggle('active',k===i));
+    requestAnimationFrame(()=>{
+      const pad=Math.max(0,(wxDial.clientHeight-WXH)/2);
+      wxDial.style.paddingTop=pad+'px'; wxDial.style.paddingBottom=pad+'px';
+      // sunset marker at its true clock position between the hour ticks
+      if (data.sunset!=null && data.sunset>=firstHr && data.sunset<=lastHr){
+        const sun=document.createElement('div'); sun.className='wxsun';
+        sun.style.top=(pad + (data.sunset-firstHr)*WXH + WXH/2)+'px';
+        sun.innerHTML='<span>🌇 '+(data.sunsetTxt||'')+'</span>';
+        wxDial.appendChild(sun);
+      }
+      let idx=0;
+      if (dayKey===wxNowKey){
+        const hrs=data.hours.map(r=>r[0]);
+        if (wxNowHr<=hrs[0]) idx=0;
+        else if (wxNowHr>=hrs[hrs.length-1]) idx=hrs.length-1;
+        else { const f=hrs.indexOf(wxNowHr); idx=f<0?0:f; }
+      }
+      wxDial.scrollTop=idx*WXH; setActive(idx);
+    });
+    wxDial.onscroll=()=>{
+      if (wxRaf) return;
+      wxRaf=requestAnimationFrame(()=>{ wxRaf=null;
+        const i=Math.min(ticks.length-1, Math.max(0, Math.round(wxDial.scrollTop/WXH))); setActive(i); });
+    };
+  }
+
+  // ===== Day tabs (周日 / 周一 / 清单) with per-step 已完成 checkboxes =====
+  // Each tab shows one day's cards. Every card gets a 已完成 checkbox whose state
+  // persists in localStorage. On load we open today's day (clamped to the trip's
+  // date range) and scroll to the first step that's still unchecked.
+  // Test another day without waiting: append ?now=2026-06-22 to the URL.
+  (function(){
+    let override = new URLSearchParams(location.search).get('now');
+    // a date-only override (YYYY-MM-DD) parses as UTC and would shift a day in
+    // western time zones — pin it to local midnight so the day math is correct.
+    if (override && /^\d{4}-\d{2}-\d{2}$/.test(override)) override += 'T00:00';
+    const now = override ? new Date(override) : new Date();
+    const main = document.querySelector('main');
+
+    // group <main> into day blocks, keyed by the daytitle's id (day1 / day2)
+    const days=[]; let day=null;
+    for (const child of main.children){
+      if (child.classList.contains('daytitle')){ day={key:child.id||('day'+(days.length+1)), title:child, date:child.dataset.date, banners:[], timeline:null, cards:[]}; days.push(day); }
+      else if (child.classList.contains('banner') && day){ day.banners.push(child); }
+      else if (child.classList.contains('timeline') && day){ day.timeline=child; day.cards=[...child.querySelectorAll('.card')]; }
+    }
+
+    // inject a 已完成 checkbox into every card; state persisted in localStorage
+    days.forEach((d,di)=>{
+      d.cards.forEach((card,ci)=>{
+        const key='tahoe_done_'+di+'_'+ci;
+        const lab=document.createElement('label'); lab.className='cardchk';
+        const txt=document.createElement('span'); txt.textContent='已完成';
+        const cb=document.createElement('input'); cb.type='checkbox';
+        let saved=false; try{ saved=localStorage.getItem(key)==='1'; }catch{}
+        cb.checked=saved; card.classList.toggle('done-step',saved);
+        cb.addEventListener('change',()=>{
+          try{ localStorage.setItem(key, cb.checked?'1':'0'); }catch{}
+          card.classList.toggle('done-step',cb.checked);
+        });
+        lab.appendChild(txt); lab.appendChild(cb); card.appendChild(lab);
+        card._checked=()=>cb.checked;
+      });
+    });
+
+    const packing=document.getElementById('packing');
+    const legend=document.querySelector('.legend');
+    const tabs=[...document.querySelectorAll('nav.tabs a')];
+
+    function render(tab){
+      tabs.forEach(a=>a.classList.toggle('active', a.dataset.tab===tab));
+      days.forEach(d=>{
+        const show = d.key===tab;
+        d.title.style.display = show?'':'none';
+        d.banners.forEach(b=> b.style.display = show?'':'none');
+        if (d.timeline) d.timeline.style.display = show?'':'none';
+      });
+      packing.style.display = tab==='checklist' ? '' : 'none';
+      if (legend) legend.style.display = tab==='checklist' ? 'none' : '';
+      renderRail(tab==='checklist' ? clampedDayId() : tab);   // checklist shows today's (clamped) day
+    }
+    tabs.forEach(a=> a.addEventListener('click', e=>{ e.preventDefault(); render(a.dataset.tab); window.scrollTo({top:0}); }));
+
+    // choose today's day, clamped to the trip range (before → first day, after → last)
+    let target = days[0];
+    if (!isNaN(+now) && days.length){
+      const today = now.getFullYear()*10000 + (now.getMonth()+1)*100 + now.getDate();
+      for (const d of days){
+        const [Y,Mo,D] = d.date.split('-').map(Number);
+        if (today >= Y*10000+Mo*100+D) target = d;   // latest day whose date <= today
+      }
+    }
+    render(target.key);
+
+    // scroll to the first not-yet-checked step in the active day
+    requestAnimationFrame(()=>{
+      const open = target.cards.find(c=>!c._checked());
+      if (!open) return;
+      const tb=document.getElementById('topbar');
+      const offset=(tb?tb.offsetHeight:0)+12;
+      const y=open.getBoundingClientRect().top + window.pageYOffset - offset;
+      window.scrollTo({ top: Math.max(0,y), behavior:'smooth' });
+    });
+  })();
 </script>
 </body>
 </html>
