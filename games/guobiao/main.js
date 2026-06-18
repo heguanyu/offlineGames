@@ -10,6 +10,7 @@ import { Sound } from '../mahjong-tianjin/sound.js';
 import { buildOrder } from '../mahjong-tianjin/handorder.js';
 import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands } from '../mahjong-tianjin/ui-util.js';
 import { BOT_NAMES } from '../mahjong-common/bot-names.js';
+import { serverUrl } from '../mahjong-common-online/server-url.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -26,8 +27,7 @@ const ONLINE = !!new URLSearchParams(location.search).get('online');
 const VIEWER = ONLINE && !!new URLSearchParams(location.search).get('viewer');
 const VIEWER_SEAT = VIEWER ? (parseInt(new URLSearchParams(location.search).get('vseat'), 10) || 0) : 0;
 const VIEWER_TABLE = VIEWER ? (parseInt(new URLSearchParams(location.search).get('vtable'), 10) || 0) : 0;
-const ONLINE_URL = new URLSearchParams(location.search).get('server') ||
-  ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? `ws://${location.hostname}:8090` : 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net');
+const ONLINE_URL = serverUrl(); // the game server endpoint — see mahjong-common-online/server-url.js
 let onlineReadied = false, onlineEndsPot = false;
 
 // Online turn countdown (国标 / 无定番) — same as 天津: drives the shared scene timer (the 3D ring on

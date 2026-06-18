@@ -4,21 +4,11 @@
 // the client never polls, it just re-renders each 'lobby' frame. When our table fills with
 // ready players/bots the server sends 'gameStart'.
 import { createRing, updateRing } from '../mahjong-common/timer-ring.js';
+import { serverUrl } from './server-url.js';
 const $ = (id) => document.getElementById(id);
 
-// Pick the game server. The Azure App Service now serves this very page AND the WebSocket
-// backend, so when we're loaded from Azure (or any same-origin host) we just connect back to
-// ourselves. The GitHub Pages mirror can't host a WebSocket, so a page served from *.github.io
-// reaches across to the Azure backend. ?server=wss://… overrides everything (handy for testing
-// a deployed server from a local page).
-const AZURE_WS = 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net';
-function defaultServerUrl() {
-  const h = location.hostname;
-  if (h === 'localhost' || h === '127.0.0.1') return `ws://${h}:8090`; // dev server (also serves this page)
-  if (h.endsWith('github.io')) return AZURE_WS;                        // Pages mirror → Azure backend
-  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`; // served from Azure → same origin
-}
-const SERVER_URL = new URLSearchParams(location.search).get('server') || defaultServerUrl();
+// The game server (WebSocket) endpoint — see server-url.js (the single source of truth).
+const SERVER_URL = serverUrl();
 
 const WINDS = ['东', '南', '西', '北'];          // seat index → wind label
 const POS = ['east', 'south', 'west', 'north'];  // seat index → chair CSS position

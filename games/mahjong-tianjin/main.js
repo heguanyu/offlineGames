@@ -10,6 +10,7 @@ import { Sound } from './sound.js';
 import { buildOrder } from './handorder.js';
 import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands, seatBadgeHtml } from './ui-util.js';
 import { BOT_NAMES } from '../mahjong-common/bot-names.js';
+import { serverUrl } from '../mahjong-common-online/server-url.js';
 
 const sound = new Sound();
 const toast = makeToast();
@@ -66,8 +67,7 @@ const ONLINE = !!new URLSearchParams(location.search).get('online');
 // that seat's frames (so the UI renders exactly as that player sees it) and ignores any action.
 const VIEWER = ONLINE && !!new URLSearchParams(location.search).get('viewer');
 const VIEWER_SEAT = VIEWER ? (parseInt(new URLSearchParams(location.search).get('vseat'), 10) || 0) : 0;
-const ONLINE_URL = new URLSearchParams(location.search).get('server') ||
-  ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? `ws://${location.hostname}:8090` : 'wss://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net');
+const ONLINE_URL = serverUrl(); // the game server endpoint — see mahjong-common-online/server-url.js
 
 // `game` is the READ-ONLY GameView handed back by the backend (see backend.js) — the UI
 // renders it but never mutates it; every move goes through `backend`. `backend` is the

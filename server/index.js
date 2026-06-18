@@ -36,7 +36,7 @@ if (!TABLE_GAMES.length) TABLE_GAMES.push('tianjin');
 
 const PORT = process.env.PORT || 8090;
 const ALLOWED = (process.env.ALLOWED_ORIGINS ||
-  'https://heguanyu.github.io,https://mahjongonline-fhc2e9hcfuafdgh0.canadacentral-01.azurewebsites.net,http://localhost:8090,http://127.0.0.1:8090,http://localhost:8137')
+  'https://heguanyu.github.io,https://offlinegames.azurewebsites.net,http://localhost:8090,http://127.0.0.1:8090,http://localhost:8137')
   .split(',').map((s) => s.trim());
 
 // The static site root. The server lives at <root>/server/index.js, so the publishable site
