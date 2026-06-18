@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a6e6e">
+<title>Tahoe 行程单 · 6/21–6/22</title>
+<style>
+  :root{
+    --bg:#f3f6f7; --card:#ffffff; --ink:#102a2a; --sub:#5d7373;
+    --teal:#0a6e6e; --teal2:#0c8a8a; --line:#e2eaea;
+    --gold:#b9892f; --warn:#c2410c; --warnbg:#fff4ec;
+    --good:#137a4b; --shadow:0 2px 10px rgba(16,42,42,.07);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.6;
+    -webkit-text-size-adjust:100%;
+  }
+  header.top{
+    background:linear-gradient(135deg,#0a6e6e,#0c8a8a 55%,#1aa3a3);
+    color:#fff; padding:22px 18px calc(16px + env(safe-area-inset-top)); padding-top:calc(22px + env(safe-area-inset-top));
+    text-align:center; box-shadow:var(--shadow);
+  }
+  header.top h1{margin:0; font-size:21px; letter-spacing:.5px;}
+  header.top .dates{margin-top:5px; font-size:14px; opacity:.92;}
+  header.top .meta{margin-top:10px; font-size:12.5px; opacity:.9; display:flex; gap:14px; justify-content:center; flex-wrap:wrap;}
+  header.top .meta span{background:rgba(255,255,255,.16); padding:3px 10px; border-radius:20px;}
+
+  nav.tabs{
+    position:sticky; top:0; z-index:20; display:flex; background:#fff;
+    border-bottom:1px solid var(--line); box-shadow:0 1px 6px rgba(16,42,42,.05);
+  }
+  nav.tabs a{
+    flex:1; text-align:center; padding:12px 6px; text-decoration:none;
+    color:var(--sub); font-weight:600; font-size:14px;
+  }
+  nav.tabs a.active{color:var(--teal); box-shadow:inset 0 -3px 0 var(--teal);}
+
+  main{max-width:680px; margin:0 auto; padding:16px 14px 60px;}
+  .daytitle{
+    display:flex; align-items:baseline; gap:10px; margin:18px 2px 6px;
+  }
+  .daytitle h2{margin:0; font-size:18px; color:var(--teal);}
+  .daytitle .tag{font-size:12.5px; color:var(--sub);}
+
+  .banner{
+    background:var(--warnbg); border:1px solid #f6d8c4; color:var(--warn);
+    border-radius:12px; padding:11px 13px; font-size:13.5px; margin:10px 0 4px;
+  }
+  .banner b{color:var(--warn);}
+
+  .timeline{position:relative; margin-top:6px;}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:13px 14px 14px; margin:11px 0; box-shadow:var(--shadow); position:relative;
+  }
+  .card .time{
+    display:inline-block; font-variant-numeric:tabular-nums; font-weight:700;
+    font-size:13px; color:#fff; background:var(--teal); border-radius:8px;
+    padding:2px 9px; letter-spacing:.3px;
+  }
+  .card.move .time{background:#6b7f8a;}
+  .card.meal .time{background:var(--gold);}
+  .card.star .time{background:var(--good);}
+  .card h3{margin:8px 0 2px; font-size:16.5px;}
+  .card .emoji{font-size:16px; margin-right:5px;}
+  .card .addr{font-size:13px; color:var(--sub); margin:3px 0 2px;}
+  .card .dur{font-size:12.5px; color:var(--sub);}
+  .card ul{margin:9px 0 0; padding-left:18px; font-size:13.5px;}
+  .card ul li{margin:3px 0;}
+  .card .hot{color:var(--warn); font-weight:600;}
+
+  .navbtns{display:flex; gap:8px; margin-top:11px; flex-wrap:wrap;}
+  .navbtns a{
+    flex:1; min-width:120px; text-align:center; text-decoration:none;
+    font-size:13px; font-weight:600; padding:9px 8px; border-radius:10px; border:1px solid var(--line);
+  }
+  .navbtns a.g{background:#eaf6f6; color:var(--teal);}
+  .navbtns a.a{background:#f4f4f6; color:#333;}
+  .navbtns a:active{opacity:.7;}
+
+  .pick{border:1px dashed var(--gold); background:#fffaf0;}
+  .pick .opt{font-size:13.5px; margin:6px 0;}
+  .pick .opt b{color:var(--gold);}
+
+  section.list{
+    background:#fff; border:1px solid var(--line); border-radius:14px;
+    padding:14px 16px; margin:20px 0; box-shadow:var(--shadow);
+  }
+  section.list h2{margin:0 0 8px; font-size:16px; color:var(--teal);}
+  .check{list-style:none; padding:0; margin:0;}
+  .check li{display:flex; align-items:flex-start; gap:10px; padding:7px 0; border-bottom:1px solid #f0f4f4; font-size:14px;}
+  .check li:last-child{border-bottom:none;}
+  .check input{width:20px; height:20px; margin-top:2px; accent-color:var(--teal); flex:none;}
+  .check li.done label{text-decoration:line-through; color:#9bb0b0;}
+  .check .key{color:var(--warn); font-weight:600;}
+  .subhead{font-size:12.5px; color:var(--sub); margin:12px 0 2px; font-weight:700; letter-spacing:.5px;}
+
+  footer{text-align:center; font-size:12px; color:var(--sub); padding:10px 16px 30px;}
+  .legend{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; font-size:12px; color:var(--sub); margin:8px 0 2px;}
+  .legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:middle;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>🌲 Lake Tahoe 周末行程 + 海牙认证</h1>
+  <div class="dates">2026 / 06 / 21（周日）– 06 / 22（周一）</div>
+  <div class="meta">
+    <span>🚗 Chevrolet Equinox</span>
+    <span>👥 3 人</span>
+    <span>🏨 Hampton Inn SLT</span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <a href="#day1" class="active">周日 · 玩湖</a>
+  <a href="#day2">周一 · 沙滩+认证</a>
+  <a href="#packing">清单</a>
+</nav>
+
+<main>
+
+  <!-- ================= DAY 1 ================= -->
+  <div class="daytitle" id="day1">
+    <h2>周日 6/21</h2><span class="tag">Sunnyvale → Tahoe，玩一整天</span>
+  </div>
+
+  <div class="banner">
+    ☀️ 天气：高 ~22°C / 低 ~12°C，风小、适合户外。<b>高原紫外线极强，必带防晒+墨镜+外套</b>。湖水冰（~10°C）。
+  </div>
+  <div class="banner">
+    🅿️ <b>Emerald Bay 停车位上午10点后常爆满</b>——我们下午到，更紧张，看到空位立刻停；实在没位就在 Inspiration Point 路边轮候。
+  </div>
+  <div class="banner">
+    ⏱️ <b>节奏紧凑：游船 5:00 PM 必须到 Zephyr Cove check-in。</b>下午要卡着 <b>2:30 PM 的古堡导览</b>。若任一环节拖延，<b>放弃下湾古堡</b>，改在 <b>Inspiration Point 观景台</b>（免费、0 体力、5 分钟俯瞰全湾）拍照后直接去码头。
+  </div>
+
+  <div class="timeline">
+
+    <div class="card move">
+      <span class="time">7:00 AM</span>
+      <h3><span class="emoji">🚗</span>从 Sunnyvale 出发</h3>
+      <div class="addr">家 → US-50 经 Sacramento → Placerville → 翻 Echo Summit 进南湖</div>
+      <div class="dur">车程 ~3h45m</div>
+      <ul>
+        <li>导航直接设 <b>My Thai Cuisine</b>。</li>
+        <li><b>出发前在湾区把油加满</b>（87 号即可）。满油可覆盖去程 + 湖区两天，<b>Tahoe 油价贵，尽量别在湖边加</b>。</li>
+      </ul>
+    </div>
+
+    <div class="card move">
+      <span class="time">~9:30 AM</span>
+      <h3><span class="emoji">☕</span>途中休息（可选）</h3>
+      <div class="addr">Placerville / Pollock Pines 一带（US-50 沿线）</div>
+      <ul>
+        <li>上厕所、买水/零食、伸展。满油的话<b>去程无需加油</b>。</li>
+        <li>翻 Echo Summit 后湖区站点少、油价高，若表显已不足半箱，可在 Placerville 顺手加满。</li>
+      </ul>
+    </div>
+
+    <div class="card meal">
+      <span class="time">11:00 AM</span>
+      <h3><span class="emoji">🍜</span>午餐 · My Thai Cuisine</h3>
+      <div class="addr">2108 Lake Tahoe Blvd, South Lake Tahoe, CA 96150 · ☎ (530) 544-3232</div>
+      <div class="dur">用餐 ~1h（11:00 一开门就到，节省时间）</div>
+      <ul>
+        <li>就在进城的「Y」路口附近，正好在上 Hwy 89 去 Tallac 的路上。</li>
+      </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=My%20Thai%20Cuisine%202108%20Lake%20Tahoe%20Blvd%20South%20Lake%20Tahoe">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=My%20Thai%20Cuisine%20South%20Lake%20Tahoe">Apple 地图</a>
+      </div>
+    </div>
+
+    <div class="card star">
+      <span class="time">12:10 PM</span>
+      <h3><span class="emoji">📷</span>Tallac 历史遗产区</h3>
+      <div class="addr">Tallac Historic Site, Highway 89, South Lake Tahoe（My Thai 出发 ~10 min）</div>
+      <div class="dur">参观/拍照 ~45 min</div>
+      <ul>
+        <li>20 世纪初湖畔豪华别墅群 + 松林 + 湖滩，免费、好拍。</li>
+        <li>旁边 Kiva Beach 可顺路走到湖边取景。</li>
+      </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Tallac%20Historic%20Site%20South%20Lake%20Tahoe">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Tallac%20Historic%20Site">Apple 地图</a>
+      </div>
+    </div>
+
+    <div class="card star">
+      <span class="time">1:10 PM</span>
+      <h3><span class="emoji">📷</span>Emerald Bay State Park 观景台</h3>
+      <div class="addr">Emerald Bay State Park Lookout（Vikingsholm 步道口同一停车场）, Highway 89（Tallac 出发 ~12 min）</div>
+      <div class="dur">~30 min 拍照（俯瞰翡翠湾 + Fannette 小岛，全湖最经典机位）</div>
+      <ul>
+        <li>停车场日用车费约 $10，备好。<span class="hot">车位紧张，看到空位立刻停。</span></li>
+        <li>观景台就在 Vikingsholm 步道口，拍完直接从这里走下湾办古堡。</li>
+      </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Emerald%20Bay%20State%20Park%20Lookout%20Vikingsholm%20Trailhead">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Emerald%20Bay%20State%20Park%20Lookout">Apple 地图</a>
+      </div>
+    </div>
+
+    <div class="card move">
+      <span class="time">1:45 PM</span>
+      <h3><span class="emoji">🥾</span>步行下到 Vikingsholm（湾底）</h3>
+      <div class="addr">Vikingsholm Trail · 单程 1 mi、落差 150m</div>
+      <div class="dur">下行 ~30 min（回程上坡更累，留体力）</div>
+      <ul>
+        <li>穿好走路的鞋；带水。到湾底在 Visitor Center <b>现场买票</b>。</li>
+      </ul>
+    </div>
+
+    <div class="card star">
+      <span class="time">2:30 PM</span>
+      <h3><span class="emoji">🏰</span>古堡 Vikingsholm 导览</h3>
+      <div class="addr">Vikingsholm Castle, Emerald Bay 湾底</div>
+      <div class="dur">导览 30 min · $15/成人、$12/儿童 · 先到先得不预约</div>
+      <ul>
+        <li>到湾底先在 Visitor Center 买票，<span class="hot">赶 2:30 这班</span>（每半小时一场）。</li>
+        <li>外观/沙滩/小岛免费自由拍，导览后留 ~25 min 在湾底取景。</li>
+        <li>来不及就<b>放弃下湾古堡</b>，在观景台拍完直接开去码头。</li>
+      </ul>
+    </div>
+
+    <div class="card move">
+      <span class="time">3:25 PM</span>
+      <h3><span class="emoji">🥾</span>步行返回停车场</h3>
+      <div class="dur">上坡 ~40 min · <span class="hot">4:10 前务必回到车上</span></div>
+    </div>
+
+    <div class="card move">
+      <span class="time">4:10 PM</span>
+      <h3><span class="emoji">🚗</span>开车去 Zephyr Cove</h3>
+      <div class="addr">Emerald Bay → 经南湖城区 → US-50 进 NV → Zephyr Cove</div>
+      <div class="dur">车程 ~45 min（~22 mi）· 路上可能堵，留足量</div>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Zephyr%20Cove%20Resort%20760%20US-50%20Zephyr%20Cove%20NV">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Zephyr%20Cove%20Resort%20760%20US-50">Apple 地图</a>
+      </div>
+    </div>
+
+    <div class="card star">
+      <span class="time">5:00 PM</span>
+      <h3><span class="emoji">⛴️</span>Check-in · MS Dixie II 晚餐游船</h3>
+      <div class="addr">760 US-50, Zephyr Cove, NV 89448 · ☎ (800) 238-2463</div>
+      <div class="dur"><span class="hot">提前 1 小时 check-in（5:00 到）</span> · 开船 6:00 PM · 约 2–2.5h · ~8:30 返港</div>
+      <ul>
+        <li>1994 年明轮观光船，3 层甲板，复古风、非高端邮轮。</li>
+        <li>含上桌式套餐（开船前 24h 选主菜）。靠窗位更佳。</li>
+        <li>11 岁以下白天船免费——但这是晚餐船，按晚餐儿童价。</li>
+      </ul>
+    </div>
+
+    <div class="card move">
+      <span class="time">~8:30 PM</span>
+      <h3><span class="emoji">🏨</span>下船回酒店 Hampton Inn</h3>
+      <div class="addr">3838 Lake Tahoe Blvd, South Lake Tahoe, CA 96150 · ☎ (530) 541-5400</div>
+      <div class="dur">Zephyr Cove → 酒店 ~25 min · ~9:00 到酒店休息</div>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Hampton%20Inn%20Suites%20South%20Lake%20Tahoe%203838%20Lake%20Tahoe%20Blvd">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Hampton%20Inn%20Suites%20South%20Lake%20Tahoe">Apple 地图</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= DAY 2 ================= -->
+  <div class="daytitle" id="day2">
+    <h2>周一 6/22</h2><span class="tag">沙滩 → Sacramento 办认证 → 回家</span>
+  </div>
+
+  <div class="banner">
+    📄 <b>州务卿办公室 4:30 PM 前必须到</b>（walk-in 先到先得）。我们 ~1:30 到，余量充足。出发前再核对认证材料（见清单）。
+  </div>
+
+  <div class="timeline">
+
+    <div class="card meal">
+      <span class="time">8:00 AM</span>
+      <h3><span class="emoji">🥐</span>酒店免费早餐</h3>
+      <div class="addr">Hampton Inn 大堂 · 免费热早餐</div>
+      <div class="dur">~45 min · 吃饱再出发</div>
+    </div>
+
+    <div class="card star">
+      <span class="time">9:00 AM</span>
+      <h3><span class="emoji">🏖️</span>Baldwin Beach 随便玩</h3>
+      <div class="addr">Baldwin Beach, Highway 89, South Lake Tahoe（酒店 ~12 min）</div>
+      <div class="dur">~1.5h · 退房后过去（行李上车）</div>
+      <ul>
+        <li>沙缓水清、人少安静，适合踩水拍照。<span class="hot">入口有 day-use 车费（约 $10）。</span></li>
+        <li>水很凉，玩水备换洗/毛巾；10:30 左右收拾出发。</li>
+      </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Baldwin%20Beach%20South%20Lake%20Tahoe">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Baldwin%20Beach%20South%20Lake%20Tahoe">Apple 地图</a>
+      </div>
+    </div>
+
+    <div class="card move">
+      <span class="time">10:30 AM</span>
+      <h3><span class="emoji">🚗</span>出发去 Sacramento（经 Placerville）</h3>
+      <div class="addr">US-50 一路向西下山</div>
+      <div class="dur">到 Placerville ~1h</div>
+      <ul>
+        <li>⛽ <b>下山后在 Placerville 或 Sacramento 加一次油</b>（比 Tahoe 便宜不少），这一箱足够办完认证再开回家（Sacramento→家 ~120 mi）。</li>
+      </ul>
+    </div>
+
+    <div class="card star">
+      <span class="time">11:45 AM</span>
+      <h3><span class="emoji">🏛️</span>Placerville 老街漫步（~30 min）</h3>
+      <div class="addr">停车：<b>Center Street 停车楼</b>（紧邻 Main St / City Hall）· 1、2 层<b>前 2 小时免费</b></div>
+      <ul>
+        <li>路线：停好上 Main St → <b>Bell Tower 钟楼</b>（1865 地标，拍照）→ 沿街看老建筑（Placerville Hardware 老五金行、Cary House 老旅馆）→ <b>Hangman's Tree（305 Main St）绞刑树</b>打卡 → 折返回停车楼。</li>
+        <li>老街就几个街区，30 分钟够逛。<span class="hot">行李在车上，停进车楼别留贵重物外露。</span></li>
+      </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Center%20Street%20Parking%20Structure%20Placerville%20CA">Google · 停车楼</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Center%20Street%20Parking%20Structure%20Placerville">Apple 地图</a>
+      </div>
+    </div>
+
+    <div class="card meal">
+      <span class="time">12:20 PM</span>
+      <h3><span class="emoji">🥞</span>午餐 · Annie's Mimosas</h3>
+      <div class="addr">155 Placerville Dr, Placerville, CA 95667 · 每天 7:00–14:00 · 老街开车 ~5 min</div>
+      <div class="dur">~40 min · 翻台快、满座常马上有位；benedict / 含羞草口碑好</div>
+      <ul>
+        <li>在 Placerville Dr、靠 US-50 西口，吃完正好上高速继续去 Sacramento。</li>
+      </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Annie's%20Mimosas%20155%20Placerville%20Dr%20Placerville">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Annie's%20Mimosas%20Placerville">Apple 地图</a>
+      </div>
+    </div>
+
+    <div class="card star">
+      <span class="time">~1:50 PM</span>
+      <h3><span class="emoji">📑</span>办海牙认证（Apostille）</h3>
+      <div class="addr">CA Secretary of State, 1500 11th Street, 3rd Floor, Sacramento, CA 95814</div>
+      <div class="dur">walk-in 无需预约 · 约 30 min 当场拿 · 费用 $26（$20+$6）</div>
+      <ul>
+        <li>办：<b>结婚证</b> certified copy 的 Apostille，国家写 <b>China</b>。</li>
+        <li>带齐：certified copy 原件 + Cover Sheet + 付款（刷卡/现金/支票均可）。</li>
+        <li>周一–周五 8:00–17:00，<span class="hot">4:30 前到</span>。</li>
+      </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=California%20Secretary%20of%20State%201500%2011th%20Street%20Sacramento">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=1500%2011th%20Street%20Sacramento%20CA">Apple 地图</a>
+      </div>
+    </div>
+
+    <div class="card move">
+      <span class="time">~2:45 PM</span>
+      <h3><span class="emoji">🏡</span>开车回家 Sunnyvale</h3>
+      <div class="addr">Sacramento → I-80 / US-50 → Bay Area</div>
+      <div class="dur">车程 ~2h15m · 预计 ~5:00 PM 到家</div>
+      <ul>
+        <li>办完认证后，记得后续做<b>认证中文翻译</b>给国内落户用（材料以落户单位要求为准）。</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- ================= PACKING ================= -->
+  <section class="list" id="packing">
+    <h2>✅ 出行清单（可勾选，自动保存）</h2>
+
+    <div class="subhead">🔴 海牙认证 · 周一别忘带</div>
+    <ul class="check" data-group="apostille">
+      <li><label><input type="checkbox"><span class="key">结婚证 certified copy 原件（带签名+钢印）</span></label></li>
+      <li><label><input type="checkbox"><span class="key">Cover Sheet（打印 apostille-request-form.pdf，国家填 China）</span></label></li>
+      <li><label><input type="checkbox"><span class="key">$26 付款（信用卡 / 现金 / 支票）</span></label></li>
+      <li><label><input type="checkbox">身份证件 / 驾照</label></li>
+    </ul>
+
+    <div class="subhead">🎒 通用 / 户外</div>
+    <ul class="check" data-group="general">
+      <li><label><input type="checkbox">防晒霜 + 墨镜 + 帽子（高原紫外线强）</label></li>
+      <li><label><input type="checkbox">外套（昼夜温差大，夜低 ~12°C）</label></li>
+      <li><label><input type="checkbox">走路/徒步鞋（Vikingsholm 上下坡 1 mi）</label></li>
+      <li><label><input type="checkbox">泳衣 / 毛巾 / 换洗（Baldwin Beach 玩水）</label></li>
+      <li><label><input type="checkbox">水 + 零食</label></li>
+      <li><label><input type="checkbox">现金 $15/人（古堡门票现场买）+ 停车零钱</label></li>
+      <li><label><input type="checkbox">游船订单/确认（已选好主菜）</label></li>
+      <li><label><input type="checkbox">手机充电线 / 车充</label></li>
+    </ul>
+
+    <div class="subhead">📞 关键联系方式</div>
+    <ul class="check" data-group="phones">
+      <li><label><input type="checkbox">游船 Zephyr Cove (800) 238-2463（6PM 开船 / 5PM check-in）</label></li>
+      <li><label><input type="checkbox">Hampton Inn (530) 541-5400</label></li>
+      <li><label><input type="checkbox">My Thai (530) 544-3232</label></li>
+    </ul>
+  </section>
+
+  <div class="legend">
+    <span><i style="background:#0a6e6e"></i>景点/活动</span>
+    <span><i style="background:#b9892f"></i>用餐</span>
+    <span><i style="background:#137a4b"></i>重点</span>
+    <span><i style="background:#6b7f8a"></i>交通</span>
+  </div>
+
+</main>
+
+<footer>
+  行程为估算时间，按实际路况/排队调整 · 周日下午节奏紧，卡住「2:30 古堡导览 + 5:00 游船 check-in」两个硬点<br>
+  祝玩得开心，认证顺利 🍀
+</footer>
+
+<script>
+  // 高亮当前 Tab
+  const tabs=[...document.querySelectorAll('nav.tabs a')];
+  const targets=tabs.map(a=>document.querySelector(a.getAttribute('href')));
+  const onScroll=()=>{
+    let i=0;
+    targets.forEach((t,idx)=>{ if(t && t.getBoundingClientRect().top<120) i=idx; });
+    tabs.forEach((a,idx)=>a.classList.toggle('active', idx===i));
+  };
+  window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+
+  // 勾选状态本地保存
+  document.querySelectorAll('.check').forEach(ul=>{
+    const g=ul.dataset.group;
+    ul.querySelectorAll('input').forEach((cb,i)=>{
+      const key='tahoe_'+g+'_'+i;
+      cb.checked = localStorage.getItem(key)==='1';
+      cb.closest('li').classList.toggle('done',cb.checked);
+      cb.addEventListener('change',()=>{
+        localStorage.setItem(key, cb.checked?'1':'0');
+        cb.closest('li').classList.toggle('done',cb.checked);
+      });
+    });
+  });
+</script>
+</body>
+</html>
