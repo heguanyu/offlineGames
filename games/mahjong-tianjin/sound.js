@@ -51,7 +51,9 @@ export class Sound {
       { pitch: 0.92, rate: 0.96, gender: 'male' },   // 2 西 — mature man
       { pitch: 1.0, rate: 0.98, gender: 'female' },  // 3 北 — mature woman
     ];
-    this._clip = [{}, {}, {}, {}];   // _clip[wind][slug] = AudioBuffer
+    this._clip = [{}, {}, {}, {}];   // _clip[wind][slug] = AudioBuffer (per-file fallback)
+    this._sprite = [null, null, null, null]; // _sprite[wind] = one decoded "audio sprite" buffer
+    this._map = [null, null, null, null];    // _map[wind][slug] = { offset, duration } within the sprite
     this._clipLoaded = false; this._clipLoading = false;
     this._zhVoices = [];
     const synth = window.speechSynthesis;
@@ -106,19 +108,36 @@ export class Sound {
     this._clipLoading = true;
     const ctx = this.ctx;
     const dec = (ab) => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.then) p.then(res, rej); });
-    const jobs = [];
-    for (let v = 0; v < 4; v++) for (const slug of CLIP_SLUGS) {
-      jobs.push(fetch(`${CLIP_BASE}${v}/${slug}.wav`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject())).then(dec)
-        .then((buf) => { this._clip[v][slug] = buf; }).catch(() => {}));
+    try {
+      // Preferred: one decoded "sprite" buffer per persona + a slug->{offset,duration}
+      // manifest (tools/pack-voice.js). 5 fetches instead of 168 — the per-file count
+      // was what made the offline cache update crawl.
+      const manifest = await fetch(`${CLIP_BASE}packed/manifest.json`).then((r) => (r.ok ? r.json() : Promise.reject()));
+      await Promise.all(Object.keys(manifest).map((v) =>
+        fetch(`${CLIP_BASE}packed/${v}.wav`).then((r) => r.arrayBuffer()).then(dec)
+          .then((buf) => { this._sprite[v] = buf; this._map[v] = manifest[v]; })));
+    } catch {
+      // Fallback (e.g. unpacked local dev, or a missing sprite): fetch each clip.
+      const jobs = [];
+      for (let v = 0; v < 4; v++) for (const slug of CLIP_SLUGS) {
+        jobs.push(fetch(`${CLIP_BASE}${v}/${slug}.wav`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject())).then(dec)
+          .then((buf) => { this._clip[v][slug] = buf; }).catch(() => {}));
+      }
+      await Promise.all(jobs);
     }
-    await Promise.all(jobs);
     this._clipLoaded = true; this._clipLoading = false;
   }
   // Play clip `slug` in voice `vi` (0..3 = 东南西北 persona); fall back to TTS if the clip isn't ready.
   _playClip(slug, vi = 0) {
     if (this.muted) return;
     const ctx = this.resume();
-    const buf = USE_CLIPS && ctx && this._clip[vi] && this._clip[vi][slug];
+    if (!ctx) { this.say(CLIP_TEXT[slug] || slug, vi); return; }
+    // Preferred: play a slice of the persona's sprite buffer.
+    const m = USE_CLIPS && this._map[vi] && this._map[vi][slug];
+    if (m && this._sprite[vi]) {
+      try { const s = ctx.createBufferSource(); s.buffer = this._sprite[vi]; s.connect(ctx.destination); s.start(ctx.currentTime, m.offset, m.duration); return; } catch {}
+    }
+    const buf = USE_CLIPS && this._clip[vi] && this._clip[vi][slug]; // per-file fallback
     if (buf) { try { const s = ctx.createBufferSource(); s.buffer = buf; s.connect(ctx.destination); s.start(); } catch {} }
     else this.say(CLIP_TEXT[slug] || slug, vi);
   }

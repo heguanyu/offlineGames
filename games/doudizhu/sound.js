@@ -76,6 +76,19 @@ function speechRegion(buf) {
 async function preload() {
   if (!USE_CLIPS || loaded || loading || !ctx) return;
   loading = true;
+  try {
+    // Preferred: one decoded "sprite" buffer per seat + a slug->{offset,duration}
+    // manifest (tools/pack-voice.js, already silence-trimmed). 4 fetches instead of 123
+    // — the per-file count was what made the offline cache update crawl. speak() plays
+    // each token as a slice of the shared buffer, exactly as it did per-file.
+    const manifest = await fetch(`${VOICE_BASE}packed/manifest.json`).then((r) => (r.ok ? r.json() : Promise.reject()));
+    await Promise.all(Object.keys(manifest).map((seat) =>
+      fetch(`${VOICE_BASE}packed/${seat}.wav`).then((r) => r.arrayBuffer()).then(decode)
+        .then((buf) => { for (const slug in manifest[seat]) { const m = manifest[seat][slug]; buffers[seat][slug] = { buf, offset: m.offset, duration: m.duration }; } })));
+    loaded = true; loading = false;
+    return;
+  } catch {}
+  // Fallback (e.g. unpacked local dev, or a missing sprite): fetch + trim each clip.
   const slugs = [...new Set(Object.values(SLUG))];
   const jobs = [];
   for (let seat = 0; seat < 3; seat++) for (const slug of slugs) {

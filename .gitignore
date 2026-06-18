@@ -25,6 +25,11 @@ test/_commitmsg.txt
 *.pth
 *.bin
 
+# Packed voice "sprites" + manifest are GENERATED from the raw per-clip wavs by
+# tools/pack-voice.js (run in the CD pipeline, or locally before serving). The raw
+# games/**/voice/<set>/*.wav stay in the repo as the source of truth.
+games/**/voice/packed/
+
 # online server runtime data (lifetime scores + the SQLite database)
 server/scores.json
 server/data/

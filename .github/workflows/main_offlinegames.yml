@@ -36,6 +36,13 @@ jobs:
         with:
           node-version: '20.x'
 
+      - name: Pack voice clips into per-set sprites
+        # Generate games/**/voice/packed/{<set>.wav,manifest.json} from the raw per-clip
+        # wavs (git-ignored output) so the SW caches ~7 sprites instead of ~291 wavs.
+        # Pure Node built-ins — no npm install needed. Runs before staging so the packed
+        # output is copied into _deploy.
+        run: node tools/pack-voice.js
+
       - name: Stage the full site + server package
         # Copy the whole publishable site (the server serves it statically), omitting the .git/CI
         # metadata, dev-only test/, the server's local node_modules + data, and ROMs (git-ignored).
