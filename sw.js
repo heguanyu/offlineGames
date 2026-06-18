@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.5.43';
+const CACHE = 'offline-games-0.5.44';
 
 const ASSETS = [
   './',
@@ -121,13 +121,12 @@ const ASSETS = [
   './emulatorjs/data/compression/extractzip.js',
   './emulatorjs/data/compression/libunrar.js',
   './emulatorjs/data/compression/libunrar.wasm',
+  // GBA runs the WebGL1 (legacy) cores (forced via EJS_forceLegacyCores in gba/index.html);
+  // NDS (melonds) runs the WebGL2 cores (thread when cross-origin-isolated, else non-thread).
+  // The unused mgba/vbam-wasm (WebGL2) + melonds*-legacy (WebGL1) builds are NOT bundled.
   './emulatorjs/data/cores/mgba-legacy-wasm.data',
-  './emulatorjs/data/cores/mgba-wasm.data',
-  './emulatorjs/data/cores/melonds-legacy-wasm.data',
   './emulatorjs/data/cores/melonds-wasm.data',
-  './emulatorjs/data/cores/melonds-thread-legacy-wasm.data',
   './emulatorjs/data/cores/melonds-thread-wasm.data',
-  './emulatorjs/data/cores/vbam-wasm.data',
   './emulatorjs/data/cores/vbam-legacy-wasm.data',
   './emulatorjs/data/cores/reports/mgba.json',
   './emulatorjs/data/cores/reports/melonds.json',

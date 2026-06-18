@@ -189,6 +189,11 @@
       window.EJS_player = '#game';
       // Core chosen by the hub entry via ?core= (mGBA default, VBA-M opt-in).
       window.EJS_core = CORE === 'vbam' ? 'vbam' : 'gba';
+      // GBA is 2D — the WebGL1 (legacy) core build is what these cores already
+      // default to (their report has no defaultWebGL2). Force it so we ship ONLY
+      // the legacy GBA cores: this also hides the in-game "WebGL2" graphics toggle,
+      // which would otherwise try to load a non-bundled core and brick GBA offline.
+      window.EJS_forceLegacyCores = true;
       // Force the GBA control scheme so the touch gamepad + controller map
       // identically regardless of core.
       window.EJS_controlScheme = 'gba';
