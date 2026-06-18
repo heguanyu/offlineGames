@@ -5,8 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>声音体检 · Voice clip audit</title>
 <style>
-  body { margin: 0; padding: 16px 18px 48px; background: #10131c; color: #e7ecf5;
+  /* pad for the iPad/iPhone safe areas (notch + status bar) when installed/standalone */
+  body { margin: 0; background: #10131c; color: #e7ecf5;
+    padding: max(16px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
+             max(48px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
     font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  .back-btn { display: inline-block; margin-bottom: 12px; background: #1b5e45; color: #eaf6f0;
+    border: 1px solid #2c8160; border-radius: 9px; padding: 8px 16px; font-size: 0.9rem; font-weight: 700;
+    cursor: pointer; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+  .back-btn:hover { background: #20704f; }
   h1 { font-size: 1.3rem; margin: 0 0 4px; }
   p.sub { color: #9aa3bd; margin: 0 0 14px; font-size: 0.88rem; line-height: 1.5; }
   h2 { margin-top: 26px; border-bottom: 1px solid #2c3a63; padding-bottom: 4px; font-size: 1.05rem; }
@@ -28,6 +35,8 @@
 </style>
 </head>
 <body>
+<!-- replace (not push) so the iPad edge-swipe has no voicepick entry to jump back into -->
+<a class="back-btn" href="../" onclick="event.preventDefault(); location.replace('../');">← 返回主页 / Return to main page</a>
 <h1>🎙️ 声音体检 — clip play-time outliers</h1>
 <p class="sub">
   Measures every shipped voice clip (both games, all voices) live in your browser and flags duration
