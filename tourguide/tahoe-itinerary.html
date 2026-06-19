@@ -534,6 +534,11 @@
       [7,'太浩',17,0,0],[8,'太浩',20,0,0],[9,'太浩',22,0,0],[10,'太浩',24,0,0],[11,'普镇',28,0,0],
       [12,'普镇',30,0,0],[13,'萨城',33,0,0],[14,'萨城',34,0,0],[15,'萨城',35,0,0],[16,'湾区',30,0,0],[17,'湾区',29,0,0] ] }
   };
+  // The baked numbers above are the offline floor. If a previous ONLINE visit cached the
+  // server-polled forecast (see the module script at the bottom), prefer it — so even offline
+  // we show the freshest data we ever received, not the build-time snapshot.
+  try { const _c = JSON.parse(localStorage.getItem('tahoe_wx') || 'null');
+    if (_c) { if (_c.day1) WEATHER.day1 = _c.day1; if (_c.day2) WEATHER.day2 = _c.day2; if (_c.fetched) WEATHER.fetched = _c.fetched; } } catch {}
   const wxIcon = (c,night) => {
     if (night){                                   // after sunset / before sunrise → moon
       if (c===0||c===1) return '🌙';
@@ -623,6 +628,17 @@
     };
   }
 
+  // Live weather: the module script at the bottom fetches the server-polled forecast and calls
+  // this to merge it in, cache it for offline, and re-draw the rail. Best-effort + idempotent.
+  window.__tahoeApplyWeather = function(data){
+    if (!data || (!data.day1 && !data.day2)) return;
+    if (data.day1) WEATHER.day1 = data.day1;
+    if (data.day2) WEATHER.day2 = data.day2;
+    if (data.fetched) WEATHER.fetched = data.fetched;
+    try { localStorage.setItem('tahoe_wx', JSON.stringify(data)); } catch {}
+    renderRail(wxCurrentDay);
+  };
+
   // ===== Day tabs (周日 / 周一 / 清单) with per-step 已完成 checkboxes =====
   // Each tab shows one day's cards. Every card gets a 已完成 checkbox whose state
   // persists in localStorage. On load we open today's day (clamped to the trip's
@@ -700,6 +716,20 @@
       const y=open.getBoundingClientRect().top + window.pageYOffset - offset;
       window.scrollTo({ top: Math.max(0,y), behavior:'smooth' });
     });
+  })();
+</script>
+<script type="module">
+  // On load, pull the server-polled forecast (hourly-refreshed) and hand it to the classic
+  // script above. Cross-origin from the Pages mirror → resolved via apiBase() (single source of
+  // truth for the host). Fails silently offline — the page already rendered baked/cached data.
+  import { apiBase } from '../games/mahjong-common-online/server-url.js';
+  (async () => {
+    try {
+      const r = await fetch(apiBase() + '/api/weather', { cache: 'no-store' });
+      if (!r.ok) return;
+      const data = await r.json();
+      window.__tahoeApplyWeather?.(data);
+    } catch { /* offline / server down → keep baked+cached */ }
   })();
 </script>
 </body>

@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.5.46';
+const CACHE = 'offline-games-0.5.47';
 
 const ASSETS = [
   './',
@@ -223,6 +223,9 @@ function crossOriginIsolate(res) {
 // version bump above, never silently mid-session.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // Dynamic API (e.g. /api/weather) must never be cached or served cache-first — let it hit the
+  // network so the page always gets the latest. Offline, the fetch fails and the page falls back.
+  try { if (new URL(e.request.url).pathname.startsWith('/api/')) return; } catch {}
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((hit) => {
       if (hit) return crossOriginIsolate(hit);

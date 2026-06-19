@@ -37,15 +37,20 @@ try {
   const sdb = new Database(DB_FILE);
   sdb.pragma('journal_mode = DELETE'); // single-file DB — no -wal/-shm sidecars (simpler ops + test cleanup)
   sdb.exec('CREATE TABLE IF NOT EXISTS players (uid TEXT PRIMARY KEY, name TEXT, total INTEGER DEFAULT 0, pots INTEGER DEFAULT 0);'
-    + 'CREATE TABLE IF NOT EXISTS tables (id INTEGER PRIMARY KEY, seats TEXT, pot TEXT);');
+    + 'CREATE TABLE IF NOT EXISTS tables (id INTEGER PRIMARY KEY, seats TEXT, pot TEXT);'
+    + 'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);'); // small key/value blobs (e.g. the polled weather forecast)
   const qUpsertPlayer = sdb.prepare('INSERT INTO players (uid,name,total,pots) VALUES (@uid,@name,@total,@pots) '
     + 'ON CONFLICT(uid) DO UPDATE SET name=@name, total=@total, pots=@pots');
   const qPlayers = sdb.prepare('SELECT uid,name,total,pots FROM players');
   const qUpsertTable = sdb.prepare('INSERT INTO tables (id,seats,pot) VALUES (@id,@seats,@pot) '
     + 'ON CONFLICT(id) DO UPDATE SET seats=@seats, pot=@pot');
   const qTables = sdb.prepare('SELECT id,seats,pot FROM tables');
+  const qSetMeta = sdb.prepare('INSERT INTO meta (key,value) VALUES (@k,@v) ON CONFLICT(key) DO UPDATE SET value=@v');
+  const qGetMeta = sdb.prepare('SELECT value FROM meta WHERE key=?');
   impl = {
     backend: 'sqlite',
+    saveWeather(json) { qSetMeta.run({ k: 'weather', v: JSON.stringify(json) }); },
+    loadWeather() { const r = qGetMeta.get('weather'); return r ? JSON.parse(r.value) : null; },
     // Per-game leaderboards share the players table via a composite "game|uid" key. loadScoreBook
     // returns a nested book { game: { uid: {name,total,pots} } }; legacy bare-uid rows (pre per-game,
     // all 天津) read as the 'tianjin' board.
@@ -98,6 +103,8 @@ if (!impl) {
   for (const k of Object.keys(state.scoreBook)) { if (!k.includes('|')) { state.scoreBook['tianjin|' + k] = state.scoreBook[k]; delete state.scoreBook[k]; } }
   impl = {
     backend: 'json',
+    saveWeather(json) { state.weather = json; flush(); },
+    loadWeather() { return state.weather || null; },
     loadScoreBook() {
       const o = {};
       for (const [k, rec] of Object.entries(state.scoreBook)) {

@@ -19,3 +19,12 @@ export function serverUrl() {
   if (h.endsWith('github.io')) return `wss://${ONLINE_SERVER}`;        // Pages mirror → Azure backend
   return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`; // served from the app → same origin
 }
+
+// HTTP(S) base for the server's REST endpoints (e.g. /api/weather), resolved the same way as
+// serverUrl() so a page on the Pages mirror reaches across to the Azure backend.
+export function apiBase() {
+  const h = location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1') return `http://${h}:8090`;
+  if (h.endsWith('github.io')) return `https://${ONLINE_SERVER}`;
+  return location.origin; // served from the app → same origin
+}

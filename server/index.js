@@ -24,6 +24,7 @@ import { ruleset as tianjin } from './rulesets/tianjin.js';
 import { ruleset as guobiao, freeRuleset as guobiaoFree } from './rulesets/guobiao.js';
 import { BOT_NAMES } from '../games/mahjong-common/bot-names.js';
 import db from './db.js';
+import { startWeather, getWeatherJson } from './weather.js';
 
 // The game each table hosts. Same lobby + Table + protocol for every entry; the ruleset is the only
 // difference (server/rulesets/*.js). One table per game type — the lobby's game tabs pick which.
@@ -370,6 +371,17 @@ async function serveStatic(req, res) {
 const server = http.createServer((req, res) => {
   if (req.url === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('mahjong-online ok'); return; }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
+  // Server-polled weather for the tourguide dial. CORS-enabled (no isolate()) so the GitHub Pages
+  // mirror can read it cross-origin; never cached (dynamic). 503 until the first poll lands.
+  if (req.url.split('?')[0] === '/api/weather') {
+    const origin = req.headers.origin;
+    const cors = { 'cache-control': 'no-store', 'content-type': 'application/json; charset=utf-8' };
+    if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
+    const body = getWeatherJson();
+    res.writeHead(body ? 200 : 503, cors);
+    res.end(req.method === 'HEAD' ? undefined : (body || '{"error":"warming up"}'));
+    return;
+  }
   serveStatic(req, res);
 });
 
@@ -438,3 +450,6 @@ wss.on('close', () => clearInterval(readySweep));
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { flushState(); process.exit(0); });
 
 server.listen(PORT, () => console.log(`mahjong-online lobby + site listening on :${PORT} (static root ${ROOT})`));
+
+// Background: refresh the tourguide weather forecast now + hourly (served at /api/weather).
+startWeather();
