@@ -82,6 +82,10 @@
   .card ul{margin:9px 0 0; padding-left:18px; font-size:13.5px;}
   .card ul li{margin:3px 0;}
   .card .hot{color:var(--warn); font-weight:600;}
+  /* optional / 机动 stop — dashed card + a badge in the title */
+  .card.opt{border-style:dashed; background:#fbfdfd;}
+  .optbadge{display:inline-block; margin-left:8px; font-size:11px; font-weight:700;
+    color:var(--teal2); background:#e6f4f4; border:1px solid #bfe3e3; border-radius:20px; padding:1px 8px;}
   /* per-step 已完成 toggle + completed state */
   .cardchk{
     display:flex; align-items:center; justify-content:flex-end; gap:8px;
@@ -186,10 +190,10 @@
   </div>
 
   <div class="banner">
-    🅿️ <b>Emerald Bay 停车位上午10点后常爆满</b>——我们下午到，更紧张，看到空位立刻停；实在没位就在 Inspiration Point 路边轮候。
+    🅿️ <b>Emerald Bay 停车位常爆满</b>——所以<b>午餐后直接先冲 Emerald Bay 抢车位、办古堡</b>，把 Tallac 留到最后机动。看到空位立刻停；实在没位就在 Inspiration Point 路边轮候。
   </div>
   <div class="banner">
-    ⏱️ <b>节奏紧凑：游船 5:00 PM 必须到 Zephyr Cove check-in。</b>下午要卡着 <b>2:30 PM 的古堡导览</b>。若任一环节拖延，<b>放弃下湾古堡</b>，改在 <b>Inspiration Point 观景台</b>（免费、0 体力、5 分钟俯瞰全湾）拍照后直接去码头。
+    ⏱️ <b>节奏：游船 5:00 PM 必须到 Zephyr Cove check-in。</b>先办完 Emerald Bay 古堡（<b>赶 1:30 / 2:00 的早场导览</b>留 buffer），<b>Tallac 视时间机动</b>——拖延就跳过 Tallac（改周一上午顺路补），再不行连下湾古堡也放弃，在 <b>Inspiration Point 观景台</b>拍照后直接去码头。
   </div>
 
   <div class="timeline">
@@ -226,7 +230,7 @@
       <div class="addr">2108 Lake Tahoe Blvd, South Lake Tahoe, CA 96150 · ☎ (530) 544-3232</div>
       <div class="dur">用餐 ~1h（11:00 一开门就到，节省时间）</div>
       <ul>
-        <li>就在进城的「Y」路口附近，正好在上 Hwy 89 去 Tallac 的路上。</li>
+        <li>就在进城的「Y」路口附近，正好在上 Hwy 89 去 Emerald Bay/翡翠湾 的路上。</li>
       </ul>
       <div class="navbtns">
         <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=My%20Thai%20Cuisine%202108%20Lake%20Tahoe%20Blvd%20South%20Lake%20Tahoe">Google 导航</a>
@@ -235,27 +239,12 @@
     </div>
 
     <div class="card star">
-      <span class="time">12:10 PM</span>
-      <h3><span class="emoji">📷</span>Tallac 历史遗产区</h3>
-      <div class="addr">Tallac Historic Site, Highway 89, South Lake Tahoe（My Thai 出发 ~10 min）</div>
-      <div class="dur">参观/拍照 ~45 min</div>
+      <span class="time">~12:25 PM</span>
+      <h3><span class="emoji">📷</span>Emerald Bay 观景台 + 抢车位</h3>
+      <div class="addr">Emerald Bay State Park Lookout（Vikingsholm 步道口同一停车场）, Highway 89（My Thai 出发 ~25 min）</div>
+      <div class="dur">~20 min 拍照（俯瞰翡翠湾 + Fannette 小岛，全湖最经典机位）</div>
       <ul>
-        <li>20 世纪初湖畔豪华别墅群 + 松林 + 湖滩，免费、好拍。</li>
-        <li>旁边 Kiva Beach 可顺路走到湖边取景。</li>
-      </ul>
-      <div class="navbtns">
-        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Tallac%20Historic%20Site%20South%20Lake%20Tahoe">Google 导航</a>
-        <a class="a" target="_blank" href="https://maps.apple.com/?q=Tallac%20Historic%20Site">Apple 地图</a>
-      </div>
-    </div>
-
-    <div class="card star">
-      <span class="time">1:10 PM</span>
-      <h3><span class="emoji">📷</span>Emerald Bay State Park 观景台</h3>
-      <div class="addr">Emerald Bay State Park Lookout（Vikingsholm 步道口同一停车场）, Highway 89（Tallac 出发 ~12 min）</div>
-      <div class="dur">~30 min 拍照（俯瞰翡翠湾 + Fannette 小岛，全湖最经典机位）</div>
-      <ul>
-        <li>停车场日用车费约 $10，备好。<span class="hot">车位紧张，看到空位立刻停。</span></li>
+        <li><span class="hot">午餐后直接来这里——先抢到车位、把古堡办完是今天的硬任务。</span>停车场日用车费约 $10，备好；看到空位立刻停。</li>
         <li>观景台就在 Vikingsholm 步道口，拍完直接从这里走下湾办古堡。</li>
       </ul>
       <div class="navbtns">
@@ -265,7 +254,7 @@
     </div>
 
     <div class="card move">
-      <span class="time">1:45 PM</span>
+      <span class="time">~12:50 PM</span>
       <h3><span class="emoji">🥾</span>步行下到 Vikingsholm（湾底）</h3>
       <div class="addr">Vikingsholm Trail · 单程 1 mi、落差 150m</div>
       <div class="dur">下行 ~30 min（回程上坡更累，留体力）</div>
@@ -275,21 +264,36 @@
     </div>
 
     <div class="card star">
-      <span class="time">2:30 PM</span>
+      <span class="time">1:30 PM</span>
       <h3><span class="emoji">🏰</span>古堡 Vikingsholm 导览</h3>
       <div class="addr">Vikingsholm Castle, Emerald Bay 湾底</div>
       <div class="dur">导览 30 min · $15/成人、$12/儿童 · 可刷卡/现金 · 先到先得不预约</div>
       <ul>
-        <li>到湾底先在 Visitor Center 买票，<span class="hot">赶 2:30 这班</span>（每半小时一场）。</li>
+        <li>到湾底先在 Visitor Center 买票，<span class="hot">赶 1:30（或 2:00）的早场</span>（每半小时一场）——早办完才有富余时间留给 Tallac。</li>
         <li>外观/沙滩/小岛免费自由拍，导览后留 ~25 min 在湾底取景。</li>
         <li>来不及就<b>放弃下湾古堡</b>，在观景台拍完直接开去码头。</li>
       </ul>
     </div>
 
     <div class="card move">
-      <span class="time">3:25 PM</span>
+      <span class="time">~2:30 PM</span>
       <h3><span class="emoji">🥾</span>步行返回停车场</h3>
-      <div class="dur">上坡 ~40 min · <span class="hot">4:10 前务必回到车上</span></div>
+      <div class="dur">上坡 ~40 min · <span class="hot">4:10 前务必回到车上去码头</span></div>
+    </div>
+
+    <div class="card star opt">
+      <span class="time">~3:15 PM</span>
+      <h3><span class="emoji">📷</span>Tallac 历史遗产区<span class="optbadge">可选 · 机动</span></h3>
+      <div class="addr">Tallac Historic Site, Highway 89, South Lake Tahoe（Emerald Bay 出发 ~12 min，顺路往城区方向）</div>
+      <div class="dur">参观/拍照 ~40 min · <b>时间够才去</b></div>
+      <ul>
+        <li>20 世纪初湖畔豪华别墅群 + 松林 + 湖滩，免费、好拍；旁边 Kiva Beach 可顺路走到湖边取景。</li>
+        <li><span class="hot">古堡办完若已晚 / 怕赶不上 5:00 游船，就跳过</span>——周一上午沙滩就在它隔壁，可顺路补（见周一）。</li>
+      </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Tallac%20Historic%20Site%20South%20Lake%20Tahoe">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Tallac%20Historic%20Site">Apple 地图</a>
+      </div>
     </div>
 
     <div class="card move">
@@ -356,14 +360,28 @@
       <span class="time">9:00 AM</span>
       <h3><span class="emoji">🏖️</span>Baldwin Beach 随便玩</h3>
       <div class="addr">Baldwin Beach, Highway 89, South Lake Tahoe（酒店 ~12 min）</div>
-      <div class="dur">~1.5h · 退房后过去（行李上车）</div>
+      <div class="dur">~1.5h（周日已去 Tallac）／~45 min（若还要补 Tallac，见下）· 退房后过去（行李上车）</div>
       <ul>
         <li>沙缓水清、人少安静，适合踩水拍照。<span class="hot">入口有 day-use 车费（约 $10）。</span></li>
-        <li>水很凉，玩水备换洗/毛巾；10:30 左右收拾出发。</li>
+        <li>水很凉，玩水备换洗/毛巾；<b>10:30 左右收拾出发（雷打不动）</b>。</li>
       </ul>
       <div class="navbtns">
         <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Baldwin%20Beach%20South%20Lake%20Tahoe">Google 导航</a>
         <a class="a" target="_blank" href="https://maps.apple.com/?q=Baldwin%20Beach%20South%20Lake%20Tahoe">Apple 地图</a>
+      </div>
+    </div>
+
+    <div class="card star opt">
+      <span class="time">~9:45 AM</span>
+      <h3><span class="emoji">📷</span>Tallac 历史遗产区<span class="optbadge">可选 · 补做</span></h3>
+      <div class="addr">Tallac Historic Site, Highway 89（就在 Baldwin / Kiva Beach 隔壁，~5 min）</div>
+      <div class="dur">~45 min · <b>仅当周日没去成才来</b>，相应把沙滩压到 ~45 min</div>
+      <ul>
+        <li>和 Baldwin Beach 同一片（Hwy 89 旁），顺路不绕；看完照样 <span class="hot">10:30 出发去 Sacramento</span>，不影响 4:30 PM 认证截止。</li>
+      </ul>
+      <div class="navbtns">
+        <a class="g" target="_blank" href="https://www.google.com/maps/search/?api=1&query=Tallac%20Historic%20Site%20South%20Lake%20Tahoe">Google 导航</a>
+        <a class="a" target="_blank" href="https://maps.apple.com/?q=Tallac%20Historic%20Site">Apple 地图</a>
       </div>
     </div>
 
