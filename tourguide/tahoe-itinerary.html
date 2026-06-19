@@ -99,7 +99,8 @@
     background:rgba(255,255,255,.82); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
     border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); display:flex;}
   .wxrail[hidden]{display:none;}
-  .wxdial{flex:1; position:relative; overflow-y:auto; scroll-snap-type:y mandatory; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+  .wxdial{flex:1; position:relative; overflow-y:auto; overflow-x:hidden; scroll-snap-type:y mandatory; scrollbar-width:none; -webkit-overflow-scrolling:touch;
+    touch-action:pan-y; overscroll-behavior:contain;}
   .wxdial::-webkit-scrollbar{display:none;}
   /* .wxtick height MUST equal WXH in the script (104) for the needle to frame a block */
   .wxtick{height:104px; scroll-snap-align:center; display:flex; flex-direction:column;
