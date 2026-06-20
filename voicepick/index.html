@@ -92,24 +92,9 @@ const GAMES = {
 };
 
 // ---- A/B casting tests (data-driven; add more here) ----
-const ABTESTS = {
-  fm1p1: {
-    title: '成熟女声 一筒 (persona 3 · 北) — 去掉前导吸气',
-    note: '原 一筒 前面有一段吸气声。fm1 是克隆音（随机输出），重 roll 了 8 个 take 并裁掉前导吸气。current 是我已应用的那个；t0–t7 为全部候选。听完告诉我用哪个 take（或保持 current）。',
-    words: { p1: '一筒' },
-    rows: [
-      { label: 'current (applied)', dir: '../games/mahjong-common/voice/3' },
-      { label: 'take 0', dir: '../test/fm1p1/t0' },
-      { label: 'take 1', dir: '../test/fm1p1/t1' },
-      { label: 'take 2', dir: '../test/fm1p1/t2' },
-      { label: 'take 3', dir: '../test/fm1p1/t3' },
-      { label: 'take 4', dir: '../test/fm1p1/t4' },
-      { label: 'take 5', dir: '../test/fm1p1/t5' },
-      { label: 'take 6', dir: '../test/fm1p1/t6' },
-      { label: 'take 7', dir: '../test/fm1p1/t7' },
-    ],
-  },
-};
+// Concluded A/B tests are removed once decided (mm1 casting → C; 南/白/發 → ！/！/'; 一筒 → take 4).
+// Add a new entry here (words + rows of {label, dir}) when a fresh casting/clip comparison is needed.
+const ABTESTS = {};
 
 const LONG = 1.6, SHORT = 0.55, FLOOR = 0.12;
 const median = (xs) => { if (!xs.length) return 0; const a = xs.slice().sort((x,y)=>x-y); const m = a.length>>1; return a.length%2 ? a[m] : (a[m-1]+a[m])/2; };
@@ -163,6 +148,7 @@ function renderAB() {
     }
     html += `</table>`;
   }
+  if (!html) html = '<p class="sub">（暂无进行中的 A/B 测试 — 已结论的会被移除）</p>';
   const ab = document.getElementById('abcontent'); ab.innerHTML = html; ab.hidden = false;
 }
 
