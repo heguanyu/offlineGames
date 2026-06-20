@@ -572,13 +572,25 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
    The per-seat 本局得分 grid is dropped here — those scores sit beside each handrow (.seat-score). */
 body.flat #result-frame { width: min(600px, 84vmax); min-width: min(560px, 96vmax); transform: none; }
 
-body.flat #result-overlay .panel { max-width: none; }
+body.flat #result-overlay .panel { max-width: none; max-height: 70vmin; } /* tighter so the 玩家/对家 rows show */
+
+/* difficulty / start modal: compact in 2D so it doesn't dominate the small board (3D unaffected) */
+body.flat #start-overlay .panel { max-width: 440px; padding: 12px 16px; }
+body.flat #start-overlay h2 { font-size: 1.05rem; margin-bottom: 2px; }
+body.flat #start-overlay p.sub { font-size: 0.72rem; margin-bottom: 6px; }
+body.flat #start-overlay .level-row { gap: 6px; margin: 7px 0; }
+body.flat #start-overlay .level-btn { flex-basis: 70px; padding: 7px 5px; border-radius: 9px; }
+body.flat #start-overlay .level-btn b { font-size: 0.9rem; margin-bottom: 1px; }
+body.flat #start-overlay .level-btn span { font-size: 0.6rem; }
+body.flat #start-overlay .big-btn { padding: 9px; font-size: 0.95rem; margin-top: 7px; border-radius: 10px; }
+body.flat #start-overlay .big-btn.hub { margin-top: 10px; }
+body.flat #start-overlay .link-btn { font-size: 0.74rem; margin-top: 8px; }
 
 body.flat #result-overlay .bd-totals { display: none; } /* scores shown beside the handrows instead */
 
 body.flat #result-overlay .seat-score { font-size: 33px; } /* ≈ the flat handrow card height */
 
-body.flat .panel { padding: 10px 14px; max-height: 70vmin; border-radius: 14px; } /* vmin: board short side (force-landscape safe) */
+body.flat .panel { padding: 10px 14px; max-height: 92vmin; border-radius: 14px; } /* vmin: board short side (force-landscape safe) */
 
 body.flat .panel h2 { font-size: 1.08rem; }
 
