@@ -93,29 +93,20 @@ const GAMES = {
 
 // ---- A/B casting tests (data-driven; add more here) ----
 const ABTESTS = {
-  mm1: {
-    title: '成熟男声 (persona 2 · 西/上家/对家) — ✓ 已选 C 并上线',
-    note: '原来的「45 岁、低沉」太老了。已选 C（~38 岁、relaxed & easygoing，seed 42，1.3×），现已上线全部 persona 2（麻将 西 / 斗地主 上家 / 掼蛋 对家）。下方 current(shipped) 现在就是 C；cur/A/B/D 为当时的候选样词（1.3×）。',
-    words: { sa5:'仨五！', bomb:'炸弹！', shunzi:'顺子！', tube:'钢板！', flush:'同花顺！' },
+  fm1p1: {
+    title: '成熟女声 一筒 (persona 3 · 北) — 去掉前导吸气',
+    note: '原 一筒 前面有一段吸气声。fm1 是克隆音（随机输出），重 roll 了 8 个 take 并裁掉前导吸气。current 是我已应用的那个；t0–t7 为全部候选。听完告诉我用哪个 take（或保持 current）。',
+    words: { p1: '一筒' },
     rows: [
-      { label: 'current (shipped · 45 · 1.8×)', dir: '../games/guandan/voice/2' },
-      { label: 'cur — 45 deep/mellow @1.3×', dir: '../test/mm1cmp/cur' },
-      { label: 'A — ~35 warm & clear, friendly', dir: '../test/mm1cmp/A' },
-      { label: 'B — early–mid 30s, bright & energetic', dir: '../test/mm1cmp/B' },
-      { label: 'C — ~38 relaxed & easygoing', dir: '../test/mm1cmp/C' },
-      { label: 'D — mid-30s, lively announcer', dir: '../test/mm1cmp/D' },
-    ],
-  },
-  mm1cue: {
-    title: '成熟男声 南 / 白 / 發 — 标点测试（✓ 已定）',
-    note: 'mm1 (voice C) 把 南 念得偏长、發 带一点气声。✓ 已选 南=！、白=！、發=\'，并上线 mahjong persona 2（作为 PERSONA_TEXT 覆盖，重生成也会复现）。下方 current 现在就是定稿；其余行为当时的候选。',
-    words: { w1: '南', d2: '白', d1: '發' },
-    rows: [
-      { label: 'current (shipped · bare)', dir: '../games/mahjong-common/voice/2' },
-      { label: '。 period', dir: '../test/mm1cue/dot' },
-      { label: '， comma', dir: '../test/mm1cue/com' },
-      { label: '！ exclamation', dir: '../test/mm1cue/exc' },
-      { label: "' apostrophe", dir: '../test/mm1cue/apo' },
+      { label: 'current (applied)', dir: '../games/mahjong-common/voice/3' },
+      { label: 'take 0', dir: '../test/fm1p1/t0' },
+      { label: 'take 1', dir: '../test/fm1p1/t1' },
+      { label: 'take 2', dir: '../test/fm1p1/t2' },
+      { label: 'take 3', dir: '../test/fm1p1/t3' },
+      { label: 'take 4', dir: '../test/fm1p1/t4' },
+      { label: 'take 5', dir: '../test/fm1p1/t5' },
+      { label: 'take 6', dir: '../test/fm1p1/t6' },
+      { label: 'take 7', dir: '../test/fm1p1/t7' },
     ],
   },
 };
