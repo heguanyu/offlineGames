@@ -30,6 +30,12 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 
 #round-info b { color: var(--gold); }
 
+/* one inline line in the 3D top bar (a · separator between the two groups)… */
+#round-info .ri-level::before { content: ' · '; }
+/* …but two stacked rows in the flat nav rail: 圈+庄 on top, 难度 below */
+body.flat #round-info .ri-round, body.flat #round-info .ri-level { display: block; }
+body.flat #round-info .ri-level::before { content: none; }
+
 /* Scoreboard — a square panel pinned to the top-right corner of the table, with the
    four seats laid out as a cross that mirrors the table (对家 top, 上家 left, 下家 right,
    玩家 bottom). Floats over the canvas/board in both the 3D and flat layouts. */
@@ -171,7 +177,45 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
   font-size: 13px; font-weight: 800; letter-spacing: 1px; color: var(--gold); white-space: nowrap;
   -webkit-text-stroke: 0.6px rgba(0,0,0,0.92); text-shadow: 0 1px 2px rgba(0,0,0,0.85); }
 
-.seat-hand.top { bottom: 100%; left: 50%; transform: translate(-50%, -12px); }
+/* 玩家 (bottom) / 对家 (top): centred on the panel; in the flat (2D) modal they're nudged left
+   (--sh-bias, set under body.flat) so the right-edge score clears the 下家 strip. 3D = 0 (centred). */
+.seat-hand { --sh-bias: 0px; }
+.seat-hand.top { bottom: 100%; left: 50%; transform: translate(calc(-50% - var(--sh-bias)), -12px); }
+
+/* 下家 (right) / 上家 (left) revealed hands: a vertical strip pinned just outside the panel's
+   side, the tile row rotated 90° so it reads as that seat's hand. The translate centres the
+   rotated strip on the panel edge, then nudges it fully clear by --sh-push (≈ half the strip's
+   depth + a gap, larger for the 3D tiles). It rides the #result-frame transform (scale/lift). */
+.seat-hand { --sh-push: 50px; }
+.seat-hand.right { left: 100%;  top: 50%; transform: translate(calc(-50% + var(--sh-push)), -50%) rotate(90deg); }
+.seat-hand.left  { right: 100%; top: 50%; transform: translate(calc(50% - var(--sh-push)), -50%) rotate(-90deg); }
+/* 玩家 (the winner/you): revealed hand pinned just below the panel, nudged left (see .top) */
+.seat-hand.bottom { top: 100%; left: 50%; transform: translate(calc(-50% - var(--sh-bias)), 12px); }
+
+/* each seat's hand score, in big glowing text beside its revealed row (2D modal only), always
+   horizontal. Anchored on the edge nearest its row and growing OUTWARD, so a 2–3 digit score
+   never grows back over the handrow. */
+.seat-score { position: absolute; z-index: 2; font-weight: 900; line-height: 1; white-space: nowrap;
+  font-size: 70px; font-variant-numeric: tabular-nums;
+  padding: 4px 16px; border-radius: 14px;
+  background: rgba(3,14,9,0.72); box-shadow: 0 3px 12px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(232,196,102,0.35);
+  text-shadow: 0 0 9px currentColor, 0 0 20px currentColor, 0 2px 4px rgba(0,0,0,0.85); }
+.seat-score.pos { color: #7ddf8a; }
+.seat-score.neg { color: #ef9a9a; }
+.seat-score.zero { color: #cfe7db; }
+/* 玩家 (bottom) / 对家 (top): unrotated rows → score just to the right of the row box */
+.seat-hand.top .seat-score, .seat-hand.bottom .seat-score { left: 100%; top: 50%; transform: translate(10px, -50%); }
+/* 上家 / 下家: rendered in the frame's screen space (renderSeatHands appends them to #result-frame),
+   vertically centred, inner edge anchored to the panel side, growing away from the rotated strip. */
+.seat-score.side-left  { top: 50%; right: 100%; transform: translate(-60px, -50%); }
+.seat-score.side-right { top: 50%; left: 100%; transform: translate(60px, -50%); }
+body:not(.flat) .seat-score { display: none; } /* the 3D modal keeps the 本局得分 grid instead */
+/* The extra DOM handrows (玩家 bottom / 上家 left / 下家 right) + per-seat scores are a 2D-only
+   feature. In 3D the table itself reveals every hand on the felt, so the modal keeps only its
+   original 对家 (top) strip — matching the 3D winning modal before the 2D work. */
+body:not(.flat) .seat-hand.bottom,
+body:not(.flat) .seat-hand.left,
+body:not(.flat) .seat-hand.right { display: none; }
 
 /* result buttons in the panel's top corners, aligned with the title, text-width */
 .corner-btn { position: absolute; top: 22px; z-index: 3; padding: 8px 15px; border: none; border-radius: 10px;
@@ -223,6 +267,9 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 
 /* 和牌(胡) confirmation: big, screen-centered, red + glowing (self-draw only here) */
 #ting-center { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; gap: 16px; pointer-events: none; }
+
+/* flat: centre on the main table, not the whole viewport — clear the 98px left nav rail */
+body.flat #ting-center { left: 98px; }
 
 #ting-center:empty { display: none; }
 
@@ -292,9 +339,11 @@ header a.back { color: #9fd3bf; text-decoration: none; font-size: 0.95rem; }
 #final-rounds-wrap { margin: 12px 0; text-align: left; }
 #final-rounds-wrap summary { cursor: pointer; color: #9fd3bf; font-size: 0.85rem; padding: 4px 0; }
 
-/* winning modal: lighter blur than other overlays */
-/* lighter than other overlays so the revealed hands show through behind the modal */
+/* winning modal: light blur in 3D (the table's own hand-reveal shows through, as originally).
+   The flat (2D) modal uses a heavy blur so the live board behind is barely recognizable (its
+   revealed handrows + panel sit ON TOP of the backdrop, so they stay sharp). */
 #result-overlay { backdrop-filter: blur(0.5px); background: rgba(3,16,11,0.4); }
+body.flat #result-overlay { backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); background: rgba(3,16,11,0.5); }
 
 #result-payments .bd-title { font-size: 0.7rem; color: var(--gold); letter-spacing: 2px; margin: 5px 0 4px; }
 
@@ -365,10 +414,14 @@ body.flat header {
 
 body.flat header a.back { font-size: 1.25rem; }
 
-/* the scoreboard floats over the board (top-right) in flat mode too — compact it a touch */
-body.flat #scores { gap: 0 4px; padding: 5px 7px; }
-body.flat .sb-name { font-size: 0.6rem; }
-body.flat .sb-pt { font-size: 0.78rem; }
+/* flat: the cross scoreboard + 每圈成绩 button live IN the left nav rail (main.js moves the
+   #score-stack node into <header>), not floating over the board — so override the absolute pin. */
+body.flat #score-stack { position: static; align-self: stretch; gap: 4px; }
+body.flat #scores { gap: 0 2px; padding: 5px 4px; }
+body.flat .sb-seat { min-width: 0; }
+body.flat .sb-name { font-size: 0.56rem; }
+body.flat .sb-pt { font-size: 0.74rem; }
+body.flat #rounds-btn { font-size: 0.55rem; padding: 4px 3px; white-space: normal; line-height: 1.15; }
 
 /* keep 快速 + mute + menu grouped at the bottom of the rail */
 body.flat #fast-toggle { margin-left: 0; margin-top: auto; justify-content: center; }
@@ -404,14 +457,27 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
 
 #board2d .tile { box-shadow: inset 0 1px 1px rgba(255,255,255,0.8), 0 1px 0 #c3b99f, 0 2px 3px rgba(0,0,0,0.4); }
 
-/* opponents: nameplate + back-count + melds */
-.b2-opp { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* opponents: nameplate + back-count + melds, in a rounded box that hugs the screen edge (so it
+   never collides with the central discard pool) and is a PRESET size — room for up to 4 melds —
+   so the border doesn't resize as melds are claimed. Bold gold frame with a fill that matches
+   the table felt, so the border itself defines each zone. (The border is 3px — a literal 3× the
+   7px turn-ring band would overrun the meld area and re-collide with the wider pool.) */
+.b2-opp { position: absolute; display: flex; gap: 4px;
+  padding: 6px; border-radius: 12px;
+  background: #07150f; border: 3px solid rgba(232,196,102,0.6); }
 
-.b2-opp-top   { top: 6px; left: 50%; transform: translateX(-50%); }
+/* 对家: a wide, short box across the top — nameplate centred, up to two melds each side,
+   the whole row vertically centred in the zone */
+.b2-opp-top { top: 6px; left: 50%; transform: translateX(-50%);
+  flex-direction: row; align-items: center; justify-content: center; width: 420px; height: 72px; }
+.b2-opp-top .b2-center { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 
-.b2-opp-left  { left: 6px; top: 44%; transform: translateY(-50%); align-items: flex-start; }
-
-.b2-opp-right { right: 6px; top: 44%; transform: translateY(-50%); align-items: flex-end; }
+/* 上家 / 下家: a narrow, tall box down the side — melds stacked vertically above the nameplate
+   (top-aligned, with a reserved meld block), sitting 10% (of the board's short side) above centre. */
+.b2-opp-left, .b2-opp-right { top: 40%; transform: translateY(-50%);
+  flex-direction: column; align-items: center; justify-content: flex-start; width: 100px; height: 208px; }
+.b2-opp-left  { left: 6px; }
+.b2-opp-right { right: 6px; }
 
 .b2-plate { display: flex; align-items: center; gap: 5px; font-size: 0.72rem; color: #eaf6f0;
   background: rgba(4,18,12,0.62); border: 1px solid #1c5a44; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
@@ -436,7 +502,17 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
 
 .b2-cnt { font-size: 0.64rem; color: #cfe7db; margin-left: 5px; }
 
-.b2-melds { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; max-width: 210px; }
+/* meld layouts — all reserve fixed space so the opponent box stays a preset size:
+   · vstack (上家/下家): one meld per row, column-reversed so the first-claimed piles at the
+     bottom and new melds stack upward; reserves 4 rows.
+   · top-left / top-right (对家): a single row each, up to two 杠-wide slots, hugging the
+     centre nameplate (top-left right-aligned, top-right left-aligned). */
+.b2-melds { display: flex; }
+.b2-melds.vstack { flex-direction: column-reverse; align-items: center; justify-content: flex-start;
+  gap: 13px; width: 78px; height: 150px; }
+.b2-melds.top-left, .b2-melds.top-right { align-items: flex-end; gap: 4px; width: 158px; height: 50px; }
+.b2-melds.top-left  { justify-content: flex-end; }
+.b2-melds.top-right { justify-content: flex-start; }
 
 .b2-melds.demo { filter: drop-shadow(0 0 7px rgba(232,196,102,0.95)); }
 
@@ -449,16 +525,19 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
 .b2-tag.open { color: #ffe23f; } /* 明杠 yellow */
 .b2-tag.conc { color: #ff6a52; } /* 暗杠 red */
 
-/* central discard pool: one wide block per suit, spread across the width;
-   within a suit, 5 tiles per row, piling bottom→top */
+/* central discard pool: one block per suit, spread across the centre; within a suit, 5 tiles
+   per row, piling bottom→top. Width kept clear of the side opponent boxes (which hug the edges).
+   Each suit column is a FIXED 5-slot width and its rows are left-aligned, so every slot has a
+   predefined position — a newly-discarded tile drops into the next slot without nudging the ones
+   already laid down (the first row never shifts). */
 .b2-pool { position: absolute; left: 50%; top: 43%; transform: translate(-50%,-50%);
-  display: flex; gap: 12px; align-items: flex-end; justify-content: space-evenly; width: 84%; }
+  display: flex; gap: 8px; align-items: flex-end; justify-content: space-evenly; width: 70%; }
 
-.b2-pool-type { display: flex; flex-direction: column; gap: 1px; }
+.b2-pool-type { display: flex; flex-direction: column; gap: 1px; width: calc(24px * 5 + 1px * 4); } /* 5 slots wide */
 
-.b2-pool-row { display: flex; gap: 1px; justify-content: center; }
+.b2-pool-row { display: flex; gap: 1px; justify-content: flex-start; }
 
-.b2-pool .tile { --tw: 24px; --th: 32px; }
+.b2-pool .tile { --tw: 24px; --th: 32px; } /* sized so 5-per-row × 4 suits clears the side boxes */
 
 /* the claimable tile, pulled out big + glowing */
 .b2-pending { position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%); }
@@ -470,26 +549,35 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
 .b2-fly { position: absolute; left: 0; top: 0; z-index: 5; pointer-events: none; will-change: transform;
   box-shadow: 0 0 0 2px rgba(232,196,102,0.7), 0 6px 16px rgba(0,0,0,0.5); }
 
-/* the human's exposed melds, above the hand on the right */
-.b2-mymelds { position: absolute; right: 8px; bottom: 88px; display: flex; gap: 6px; }
+/* the human's exposed melds — lie to the RIGHT of the hand row, bottom-aligned with it
+   (scene2d sets `left` to clear the hand's dynamic width) */
+.b2-mymelds { position: absolute; bottom: max(6px, env(safe-area-inset-bottom));
+  display: flex; gap: 6px; align-items: flex-end; }
 
-.b2-mymelds .tile { --tw: 22px; --th: 30px; }
+.b2-mymelds .tile { --tw: 24px; --th: 33px; } /* ~10% larger than the opponents' meld tiles */
 
-/* the human's hand row */
-.b2-hand { position: absolute; left: 50%; bottom: max(6px, env(safe-area-inset-bottom));
-  transform: translateX(-50%); display: flex; gap: 3px; align-items: flex-end; }
+/* the human's hand row: fixed tile height, dynamic width, floating to the left edge
+   (landscape view) so the melds sit to its right */
+.b2-hand { position: absolute; left: 8px; bottom: max(6px, env(safe-area-inset-bottom));
+  display: flex; gap: 3px; align-items: flex-end; }
 
 .b2-htile { transition: transform 0.08s; }
 
 .b2-htile.sel { transform: translateY(-13px);
   box-shadow: 0 0 0 2px rgba(232,196,102,0.9), 0 0 14px 4px rgba(232,196,102,0.5); }
 
-/* compact winning modal so it fits a phone without scrolling */
-body.flat #result-frame { width: min(680px, 94vw); transform: none; }
+/* compact winning modal: 20% thinner + capped height so all four revealed handrows (玩家 below,
+   对家 above, 上家/下家 either side) stay visible around it. The per-seat 本局得分 grid is dropped
+   here — those scores now sit beside each handrow (see .seat-score). */
+body.flat #result-frame { width: min(544px, 75vw); transform: none; }
 
 body.flat #result-overlay .panel { max-width: none; }
 
-body.flat .panel { padding: 12px 16px; max-height: 96vh; border-radius: 14px; }
+body.flat #result-overlay .bd-totals { display: none; } /* scores shown beside the handrows instead */
+
+body.flat #result-overlay .seat-score { font-size: 33px; } /* ≈ the flat handrow card height */
+
+body.flat .panel { padding: 10px 14px; max-height: 66vh; border-radius: 14px; }
 
 body.flat .panel h2 { font-size: 1.08rem; }
 
@@ -525,7 +613,11 @@ body.flat .seat-hand { padding: 5px 7px; gap: 5px; }
 
 body.flat .seat-hand .tile { --tw: 24px; --th: 33px; }
 
-body.flat .seat-hand.top { transform: translate(-50%, -6px); }
+body.flat .seat-hand { --sh-push: 28px; --sh-bias: 40px; } /* flat: shallower strip + left nudge for the score */
+
+body.flat .seat-hand.top { transform: translate(calc(-50% - var(--sh-bias)), -6px); }
+
+body.flat .seat-hand.bottom { transform: translate(calc(-50% - var(--sh-bias)), 6px); }
 
 /* online turn countdown — the shared .ring-timer (timer-ring.css): a depleting ring that sweeps
    green→yellow→red and shakes in the final seconds, with the seconds left before the server auto-acts.

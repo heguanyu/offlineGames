@@ -75,7 +75,13 @@ const FLAT = (() => {
   if (q.get('d3')) return false;
   return Math.min(screen.width, screen.height) < 600 || /iPhone|iPod/.test(navigator.userAgent);
 })();
-if (FLAT) document.body.classList.add('flat');
+if (FLAT) {
+  document.body.classList.add('flat');
+  // Flat layout: move the floating scoreboard into the left nav rail (just under 局况).
+  const hdr = document.querySelector('header');
+  const ss = document.getElementById('score-stack'), ri = document.getElementById('round-info');
+  if (ss && hdr) hdr.insertBefore(ss, ri ? ri.nextSibling : hdr.firstChild);
+}
 const Renderer = FLAT ? MahjongScene2D : MahjongScene;
 
 // `game` is the READ-ONLY GameView the backend hands back (see backend.js) — the UI renders it but
@@ -121,7 +127,9 @@ function renderHud() {
   const minTxt = CFG.minFan > 0 ? `起和 ${CFG.minFan}番` : '无定番';
   // Online the server owns the match (no local session) — read the 圈 from the view; offline use the session.
   const roundWind = (ONLINE && game) ? (game.roundWind || 0) : session.roundWind;
-  $('round-info').innerHTML = `<b>${WIND[roundWind]}圈</b> · ${ONLINE ? '联机' : `第 ${session.hand} 局 · 难度 <b>${LEVEL_NAMES[level]}</b>`} · ${minTxt}`;
+  const r1 = ONLINE ? `<b>${WIND[roundWind]}圈</b> · 联机` : `<b>${WIND[roundWind]}圈</b> · 第 ${session.hand} 局`;
+  const r2 = ONLINE ? minTxt : `难度 · <b>${LEVEL_NAMES[level]}</b> · ${minTxt}`;
+  $('round-info').innerHTML = `<span class="ri-round">${r1}</span><span class="ri-level">${r2}</span>`;
   renderScores();
   $('wall-count').textContent = `余 ${game.wall.length} 张`;
   for (let p = 0; p < 4; p++) renderPlate(p);
@@ -512,7 +520,7 @@ function breakdownHtml(r) {
       `<span class="bd-net" style="color:${col(net)}">${sgn(net)}</span></div>${sub}</div>`;
   });
   const total = r.payments[me];
-  return `<div class="bd-title">本局得分</div><div class="bd-all">${all}</div>` +
+  return `<div class="bd-totals"><div class="bd-title">本局得分</div><div class="bd-all">${all}</div></div>` +
     `<div class="bd-title">玩家明细 · <span style="letter-spacing:normal;font-size:1.05rem;font-weight:800;color:${col(total)}">${sgn(total)}</span></div>` +
     grps.join('');
 }

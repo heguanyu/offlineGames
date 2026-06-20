@@ -140,6 +140,28 @@ body.flat .long-run { width: calc(21px * 5 + 4px); }
 .lz-arrow-2 { left: 50%; top: -30px; transform: translateX(-50%); border-left: 16px solid transparent; border-right: 16px solid transparent; border-bottom: 21px solid var(--gold); }
 .lz-arrow-1 { top: 50%; right: -30px; transform: translateY(-50%); border-top: 16px solid transparent; border-bottom: 16px solid transparent; border-left: 21px solid var(--gold); }
 .lz-arrow-3 { top: 50%; left: -30px; transform: translateY(-50%); border-top: 16px solid transparent; border-bottom: 16px solid transparent; border-right: 21px solid var(--gold); }
+
+/* 拉庄 on a phone (flat board): the full-size cross overruns the short (force-landscape) board,
+   clipping the 对家/玩家 chairs. Shrink the whole cluster. The felt is sized in vmin (the device's
+   short side — stable across the portrait force-rotate, unlike vw/vh) so the cross always fits. */
+body.flat #lazhuang-overlay .lz-cross { grid-template-columns: 86px auto 86px; gap: 9px 9px; max-width: 100%; }
+body.flat .lz-center { width: min(220px, 46vmin); padding: 12px 14px; border-width: 9px; border-radius: 16px; }
+body.flat .lz-center h3 { font-size: 1.18rem; margin-bottom: 5px; }
+body.flat #lazhuang-text { font-size: 0.8rem; }
+body.flat .lz-btns { gap: 8px; margin-top: 9px; }
+body.flat .lz-btns .big-btn { font-size: 1rem; padding: 9px 8px; border-radius: 12px; box-shadow: 0 4px 0 #b8902f; }
+body.flat .lz-wait { font-size: 0.85rem; margin-top: 6px; }
+body.flat .lz-seat { width: 82px; height: 58px; padding: 4px 6px; gap: 1px; border-radius: 9px; }
+body.flat .lz-seat::after { display: none; } /* drop the chair-plank pseudo to save room */
+body.flat .lz-seat .lz-nm { font-size: 0.82rem; }
+body.flat .lz-seat .lz-rel { font-size: 0.62rem; }
+body.flat .lz-seat .lz-rel .lz-wind { font-size: 0.72rem; }
+body.flat .lz-seat .lz-score { font-size: 0.68rem; }
+body.flat .lz-st { font-size: 0.58rem; padding: 1px 6px; top: -7px; right: -5px; }
+body.flat .lz-arrow-0 { bottom: -16px; border-left-width: 9px; border-right-width: 9px; border-top-width: 12px; }
+body.flat .lz-arrow-2 { top: -16px; border-left-width: 9px; border-right-width: 9px; border-bottom-width: 12px; }
+body.flat .lz-arrow-1 { right: -16px; border-top-width: 9px; border-bottom-width: 9px; border-left-width: 12px; }
+body.flat .lz-arrow-3 { left: -16px; border-top-width: 9px; border-bottom-width: 9px; border-right-width: 12px; }
 </style>
 </head>
 <body>
@@ -211,8 +233,12 @@ body.flat .long-run { width: calc(21px * 5 + 4px); }
         <div id="result-payments" class="sub"></div>
       </div>
     </div>
-    <!-- 对家 (top) revealed hand, pinned above the panel -->
-    <div class="seat-hand top" id="seat-hand-2" aria-hidden="true"></div>
+    <!-- every seat's revealed hand, pinned just outside the panel on its seat's edge
+         (玩家 bottom / 对家 top / 下家 right / 上家 left), each tagged with its hand score -->
+    <div class="seat-hand top"    id="seat-hand-2" aria-hidden="true"></div>
+    <div class="seat-hand right"  id="seat-hand-1" aria-hidden="true"></div>
+    <div class="seat-hand left"   id="seat-hand-3" aria-hidden="true"></div>
+    <div class="seat-hand bottom" id="seat-hand-0" aria-hidden="true"></div>
     </div>
   </div>
 

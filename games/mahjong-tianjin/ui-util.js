@@ -44,6 +44,7 @@ function meldLabel(m, isWild) {
 // meld as a SEPARATE group, each tagged 碰 / 吃 / 明杠 / 暗杠 / 金杠. `isWild(id)`
 // flags 混儿 (天津); pass nothing for 国标.
 export function renderSeatHands(game, isWild = () => false) {
+  const payments = game.result && game.result.payments;
   for (let p = 0; p < 4; p++) {
     const el = $('seat-hand-' + p);
     if (!el) continue;
@@ -57,6 +58,19 @@ export function renderSeatHands(game, isWild = () => false) {
       g.appendChild(tag);
       for (const id of m.tiles) g.appendChild(faceTileEl(id, { wild: isWild(id) }));
       el.appendChild(g);
+    }
+    // this seat's hand score, in big glowing text beside its row (flat only; CSS hides it in 3D).
+    if (payments && payments[p] != null) {
+      const v = payments[p];
+      const sc = document.createElement('div');
+      sc.className = 'seat-score ' + (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
+      sc.textContent = (v > 0 ? '+' : '') + v;
+      // 玩家 (0) / 对家 (2): horizontal rows → score sits at the row's right edge (inside the row el).
+      // 上家 (3) / 下家 (1): the row is rotated, so the score lives in the frame's screen space, its
+      // INNER edge anchored to the panel side and growing outward — a 2–3 digit score never reaches
+      // the handrow. (#result-frame is the seat-hands' parent.)
+      if (p === 1 || p === 3) { sc.classList.add(p === 3 ? 'side-left' : 'side-right'); el.parentNode.appendChild(sc); }
+      else el.appendChild(sc);
     }
   }
 }

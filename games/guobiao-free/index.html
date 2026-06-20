@@ -75,8 +75,12 @@
         <div id="result-payments" class="sub"></div>
       </div>
     </div>
-    <!-- 对家 (top) revealed hand, pinned above the panel -->
-    <div class="seat-hand top" id="seat-hand-2" aria-hidden="true"></div>
+    <!-- every seat's revealed hand, pinned just outside the panel on its seat's edge
+         (玩家 bottom / 对家 top / 下家 right / 上家 left), each tagged with its hand score -->
+    <div class="seat-hand top"    id="seat-hand-2" aria-hidden="true"></div>
+    <div class="seat-hand right"  id="seat-hand-1" aria-hidden="true"></div>
+    <div class="seat-hand left"   id="seat-hand-3" aria-hidden="true"></div>
+    <div class="seat-hand bottom" id="seat-hand-0" aria-hidden="true"></div>
     </div>
   </div>
 

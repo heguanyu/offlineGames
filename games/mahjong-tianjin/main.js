@@ -42,10 +42,13 @@ const FLAT = (() => {
 })();
 if (FLAT) {
   document.body.classList.add('flat');
-  // The 混儿 indicator floats over the 3D table; in the flat layout it belongs in
-  // the left rail. main.js fills it by id, so moving the element changes nothing else.
+  // The 混儿 indicator + the scoreboard float over the 3D table; in the flat layout they
+  // belong in the left nav rail. main.js fills them by id, so moving the nodes changes
+  // nothing else. The scoreboard (+ 每圈成绩 button) sits just under 局况 at the rail top.
   const wh = document.getElementById('wild-hud'), hdr = document.querySelector('header');
   if (wh && hdr) hdr.appendChild(wh);
+  const ss = document.getElementById('score-stack'), ri = document.getElementById('round-info');
+  if (ss && hdr) hdr.insertBefore(ss, ri ? ri.nextSibling : hdr.firstChild);
 }
 const Renderer = FLAT ? MahjongScene2D : MahjongScene;
 // A bot's 碰/杠 is shown lifted for CLAIM_DEMO_MS; the game logic is held until the
@@ -55,8 +58,8 @@ const CLAIM_SETTLE_MS = FAST ? 20 : 380;
 // A bot's discard flies from its hand to the center halt, holds ~1s, then drops into
 // the pool; the tick is locked for the whole duration. 快速模式 (fastMode) or ?fast=1
 // turns the animation + lock off.
-const DISCARD_DEMO_MS = 900;  // 0.4s rise + ~0.5s halt at the center
-const DISCARD_SETTLE_MS = 220; // covers the ~0.18s fall into the pool
+const DISCARD_DEMO_MS = 500;  // 0.2s rise + 0.3s halt at the center
+const DISCARD_SETTLE_MS = 140; // covers the ~0.1s fall into the pool
 let fastMode = localStorage.getItem('mahjong-fast') !== '0'; // checked (on) by default
 
 // Online mode: ?online=1 means this page is driven by the remote server (the lobby navigates
@@ -160,8 +163,8 @@ function renderHud() {
   // 圈 (prevailing wind) · 庄 (the 庄's fixed 座风 — only the 庄 moves within the 锅) · 难度
   const watching = VIEWER && game.seatNames ? `<span class="viewing">👁 观战 ${esc(game.seatNames[HUMAN] || '')}</span> · ` : '';
   $('round-info').innerHTML = watching +
-    `<b>${WIND[game.prevailingWind]}圈</b> · <b>${WIND[game.seatWind(game.dealer)]}庄</b> · ` +
-    (ONLINE ? '联机' : `难度 <b>${LEVEL_NAMES[level]}</b>`);
+    `<span class="ri-round"><b>${WIND[game.prevailingWind]}圈</b> · <b>${WIND[game.seatWind(game.dealer)]}庄</b></span>` +
+    `<span class="ri-level">${ONLINE ? '联机' : `难度 · <b>${LEVEL_NAMES[level]}</b>`}</span>`;
   renderScores();
 
   // ---- the round's two 混儿 (e.g. 7万 + 8万), shown with their real faces ----
@@ -753,7 +756,7 @@ function breakdownHtml(r) {
     ).join('');
     return `<div class="bd-grp"><div class="bd-row"><span class="bd-seat">${q === dealer ? '👑 ' : ''}${SEAT_LABEL[q]}${tag}</span></div>${subHtml}</div>`;
   });
-  return `<div class="bd-title">本局得分</div><div class="bd-all">${all}</div>` +
+  return `<div class="bd-totals"><div class="bd-title">本局得分</div><div class="bd-all">${all}</div></div>` +
     `<div class="bd-title">玩家明细</div>` +
     grps.join('');
 }

@@ -11,9 +11,9 @@
 // costs ~zero. No deck wall, no flight animations — just the live state.
 import { faceTileEl, seatBadgeHtml } from './ui-util.js';
 import { updateRing } from '../mahjong-common/timer-ring.js';
+import { BOT_NAMES } from '../mahjong-common/bot-names.js';
 
 const WIND = ['东', '南', '西', '北'];
-const SEAT_LABEL = ['玩家', '下家', '对家', '上家'];
 const HUMAN = 0;
 
 function meldLabel(m, isWild) {
@@ -84,13 +84,24 @@ export class MahjongScene2D {
   // the tick for `ms`, so no re-sync interrupts it until it's done.
   beginDiscardDemo(player, idx, ms = 1350) { this.discardDemo = { player, idx, t0: performance.now(), ms }; }
 
+  // An element's centre in the board's LAYOUT coordinate space (offsetParent = #board2d,
+  // pinned to the table's top-left). offset* + the computed translate are rotation-invariant,
+  // unlike getBoundingClientRect, which reports VISUAL (post-transform) coords and so is wrong
+  // once forceLandscape CSS-rotates the whole page in portrait. Used to place the pool / claim
+  // prompt / turn-ring / discard fly so they stay put in either orientation.
+  _center(el) {
+    const tf = getComputedStyle(el).transform; // resolved to a matrix() (px); 'none' if unset
+    const m = tf && tf !== 'none' ? new DOMMatrixReadOnly(tf) : new DOMMatrixReadOnly(); // translate-only here → m.e/m.f
+    return { x: el.offsetLeft + el.offsetWidth / 2 + m.e, y: el.offsetTop + el.offsetHeight / 2 + m.f };
+  }
+
   // Anchor for the claim prompt (碰/杠/过): centred horizontally, just above the
-  // hand row. main.js calls this only as worldToScreen(0,0,5). Table-local px.
+  // hand row. main.js calls this only as worldToScreen(0,0,5). Table-local (layout) px.
   worldToScreen() {
-    const mr = this.mount.getBoundingClientRect();
-    let y = mr.height * 0.6;
-    if (this.handEl) y = this.handEl.getBoundingClientRect().top - mr.top - 8;
-    return { x: mr.width / 2, y };
+    const w = this.mount.clientWidth, h = this.mount.clientHeight;
+    let y = h * 0.6;
+    if (this.handEl) y = this.handEl.offsetTop - 8;
+    return { x: w / 2, y };
   }
 
   pick(clientX, clientY) {
@@ -113,8 +124,13 @@ export class MahjongScene2D {
     this.handEl = null;
     const over = ui.reveal || (game.phase != null && game.result); // result overlay covers the board
 
-    // ---- opponents: compact nameplate + back-count + melds ----
+    // ---- opponents: nameplate + back-count + melds, in a preset-size box that hugs the
+    // screen edge so it never collides with the central discard pool. 上家/下家 stack their
+    // melds vertically (one per row, piling bottom→up) in a narrow side box; 对家 lays them
+    // in a wide top box, up to two melds either side of the centred nameplate (filled
+    // centre-out by slot order 1,2,0,3 across the left→right slots 0..3). ----
     const SIDE = { 1: 'right', 2: 'top', 3: 'left' }; // 下家 right, 对家 top, 上家 left
+    const TOP_FILL = [1, 2, 0, 3]; // 对家 slot order (slots 0..3 = left→right): centre-out
     for (const p of [1, 2, 3]) {
       const opp = document.createElement('div');
       opp.className = 'b2-opp b2-opp-' + SIDE[p];
@@ -122,25 +138,46 @@ export class MahjongScene2D {
       const dealer = p === game.dealer;
       const plate = document.createElement('div');
       plate.className = 'b2-plate' + (active ? ' active' : '') + (dealer ? ' dealer' : '');
+      // Name by the seat's WIND (东方雨/南宫云/…), matching the wind char shown; online keeps
+      // the real player name. No 思考中 text — the active glow + turn-ring show whose turn it
+      // is — so the plate stays a fixed width inside the preset box.
+      const wind = game.seatWind(p);
+      const name = (game.seatNames && game.seatNames[p]) || BOT_NAMES[wind];
       plate.innerHTML = seatBadgeHtml(game, p) +
-        `<span class="wind">${WIND[game.seatWind(p)]}</span><span>${SEAT_LABEL[p]}</span>` +
-        (active ? '<span class="think">思考中…</span>' : '');
-      opp.appendChild(plate);
+        `<span class="wind">${WIND[wind]}</span><span>${name}</span>`;
       // back-count: a small fan of tile-backs + ×N
       const n = game.hands[p].length;
       const backs = document.createElement('div');
       backs.className = 'b2-backs';
       backs.innerHTML = '<span class="b2-back"></span><span class="b2-back"></span><span class="b2-back"></span>' +
         `<span class="b2-cnt">×${n}</span>`;
-      opp.appendChild(backs);
-      // exposed melds
+      // exposed melds (碰/吃/杠) — the box is a PRESET size (room for up to 4 melds) so the
+      // border doesn't resize as melds are claimed during the hand.
       const melds = game.melds[p] || [];
-      if (melds.length) {
-        const demo = this.claimDemo && this.claimDemo.player === p && performance.now() < this.claimDemo.until;
-        const mrow = document.createElement('div');
-        mrow.className = 'b2-melds' + (demo ? ' demo' : '');
-        for (const m of melds) mrow.appendChild(this._meld(m, isWild));
-        opp.appendChild(mrow);
+      const demo = this.claimDemo && this.claimDemo.player === p && performance.now() < this.claimDemo.until;
+
+      if (p === 2) {
+        // 对家 (top): centred nameplate with up to two meld slots on each side.
+        const center = document.createElement('div'); center.className = 'b2-center';
+        center.appendChild(plate); center.appendChild(backs);
+        const left = document.createElement('div'); left.className = 'b2-melds top-left' + (demo ? ' demo' : '');
+        const right = document.createElement('div'); right.className = 'b2-melds top-right' + (demo ? ' demo' : '');
+        melds.forEach((m, i) => {
+          const slot = TOP_FILL[i] ?? i;          // 1,2,0,3 → centre-out
+          const el = this._meld(m, isWild);
+          el.style.order = slot;                  // keep slots left→right within each side
+          (slot < 2 ? left : right).appendChild(el);
+        });
+        opp.appendChild(left); opp.appendChild(center); opp.appendChild(right);
+      } else {
+        // 上家 (left) / 下家 (right): melds stacked vertically ABOVE the nameplate, one per
+        // row, the first-claimed meld at the bottom (CSS column-reverse) so they pile upward.
+        const mcol = document.createElement('div');
+        mcol.className = 'b2-melds vstack' + (demo ? ' demo' : '');
+        for (const m of melds) mcol.appendChild(this._meld(m, isWild));
+        opp.appendChild(mcol);
+        opp.appendChild(plate);
+        opp.appendChild(backs);
       }
       b.appendChild(opp);
     }
@@ -188,26 +225,18 @@ export class MahjongScene2D {
       this.pending = { el: wrap, player: d.player };
     }
 
-    // ---- the human's own melds (just above the hand) ----
+    // ---- the human's hand (bottom-left, floating) + melds to its right ----
+    // The tile size is keyed to a FIXED 14-tile reference (and the full board width, NOT
+    // discounting the melds) so the row keeps a CONSTANT height however many melds are
+    // claimed — only its WIDTH shrinks as tiles leave the hand. Set inline per tile so it
+    // beats the base .tile rule.
     const myMelds = game.melds[HUMAN] || [];
-    if (myMelds.length) {
-      const mrow = document.createElement('div');
-      mrow.className = 'b2-mymelds';
-      for (const m of myMelds) mrow.appendChild(this._meld(m, isWild));
-      b.appendChild(mrow);
-    }
-
-    // ---- the human's hand (bottom) ----
     const hand = ui.renderedHand || game.hands[HUMAN] || [];
     const handEl = document.createElement('div');
     handEl.className = 'b2-hand';
-    // Tile size is keyed to a FIXED reference count (a full hand for the current meld
-    // count: 14 - 3·melds) so it doesn't shrink/grow as the hand cycles 13↔14 tiles —
-    // the row keeps a steady size. Set inline per tile so it beats the base .tile rule.
     const DRAW_GAP = 8; // flanks the freshly-drawn tile so it reads as just-drawn
-    const refCount = Math.max(hand.length, 14 - 3 * myMelds.length);
     const avail = this.mount.clientWidth - 16;
-    const tw = Math.max(24, Math.min(52, Math.floor((avail - 2 * DRAW_GAP) / refCount) - 4));
+    const tw = Math.max(24, Math.min(52, Math.floor((avail - 2 * DRAW_GAP) / 14) - 4));
     const th = Math.round(tw * 1.35);
     // renderedHand already sorts the drawn tile into place; flank that slot with a gap.
     const drawnIdx = ui.drawnTile != null ? hand.lastIndexOf(ui.drawnTile) : -1;
@@ -228,13 +257,41 @@ export class MahjongScene2D {
     b.appendChild(handEl);
     this.handEl = handEl;
 
+    // exposed melds (碰/吃/杠) lie to the RIGHT of the hand row, bottom-aligned with it,
+    // offset past the hand's dynamic width. Only present once the player has claimed.
+    if (myMelds.length) {
+      const mrow = document.createElement('div');
+      mrow.className = 'b2-mymelds';
+      for (const m of myMelds) mrow.appendChild(this._meld(m, isWild));
+      b.appendChild(mrow);
+      mrow.style.left = (handEl.offsetLeft + handEl.offsetWidth + 12) + 'px';
+    }
+
     // Anchor the pool's bottom edge above the hand row (it grows upward): a 20px gap
-    // plus another 10% of the board height, so it sits clear of the hand.
-    const pr = this.mount.getBoundingClientRect();
-    const handTopLocal = handEl.getBoundingClientRect().top - pr.top;
+    // plus another 10% of the board height, so it sits clear of the hand. Layout px
+    // (clientHeight / offsetTop) so it holds in portrait's force-landscape rotation too.
+    const boardH = this.mount.clientHeight;
+    const handTopLocal = handEl.offsetTop;
+    const poolBottom = boardH - handTopLocal + 20 + boardH * 0.1;
     pool.style.top = 'auto';
     pool.style.transform = 'translateX(-50%)';
-    pool.style.bottom = (pr.height - handTopLocal + 20 + pr.height * 0.1) + 'px';
+    pool.style.bottom = poolBottom + 'px';
+
+    // Both turn widgets (the online countdown ring + the turn-direction arc) sit in the open band
+    // between the 对家 box (top) and the player's hand row (bottom): centred in it and sized to it,
+    // so they read clearly and don't overlap either an opponent box or the hand.
+    const topBox = b.querySelector('.b2-opp-top');
+    const bandTop = topBox ? topBox.offsetTop + topBox.offsetHeight : boardH * 0.2;
+    const bandCenterY = (bandTop + handTopLocal) / 2;
+    const bandH = Math.max(0, handTopLocal - bandTop);
+
+    const tt = document.getElementById('turn-timer');
+    if (tt) {
+      tt.style.top = bandCenterY + 'px';
+      tt.style.bottom = 'auto';
+      tt.style.transform = 'translate(-50%, -50%)';
+      tt.style.setProperty('--rt-size', Math.round(Math.max(100, Math.min(140, bandH * 0.58))) + 'px');
+    }
 
     // Record hand-tile hit rects for pick() (client coords; getBoundingClientRect
     // already accounts for the force-landscape body rotation).
@@ -242,13 +299,11 @@ export class MahjongScene2D {
       this.handRects.push({ pick: +t.dataset.pick, rect: t.getBoundingClientRect() });
     }
 
-    // Opponent anchors for the claim arrow (table-local centres).
-    const mr = this.mount.getBoundingClientRect();
+    // Opponent anchors for the claim arrow + discard fly (table-local layout centres).
     for (const opp of b.querySelectorAll('.b2-opp')) {
-      const r = opp.getBoundingClientRect();
       const cls = opp.className;
       const p = cls.includes('b2-opp-right') ? 1 : cls.includes('b2-opp-top') ? 2 : 3;
-      this.oppAnchor[p] = { x: r.left + r.width / 2 - mr.left, y: r.top + r.height / 2 - mr.top };
+      this.oppAnchor[p] = this._center(opp);
     }
 
     // ---- turn-ring: a glowing quarter-arc pointing at the active seat (mirrors the 3D
@@ -257,10 +312,13 @@ export class MahjongScene2D {
     if (!over) {
       const ring = document.createElement('div');
       ring.className = 'b2-ring';
-      const D = Math.min(mr.width, mr.height) * 0.66;
+      const bw = this.mount.clientWidth;
+      // Sized to the hand↔对家 band and centred in it, so the arc stays clear of the opponent
+      // boxes (it used to be a min(bw,bh)·0.66 disc that spilled onto them).
+      const D = Math.round(Math.max(120, Math.min(bandH * 0.78, 190)));
       ring.style.width = ring.style.height = D + 'px';
-      ring.style.left = (mr.width / 2) + 'px';
-      ring.style.top = (mr.height * 0.42) + 'px';
+      ring.style.left = (bw / 2) + 'px';
+      ring.style.top = bandCenterY + 'px';
       const FROM = { 0: 135, 1: 45, 2: -45, 3: 225 };
       ring.style.background = `conic-gradient(from ${FROM[game.turn] ?? 135}deg, #ffd23a 0deg 90deg, transparent 90deg 360deg)`;
       b.insertBefore(ring, b.firstChild); // behind the tiles
@@ -277,12 +335,12 @@ export class MahjongScene2D {
   // only happens after the tile has landed.
   _flyDiscard(d, dd, pool) {
     const isWild = (id) => !!(this._last.game.isWild && this._last.game.isWild(id));
-    const mr = this.mount.getBoundingClientRect();
+    // Layout px (rotation-invariant) so the fly path is right in portrait too.
+    const bw = this.mount.clientWidth, bh = this.mount.clientHeight;
     // bots fly from their nameplate; the player (no oppAnchor) flies up from the hand row.
-    const start = this.oppAnchor[dd.player] || { x: mr.width / 2, y: mr.height - 70 };
-    const center = { x: mr.width / 2, y: mr.height * 0.4 };
-    const pr = pool.getBoundingClientRect();
-    const end = { x: pr.left + pr.width / 2 - mr.left, y: pr.top + pr.height / 2 - mr.top };
+    const start = this.oppAnchor[dd.player] || { x: bw / 2, y: bh - 70 };
+    const center = { x: bw / 2, y: bh * 0.4 };
+    const end = this._center(pool);
     const fly = faceTileEl(d.kind, { wild: isWild(d.kind) });
     fly.className += ' b2-fly';
     fly.style.setProperty('--tw', '40px');
@@ -291,12 +349,12 @@ export class MahjongScene2D {
     fly.style.transform = at(start, 0.6);
     this.board.appendChild(fly);
     fly.getBoundingClientRect(); // force reflow so the first transition runs
-    requestAnimationFrame(() => {        // phase 1: rise to the center halt, enlarged (~0.4s)
-      fly.style.transition = 'transform 0.4s ease-out';
+    requestAnimationFrame(() => {        // phase 1: rise to the center halt, enlarged (~0.2s)
+      fly.style.transition = 'transform 0.2s ease-out';
       fly.style.transform = at(center, 1.5);
     });
     setTimeout(() => {                    // phase 3: after the halt, drop into the pool (fast)
-      fly.style.transition = 'transform 0.16s ease-in';
+      fly.style.transition = 'transform 0.1s ease-in';
       fly.style.transform = at(end, 0.55);
     }, dd.ms); // halt ends at dd.ms (= 0.4s rise + ~0.5s hold); the quick drop runs into the settle window
   }

@@ -20,7 +20,7 @@ const CLAIM_DEMO_MS = 2000; // a bot's 吃/碰/杠 is held up facing the camera 
 // claim-meld lift (_meldsFlat) and the discard fly (_pool).
 const DEMO_POS = { 0: { x: 0, y: 2.7, z: 1.2 }, 1: { x: 3.8, y: 2.6, z: 1.8 }, 2: { x: 0, y: 2.95, z: -2.2 }, 3: { x: -3.8, y: 2.6, z: 1.8 } };
 const DEMO_SCALE = 1.3;
-const DISCARD_DROP_MS = 180; // a discard's fall from the center halt into the pool
+const DISCARD_DROP_MS = 100; // a discard's fall from the center halt into the pool
 // Initial deal: one tile launches from the wall every DEAL_SERVE_MS, round-robin
 // from the dealer; each flies ~DEAL_LAND_MS (the loop's lerp) so several are in
 // transit at once. The onLand callback fires DEAL_LAND_MS after a human tile is
@@ -446,7 +446,7 @@ export class MahjongScene {
       // Bot-discard demo: fly from the seat up to the same center halt, hold, then
       // release to lerp down into the pool slot (rec.tp). Same rise/hold/release shape.
       if (spec.discard) {
-        rec.discardSeq = { t0: spec.discard.t0, ms: spec.discard.ms, demo: spec.discard.demo, drop: DISCARD_DROP_MS,
+        rec.discardSeq = { t0: spec.discard.t0, ms: spec.discard.ms, demo: spec.discard.demo, drop: DISCARD_DROP_MS, rise: 0.2,
           from: spec.from ? spec.from.clone() : new THREE.Vector3(spec.x, spec.y, spec.z),
           rx0: spec.rx, rz0: spec.rz || 0 };
       }
@@ -1005,7 +1005,7 @@ export class MahjongScene {
   // `seq` = { t0, ms, demo:{x,y,z,s,rx}, from, rx0, rz0, drop? }.
   _animateDemoSeq(seq, rec, m) {
     const t = (performance.now() - seq.t0) / 1000;
-    const RISE = 0.4, HOLD_END = (seq.ms ?? CLAIM_DEMO_MS) / 1000;
+    const RISE = seq.rise ?? 0.4, HOLD_END = (seq.ms ?? CLAIM_DEMO_MS) / 1000;
     const DROP = seq.drop ? seq.drop / 1000 : 0;
     if (t >= HOLD_END + DROP) return false;
     const dm = seq.demo;
