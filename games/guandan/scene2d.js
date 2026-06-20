@@ -6,7 +6,9 @@
 // FOUR seats: 0 bottom (you), 1 right, 2 top (partner), 3 left.
 import { rankLabel, isWild } from './engine.js';
 
-const SUIT = ['♠', '♥', '♣', '♦'];
+// Append U+FE0E (text variation selector) so iOS renders ♥/♦ as instant TEXT glyphs (honoring the CSS
+// red), not color emoji — the emoji-font load was a 1–2s stall on the first card paint on old iPhones.
+const SUIT = ['♠︎', '♥︎', '♣︎', '♦︎'];
 const RED = [false, true, false, true];
 
 function faceCard(card, wild) {

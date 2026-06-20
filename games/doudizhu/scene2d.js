@@ -6,7 +6,7 @@
 // stay main.js's overlays, positioned via seatScreen(); this renderer only draws the cards.
 import { rankLabel } from './engine.js';
 
-const SUIT = ['♠', '♥', '♣', '♦'];
+const SUIT = ['♠︎', '♥︎', '♣︎', '♦︎'];
 const RED = [false, true, false, true];
 
 function faceCard(card) {

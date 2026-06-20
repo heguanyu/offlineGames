@@ -12,7 +12,7 @@ const CW = 1.0, CH = 1.45, CD = 0.014;  // card width / height / depth (very thi
 const FELT = 15;
 const HAND_Y = 0.62;   // human hand sits ABOVE the felt (was clipping into the table)
 const OPP_Y = 1.45;    // opponents' upright fans stand on the table (raised so the 2× cards clear the felt)
-const SUIT_CHAR = ['♠', '♥', '♣', '♦'];
+const SUIT_CHAR = ['♠︎', '♥︎', '♣︎', '♦︎'];
 const SUIT_RED = [false, true, false, true];
 
 // Seat anchors (world space). Seat 0 is the human at the bottom; 1 is the 下家 (upper right),
@@ -195,9 +195,26 @@ export class DouScene {
     this._resize();
     new ResizeObserver(() => this._resize()).observe(canvas.parentElement);
     this._loop();
+    this._warmFaces();
   }
 
   setRotated(r) { this.rotated = !!r; }
+
+  // Pre-rasterise + GPU-upload every card face up front so the first deal doesn't lazily generate ~17
+  // face canvases on a slow CPU. Spread over ticks to keep startup responsive.
+  _warmFaces() {
+    const jobs = [];
+    for (let r = 3; r <= 15; r++) for (let s = 0; s < 4; s++) jobs.push({ rank: r, suit: s });
+    jobs.push({ rank: 16, suit: -1 }, { rank: 17, suit: -1 });
+    this._uploadTex(backTexture());
+    let i = 0;
+    const tick = () => {
+      for (let n = 0; i < jobs.length && n < 6; i++, n++) this._uploadTex(cardTexture(jobs[i]));
+      if (i < jobs.length) setTimeout(tick, 16);
+    };
+    tick();
+  }
+  _uploadTex(t) { try { this.renderer.initTexture(t); } catch {} } // initTexture absent in old three → canvas still pre-drawn
   resize() { this._resize(); }
 
   // A CENTERED (x=0) key light + ambient fill. Centered means it's symmetric left↔right, so the hand

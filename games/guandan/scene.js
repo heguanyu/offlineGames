@@ -13,7 +13,7 @@ const CW = 1.0, CH = 1.45, CD = 0.014;
 const FELT = 16;
 const HAND_Y = 0.62;
 const OPP_Y = 1.4;
-const SUIT_CHAR = ['♠', '♥', '♣', '♦'];
+const SUIT_CHAR = ['♠︎', '♥︎', '♣︎', '♦︎'];
 const SUIT_RED = [false, true, false, true];
 
 // Seat anchors (world). 0 bottom, 1 right, 2 top, 3 left.
@@ -186,11 +186,30 @@ export class GuandanScene {
     this._resize();
     new ResizeObserver(() => this._resize()).observe(canvas.parentElement);
     this._loop();
+    this._warmFaces();
   }
 
   setRotated(r) { this.rotated = !!r; }
   setLevel(l) { this.level = l; }
   resize() { this._resize(); }
+
+  // Pre-rasterise + GPU-upload every card face up front, so the first deal doesn't hitch lazily
+  // generating ~27 face canvases on a slow CPU (the 1–2s "card image loading" stall). Spread over
+  // ticks so startup stays responsive; by the time 开始 is tapped the cache + GPU are warm.
+  _warmFaces() {
+    const jobs = [];
+    for (let r = 2; r <= 14; r++) for (let s = 0; s < 4; s++) jobs.push([{ rank: r, suit: s }, false]);
+    for (let r = 2; r <= 14; r++) jobs.push([{ rank: r, suit: 1 }, true]); // ♥-level 百搭 wild faces (any level)
+    jobs.push([{ rank: 16, suit: -1 }, false], [{ rank: 17, suit: -1 }, false]);
+    this._uploadTex(backTexture());
+    let i = 0;
+    const tick = () => {
+      for (let n = 0; i < jobs.length && n < 6; i++, n++) this._uploadTex(cardTexture(jobs[i][0], jobs[i][1]));
+      if (i < jobs.length) setTimeout(tick, 16);
+    };
+    tick();
+  }
+  _uploadTex(t) { try { this.renderer.initTexture(t); } catch {} } // initTexture may be absent in old three — canvas is still pre-drawn
 
   _lights() {
     this.scene.add(new THREE.HemisphereLight(0xcfe9df, 0x223026, 1.0));
