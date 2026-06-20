@@ -201,7 +201,8 @@ function speakMove(d) {
     case COMBO.TRIO: return ['仨', R(d.rank)];
     case COMBO.TRIO_SINGLE: return ['三带一'];
     case COMBO.TRIO_PAIR: return ['三带二'];
-    case COMBO.STRAIGHT: case COMBO.DOUBLE_STRAIGHT: return ['串'];
+    case COMBO.STRAIGHT: return ['顺子'];                       // was 串; now 顺子！
+    case COMBO.DOUBLE_STRAIGHT: return ['串'];
     case COMBO.PLANE: case COMBO.PLANE_SINGLE: case COMBO.PLANE_PAIR: return ['飞机'];
     case COMBO.FOUR_SINGLE: case COMBO.FOUR_PAIR: return ['四带二'];
     case COMBO.BOMB: return ['炸弹'];

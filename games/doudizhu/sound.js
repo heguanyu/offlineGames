@@ -51,7 +51,7 @@ const SLUG = {
   '俩三': 'dui3', '俩四': 'dui4', '俩五': 'dui5', '俩六': 'dui6', '俩七': 'dui7', '俩八': 'dui8',
   '俩九': 'dui9', '俩十': 'dui10', '俩勾': 'duiJ', '俩圈': 'duiQ', '俩K': 'duiK', '俩尖': 'duiA', '俩二': 'dui2',
   '三带一': 'tri1', '三带二': 'tri2',
-  '串': 'chuan', '飞机': 'plane', '炸弹': 'bomb', '王炸': 'rocket', '四带二': 'four2',
+  '顺子': 'shunzi', '串': 'chuan', '飞机': 'plane', '炸弹': 'bomb', '王炸': 'rocket', '四带二': 'four2',
   '1分': 'bid1', '2分': 'bid2', '3分': 'bid3', '过': 'guo', '我是地主': 'landlord',
 };
 

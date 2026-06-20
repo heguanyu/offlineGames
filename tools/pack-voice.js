@@ -13,7 +13,7 @@
 // All clips are PCM mono 24 kHz 16-bit (asserted below); packing just concatenates
 // their PCM under one canonical WAV header — bit-identical audio, no re-encoding.
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -25,6 +25,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TARGETS = [
   { base: 'games/mahjong-common/voice', trim: false },
   { base: 'games/doudizhu/voice', trim: true },
+  { base: 'games/guandan/voice', trim: true },   // 掼蛋 — skipped until its clips are generated
 ];
 
 const SR = 24000, CH = 1, BITS = 16; // expected format of every clip
@@ -77,10 +78,13 @@ const round = (x) => Math.round(x * 1e6) / 1e6;
 
 function packTarget({ base, trim }) {
   const dir = join(ROOT, base);
+  // Skip gracefully if a game's clips aren't generated yet (so the CD pipeline + local runs don't break).
+  if (!existsSync(dir)) { console.log(`${base}: no voice dir — skipped (clips not generated yet)`); return; }
   // Voice sets are the numeric subdirectories (0,1,2,3 = personas/seats).
   const sets = readdirSync(dir, { withFileTypes: true })
     .filter((d) => d.isDirectory() && /^\d+$/.test(d.name))
     .map((d) => d.name).sort((a, b) => a - b);
+  if (!sets.length) { console.log(`${base}: no voice sets — skipped`); return; }
   const outDir = join(dir, 'packed');
   mkdirSync(outDir, { recursive: true });
 

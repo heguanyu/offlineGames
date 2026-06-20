@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.5.50';
+const CACHE = 'offline-games-0.5.51';
 
 const ASSETS = [
   './',
@@ -113,6 +113,23 @@ const ASSETS = [
   './games/doudizhu/voice/packed/0.wav',
   './games/doudizhu/voice/packed/1.wav',
   './games/doudizhu/voice/packed/2.wav',
+  // 掼蛋 (Guandan) — 4-player / 2-team.
+  './games/guandan/',
+  './games/guandan/index.html',
+  './games/guandan/guandan.css',
+  './games/guandan/engine.js',
+  './games/guandan/ai.js',
+  './games/guandan/backend.js',
+  './games/guandan/scene.js',
+  './games/guandan/scene2d.js',
+  './games/guandan/select.js',
+  './games/guandan/sound.js',
+  './games/guandan/main.js',
+  './games/guandan/voice/packed/manifest.json', // voice sprites (tools/pack-voice.js): 4 personas, one decoded buffer each
+  './games/guandan/voice/packed/0.wav',
+  './games/guandan/voice/packed/1.wav',
+  './games/guandan/voice/packed/2.wav',
+  './games/guandan/voice/packed/3.wav',
   './shared/emu-persistence.js',
   './emulatorjs/data/emulator.css',
   './emulatorjs/data/loader.js',

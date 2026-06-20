@@ -111,7 +111,7 @@ function controlCost(move) {
 // Score one legal move from `view`. Higher = better. The structural core: prefer "clean" groups
 // (don't fragment a straight to play a pair), shed more cards, save high/control cards. On top of
 // that, strategicAdj() layers role/cooperation logic.
-function scoreMove(view, move, level, rng) {
+function scoreMove(view, move, level, rng, tempo = 0) {
   if (move.ranks.length === view.handRanks.length) return 1e6 - move.rank; // empties the hand → win
   const groupsBefore = minSplit(view.counts);
   const groupsAfter = minSplit(removeRanks(view.counts, move.ranks));
@@ -121,11 +121,14 @@ function scoreMove(view, move, level, rng) {
   s += move.ranks.length * 2;                              // efficiency: shed more per play
   s -= controlCost(move) * 5;
   s -= move.rank * 0.5;                                    // all else equal, save higher cards
-  s += strategicAdj(view, move);
+  s += strategicAdj(view, move, tempo);
   if (level === 0) s += (rng() - 0.5) * 160;              // 新手 plays erratically
   return s;
 }
-function strategicAdj(view, move) {
+// `tempo` (heuristic levels only) is the value of SEIZING the lead from an opponent — it lets you
+// start dumping. 0 = the original conservative behavior (used inside Monte-Carlo rollouts so level-2
+// is unchanged); the live level-0/1 default is set below.
+function strategicAdj(view, move, tempo = 0) {
   let adj = 0;
   const following = view.against != null;
   if (following) {
@@ -135,6 +138,10 @@ function strategicAdj(view, move) {
     } else {
       const threat = view.handCounts[view.leadSeat];       // an opponent leads; punish them if they're closing out
       if (threat <= 5) adj += (6 - threat) * 18;
+      if (tempo && move.type !== COMBO.BOMB && move.type !== COMBO.ROCKET) {
+        adj += tempo;                                      // contest the lead with non-bomb plays (bombs stay hoarded)
+        if (view.handRanks.length <= 8) adj += (9 - view.handRanks.length) * 1.2; // closing in → the lead is worth more
+      }
     }
   } else {
     if (view.handRanks.length > 8) adj -= controlCost(move); // early game: hoard control even harder
@@ -153,7 +160,7 @@ function passScore(view) {
 // ---- the policy ------------------------------------------------------------
 // Pick a move (array of ranks) or null (pass) for `view`. The single decision function used by
 // both the live bots and the rollouts.
-export function pickMoveRanks(view, level, rng) {
+export function pickMoveRanks(view, level, rng, tempo = 0) {
   const following = view.against != null;
   const all = legalMoves(view.handRanks, view.against);
   // Never break up a 炸弹: drop moves that use only part of a held 4-of-a-kind. The bomb stays whole
@@ -165,7 +172,7 @@ export function pickMoveRanks(view, level, rng) {
     try { return monteCarlo(view, moves, following, rng); } catch { /* fall through to heuristic */ }
   }
   let best = null, bestS = following ? passScore(view) : -Infinity;
-  for (const m of moves) { const s = scoreMove(view, m, level, rng); if (s > bestS) { bestS = s; best = m; } }
+  for (const m of moves) { const s = scoreMove(view, m, level, rng, tempo); if (s > bestS) { bestS = s; best = m; } }
   return best ? best.ranks : null;
 }
 
@@ -263,10 +270,17 @@ export function chooseBid(game, seat, level = 1, rng = Math.random) {
   return Math.max(0, Math.min(3, call));
 }
 
+// Heuristic tempo (levels 0/1): how keenly the bot contests an opponent's lead. 0 was the original
+// over-cautious behavior; this value was chosen by paired self-play (see test/doudizhu-ai-check). It
+// is NOT used inside the level-2 Monte-Carlo (rollouts pass tempo 0), so 高手 play is unchanged.
+const DEFAULT_TEMPO = 10;
+
 // Choose a play for `seat`. Returns { pass, cardIds } — cardIds are concrete ids from the hand.
-export function chooseMove(game, seat, level = 1, rng = Math.random) {
+// `opts.tempo` overrides the heuristic tempo (exposed so paired self-play can A/B the aggression).
+export function chooseMove(game, seat, level = 1, rng = Math.random, opts = {}) {
   const view = buildView(game, seat);
-  const ranks = pickMoveRanks(view, level, rng);
+  const tempo = opts.tempo ?? DEFAULT_TEMPO;
+  const ranks = pickMoveRanks(view, level, rng, tempo);
   if (ranks === null) return { pass: true, cardIds: [] };
   const pool = game.hands[seat].slice();
   const cardIds = [];

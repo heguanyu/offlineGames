@@ -6,18 +6,23 @@
 <title>声音体检 · Voice clip audit</title>
 <script src="../app-nav.js"></script>
 <style>
-  /* pad for the iPad/iPhone safe areas (notch + status bar) when installed/standalone */
   body { margin: 0; background: #10131c; color: #e7ecf5;
     padding: max(16px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
              max(48px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
     font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
   .back-btn { display: inline-block; margin-bottom: 12px; background: #1b5e45; color: #eaf6f0;
-    border: 1px solid #2c8160; border-radius: 9px; padding: 8px 16px; font-size: 0.9rem; font-weight: 700;
+    border: 1px solid #2c8160; border-radius: 9px; padding: 7px 14px; font-size: 0.85rem; font-weight: 700;
     cursor: pointer; text-decoration: none; -webkit-tap-highlight-color: transparent; }
   .back-btn:hover { background: #20704f; }
-  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  /* top tab bar — present on every view */
+  nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 18px; border-bottom: 1px solid #2c3a63; }
+  nav.tabs a { padding: 9px 16px; border-radius: 9px 9px 0 0; background: #16213e; color: #cfe0ff;
+    text-decoration: none; font-size: 0.92rem; border: 1px solid #2c3a63; border-bottom: none; margin-bottom: -1px; }
+  nav.tabs a:hover { background: #1d2b52; }
+  nav.tabs a.active { background: #0f3460; color: #fff; font-weight: 700; border-bottom: 1px solid #0f3460; }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
   p.sub { color: #9aa3bd; margin: 0 0 14px; font-size: 0.88rem; line-height: 1.5; }
-  h2 { margin-top: 26px; border-bottom: 1px solid #2c3a63; padding-bottom: 4px; font-size: 1.05rem; }
+  h2 { margin-top: 24px; border-bottom: 1px solid #2c3a63; padding-bottom: 4px; font-size: 1.05rem; }
   h2.warn { border: 0; color: #ff9d6b; }
   h3 { color: #9fb4ff; margin: 14px 0 6px; font-size: 0.95rem; }
   #status { color: #9fb4ff; margin: 8px 0 14px; }
@@ -27,164 +32,207 @@
   .clip code, .comp code { color: #8a93ad; font-size: 0.74rem; } .clip i, .comp i { color: #6f88c0; font-style: normal; font-size: 0.72rem; }
   button.play { background: #23365e; color: #cfe0ff; border: none; border-radius: 5px; padding: 3px 9px; cursor: pointer; font-size: 0.82rem; }
   button.play:hover { background: #2f4a82; }
-  .flag-long { color: #ff9d6b; font-weight: 700; } .flag-short { color: #ffd23a; font-weight: 700; }
-  .clip.flag-long { border-color: #ff9d6b; } .clip.flag-short { border-color: #ffd23a; }
+  .flag-long { color: #ff9d6b; font-weight: 700; } .flag-short { color: #ffd23a; font-weight: 700; } .flag-missing { color: #ff6b6b; font-weight: 700; }
+  .clip.flag-long { border-color: #ff9d6b; } .clip.flag-short { border-color: #ffd23a; } .clip.flag-missing { border-color: #ff6b6b; opacity: 0.7; }
   .o-card { background: #161c2c; border: 1px solid #2c3a63; border-radius: 11px; padding: 10px 12px; margin: 8px 0; }
   .o-head { margin-bottom: 6px; } .comps { margin-top: 6px; color: #8a93ad; font-size: 0.8rem; }
   .fam { margin: 6px 0 14px; } .fam-name { font-weight: 700; color: #cfe0ff; } .fam-med { color: #8a93ad; font-size: 0.78rem; margin-left: 8px; }
   code { background: none; }
+  /* A/B test tables */
+  table.ab { border-collapse: collapse; margin: 6px 0 18px; }
+  table.ab td, table.ab th { border: 1px solid #2c3a63; padding: 7px 11px; text-align: left; font-size: 0.86rem; }
+  table.ab th { background: #16213e; }
+  table.ab td:first-child { color: #cfe0ff; }
+  .ab-pick { color: #7ddf8a; }
 </style>
 </head>
 <body>
-<!-- replace (not push) so the iPad edge-swipe has no voicepick entry to jump back into -->
-<a class="back-btn" href="../" onclick="event.preventDefault(); location.replace('../');">← 返回主页 / Return to main page</a>
-<h1>🎙️ 声音体检 — clip play-time outliers</h1>
-<p class="sub">
-  Measures every shipped voice clip (both games, all voices) live in your browser and flags duration
-  <b>outliers</b> vs the same word in the other voices (tempo-normalized). <b class="flag-long">Long</b> =
-  likely an extra tone; <b class="flag-short">short</b> = possibly clipped. ▶ plays the clip; each outlier
-  lists its comparison clips. Listen, then tell me which to fix.
-</p>
-<div id="status">加载中… measuring clips</div>
+<a class="back-btn" href="../" onclick="event.preventDefault(); location.replace('../');">← 返回主页 / Back</a>
+<nav class="tabs" id="tabs"></nav>
+<h1 id="title">🎙️ 声音体检 — Voice clip audit</h1>
+<p class="sub" id="sub"></p>
+
+<div id="status" hidden>加载中… measuring clips</div>
 <div id="content" hidden>
   <h2 class="warn">⚠️ Outliers (<span id="ocount">0</span>)</h2>
   <div id="outliers"></div>
   <h2>All clips (browse / spot-check)</h2>
   <div id="all"></div>
 </div>
+<div id="abcontent" hidden></div>
+<div id="landing" hidden></div>
 
 <script>
-// ---- manifest (slug -> text), mirrors games/*/voice + gen-voice-oss in the sibling gen project ----
+// ---- manifests (slug -> text), mirror games/*/voice + the sibling gen-voice-oss.py VOCAB_* --------
 const DIGITS = '一二三四五六七八九';
 const vMahjong = {};
 for (let i = 1; i <= 9; i++) { vMahjong['m'+i] = DIGITS[i-1]+'万'; vMahjong['p'+i] = DIGITS[i-1]+'筒'; vMahjong['s'+i] = DIGITS[i-1]+'条'; }
 Object.assign(vMahjong, { w0:'东', w1:'南', w2:'西', w3:'北', d0:'中', d1:'發', d2:'白',
   pung:'碰', chi:'吃', mingkong:'明杠', ankong:'暗杠', jinkong:'金杠', hula:'胡啦', dianpao:'点炮', zimo:'自摸' });
 const RANKS = { r3:'三', r4:'四', r5:'五', r6:'六', r7:'七', r8:'八', r9:'九', r10:'十', rJ:'勾', rQ:'圈', rK:'K', rA:'尖', r2:'二' };
+const PLABELS = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
 const vDou = Object.assign({}, RANKS, { sa:'仨' });
-['3','4','5','6','7','8','9','10','J','Q','K','A','2'].forEach((l, i) => vDou['dui'+l] = '俩' + Object.values(RANKS)[i]);
-Object.assign(vDou, { tri1:'三带一', tri2:'三带二', chuan:'串', plane:'飞机', bomb:'炸弹', rocket:'王炸', four2:'四带二',
+PLABELS.forEach((l, i) => vDou['dui'+l] = '俩' + Object.values(RANKS)[i]);
+Object.assign(vDou, { tri1:'三带一', tri2:'三带二', shunzi:'顺子！', chuan:'串', plane:'飞机', bomb:'炸弹', rocket:'王炸', four2:'四带二',
   jokerS:'小王', jokerB:'大王', bid1:'1分', bid2:'2分', bid3:'3分', guo:'过', landlord:'我是地主' });
+const vGuandan = Object.assign({}, RANKS);
+PLABELS.forEach((l, i) => { vGuandan['dui'+l] = '俩' + Object.values(RANKS)[i]; vGuandan['sa'+l] = '仨' + Object.values(RANKS)[i]; });
+Object.assign(vGuandan, { tri2:'三带二！', shunzi:'顺子！', tube:'钢板！', plate:'三连对！', flush:'同花顺！', bomb:'炸弹！', rocket:'王炸！',
+  jokerS:'小王', jokerB:'大王' });
+// 斗地主 + 掼蛋 clips all end with ！ (matches gen-voice-oss.py _excl); mahjong is untouched.
+const exclAll = (v) => { for (const k in v) v[k] = v[k].replace(/[。，！]+$/, '') + '！'; return v; };
+exclAll(vDou); exclAll(vGuandan);
+vDou.r4 = '四'; vGuandan.r4 = '四'; // r4 keeps no cue (VoiceDesign runs away on 四！)
+vDou.bid2 = '两分！';                // 2分 spoken as 两分 (liǎng), not 二分
 
 const GAMES = {
-  'mahjong-common': { vocab: vMahjong, personas: { 0:'0 · 东 young man', 1:'1 · 南 young woman', 2:'2 · 西 mature man', 3:'3 · 北 mature woman' },
-    families: ['数牌','字牌','叫牌'] },
-  'doudizhu': { vocab: vDou, personas: { 0:'0 · 你 young man', 1:'1 · 下家 young woman', 2:'2 · 上家 mature man' },
-    families: ['点数','对子','牌型其他'] },
+  'mahjong-common': { label: '🀄 麻将', vocab: vMahjong, personas: { 0:'0 · 东 young man', 1:'1 · 南 young woman', 2:'2 · 西 mature man', 3:'3 · 北 mature woman' }, families: ['数牌','字牌','叫牌'] },
+  'doudizhu':       { label: '🃏 斗地主', vocab: vDou, personas: { 0:'0 · 你 young man', 1:'1 · 下家 young woman', 2:'2 · 上家 mature man' }, families: ['点数','对子','牌型其他'] },
+  'guandan':        { label: '🎴 掼蛋', vocab: vGuandan, personas: { 0:'0 · 你 young man', 1:'1 · 右家 young woman', 2:'2 · 对家 mature man', 3:'3 · 左家 mature woman' }, families: ['点数','对子','三同','牌型'] },
 };
-const LONG = 1.6, SHORT = 0.55, FLOOR = 0.12; // outlier thresholds (ratio vs expected; absolute floor)
 
-function fam(game, slug) {
-  if (game === 'mahjong-common') {
-    if (/^[mps][1-9]$/.test(slug)) return '数牌';
-    if (/^(w[0-3]|d[0-2])$/.test(slug)) return '字牌';
-    return '叫牌';
-  }
-  if (slug.startsWith('dui')) return '对子';
-  if (slug[0] === 'r') return '点数';
-  return '牌型其他';
-}
+// ---- A/B casting tests (data-driven; add more here) ----
+const ABTESTS = {
+  mm1: {
+    title: '成熟男声 (persona 2 · 西/上家/对家) — ✓ 已选 C 并上线',
+    note: '原来的「45 岁、低沉」太老了。已选 C（~38 岁、relaxed & easygoing，seed 42，1.3×），现已上线全部 persona 2（麻将 西 / 斗地主 上家 / 掼蛋 对家）。下方 current(shipped) 现在就是 C；cur/A/B/D 为当时的候选样词（1.3×）。',
+    words: { sa5:'仨五！', bomb:'炸弹！', shunzi:'顺子！', tube:'钢板！', flush:'同花顺！' },
+    rows: [
+      { label: 'current (shipped · 45 · 1.8×)', dir: '../games/guandan/voice/2' },
+      { label: 'cur — 45 deep/mellow @1.3×', dir: '../test/mm1cmp/cur' },
+      { label: 'A — ~35 warm & clear, friendly', dir: '../test/mm1cmp/A' },
+      { label: 'B — early–mid 30s, bright & energetic', dir: '../test/mm1cmp/B' },
+      { label: 'C — ~38 relaxed & easygoing', dir: '../test/mm1cmp/C' },
+      { label: 'D — mid-30s, lively announcer', dir: '../test/mm1cmp/D' },
+    ],
+  },
+  mm1cue: {
+    title: '成熟男声 南 / 白 / 發 — 标点测试（✓ 已定）',
+    note: 'mm1 (voice C) 把 南 念得偏长、發 带一点气声。✓ 已选 南=！、白=！、發=\'，并上线 mahjong persona 2（作为 PERSONA_TEXT 覆盖，重生成也会复现）。下方 current 现在就是定稿；其余行为当时的候选。',
+    words: { w1: '南', d2: '白', d1: '發' },
+    rows: [
+      { label: 'current (shipped · bare)', dir: '../games/mahjong-common/voice/2' },
+      { label: '。 period', dir: '../test/mm1cue/dot' },
+      { label: '， comma', dir: '../test/mm1cue/com' },
+      { label: '！ exclamation', dir: '../test/mm1cue/exc' },
+      { label: "' apostrophe", dir: '../test/mm1cue/apo' },
+    ],
+  },
+};
+
+const LONG = 1.6, SHORT = 0.55, FLOOR = 0.12;
 const median = (xs) => { if (!xs.length) return 0; const a = xs.slice().sort((x,y)=>x-y); const m = a.length>>1; return a.length%2 ? a[m] : (a[m-1]+a[m])/2; };
 const esc = (t) => (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const pname = (game, p) => { const l = GAMES[game].personas[p]; return l.includes(' · ') ? l.split(' · ')[1] : ('v'+p); };
+function fam(game, slug) {
+  if (game === 'mahjong-common') { if (/^[mps][1-9]$/.test(slug)) return '数牌'; if (/^(w[0-3]|d[0-2])$/.test(slug)) return '字牌'; return '叫牌'; }
+  if (game === 'guandan') { if (slug.startsWith('dui')) return '对子'; if (slug.startsWith('sa')) return '三同'; if (slug[0]==='r'||slug.startsWith('joker')) return '点数'; return '牌型'; }
+  if (slug.startsWith('dui')) return '对子'; if (slug[0]==='r') return '点数'; return '牌型其他';
+}
+function measure(url) { return new Promise((res) => { const a = new Audio(); a.preload = 'metadata'; a.onloadedmetadata = () => res(isFinite(a.duration)?a.duration:null); a.onerror = () => res(null); a.src = url; }); }
 
-// measure a clip's duration from its WAV metadata
-function measure(url) {
-  return new Promise((res) => {
-    const a = new Audio(); a.preload = 'metadata';
-    a.onloadedmetadata = () => res(isFinite(a.duration) ? a.duration : null);
-    a.onerror = () => res(null);
-    a.src = url;
-  });
+const params = new URLSearchParams(location.search);
+const SELECTED = params.get('game');
+const TAB = params.get('tab');
+
+// ---- top tab bar (on every view) ----
+const TABS = [
+  ['?game=mahjong-common', '🀄 麻将', SELECTED === 'mahjong-common'],
+  ['?game=doudizhu', '🃏 斗地主', SELECTED === 'doudizhu'],
+  ['?game=guandan', '🎴 掼蛋', SELECTED === 'guandan'],
+  ['?tab=ab', '🆎 A/B tests', TAB === 'ab'],
+];
+document.getElementById('tabs').innerHTML = TABS.map(([h, l, on]) =>
+  `<a href="${h}"${on ? ' class="active"' : ''} onclick="event.preventDefault(); location.replace('${h}');">${l}</a>`).join('');
+
+// shared playback (one clip at a time)
+let cur = null;
+document.body.addEventListener('click', (e) => { const b = e.target.closest('button.play'); if (!b) return; if (cur) cur.pause(); cur = new Audio(b.dataset.u); cur.play(); });
+
+// ---- route ----
+if (TAB === 'ab') renderAB();
+else if (SELECTED && GAMES[SELECTED]) runAudit(SELECTED);
+else renderLanding();
+
+function renderLanding() {
+  document.getElementById('title').textContent = '🎙️ 声音体检 — Voice clip audit';
+  document.getElementById('sub').textContent = '选上方的标签页：按游戏审听语音（标注时长异常 / 缺失），或 A/B 试听新配音。';
+  document.getElementById('landing').hidden = false;
 }
 
-(async function () {
+function renderAB() {
+  document.getElementById('title').textContent = '🆎 A/B 配音试听';
+  document.getElementById('sub').textContent = '试听并告诉我你更喜欢哪一个。';
+  let html = '';
+  for (const t of Object.values(ABTESTS)) {
+    const words = Object.entries(t.words);
+    html += `<h2>${esc(t.title)}</h2><p class="sub">${esc(t.note)}</p>`;
+    html += `<table class="ab"><tr><th>option</th>` + words.map(([s, w]) => `<th>${esc(w)}</th>`).join('') + `</tr>`;
+    for (const row of t.rows) {
+      html += `<tr><td>${esc(row.label)}</td>` + words.map(([s]) => `<td><button class="play" data-u="${row.dir}/${s}.wav">▶</button></td>`).join('') + `</tr>`;
+    }
+    html += `</table>`;
+  }
+  const ab = document.getElementById('abcontent'); ab.innerHTML = html; ab.hidden = false;
+}
+
+async function runAudit(game) {
+  const gc = GAMES[game];
+  document.getElementById('title').textContent = `🎙️ ${gc.label} — clip play-time outliers`;
+  document.getElementById('sub').innerHTML =
+    `Measures every <b>${game}</b> clip (all ${Object.keys(gc.personas).length} voices) and flags `
+    + `<b class="flag-long">long</b> / <b class="flag-short">short</b> / <b class="flag-missing">missing</b> outliers vs the same word in the other voices. ▶ plays a clip.`;
+  const status = document.getElementById('status'); status.hidden = false;
+
   const clips = [];
-  for (const [game, gc] of Object.entries(GAMES))
-    for (const p of Object.keys(gc.personas).map(Number))
-      for (const slug of Object.keys(gc.vocab))
-        clips.push({ game, persona: p, slug, text: gc.vocab[slug], fam: fam(game, slug),
-          url: `../games/${game}/voice/${p}/${slug}.wav` });
+  for (const p of Object.keys(gc.personas).map(Number))
+    for (const slug of Object.keys(gc.vocab))
+      clips.push({ persona: p, slug, text: gc.vocab[slug], fam: fam(game, slug), url: `../games/${game}/voice/${p}/${slug}.wav` });
 
   let done = 0;
-  const status = document.getElementById('status');
-  await Promise.all(clips.map(async (c) => {
-    c.dur = await measure(c.url);
-    if (++done % 25 === 0) status.textContent = `加载中… ${done}/${clips.length}`;
-  }));
+  await Promise.all(clips.map(async (c) => { c.dur = await measure(c.url); if (++done % 25 === 0) status.textContent = `加载中… ${done}/${clips.length}`; }));
   const ok = clips.filter((c) => c.dur != null);
-  const missing = clips.length - ok.length;
+  const missing = clips.filter((c) => c.dur == null);
 
-  // baselines: per-persona median (tempo proxy) + per-word cross-voice normalized median
   const personaMed = {}, slugNormMed = {};
-  for (const [game, gc] of Object.entries(GAMES))
-    for (const p of Object.keys(gc.personas).map(Number))
-      personaMed[game+'/'+p] = median(ok.filter((c)=>c.game===game && c.persona===p).map((c)=>c.dur));
-  for (const [game, gc] of Object.entries(GAMES))
-    for (const slug of Object.keys(gc.vocab)) {
-      const norms = ok.filter((c)=>c.game===game && c.slug===slug).map((c)=>c.dur / personaMed[game+'/'+c.persona]);
-      if (norms.length) slugNormMed[game+'/'+slug] = median(norms);
-    }
-  // family medians per persona (for the browse table)
+  for (const p of Object.keys(gc.personas).map(Number)) personaMed[p] = median(ok.filter((c)=>c.persona===p).map((c)=>c.dur));
+  for (const slug of Object.keys(gc.vocab)) { const norms = ok.filter((c)=>c.slug===slug).map((c)=>c.dur/(personaMed[c.persona]||1)); if (norms.length) slugNormMed[slug] = median(norms); }
   const famMed = {};
-  for (const [game, gc] of Object.entries(GAMES))
-    for (const p of Object.keys(gc.personas).map(Number))
-      for (const f of gc.families)
-        famMed[`${game}/${p}/${f}`] = median(ok.filter((c)=>c.game===game && c.persona===p && c.fam===f).map((c)=>c.dur));
+  for (const p of Object.keys(gc.personas).map(Number)) for (const f of gc.families) famMed[`${p}/${f}`] = median(ok.filter((c)=>c.persona===p && c.fam===f).map((c)=>c.dur));
 
   for (const c of ok) {
-    const pm = personaMed[c.game+'/'+c.persona], snm = slugNormMed[c.game+'/'+c.slug] || 1;
-    c.base = snm * pm;                                   // expected duration for this word in this voice
-    c.ratio = (pm && snm) ? (c.dur / pm) / snm : 1;
-    c.flag = null;
+    const pm = personaMed[c.persona], snm = slugNormMed[c.slug] || 1;
+    c.base = snm * pm; c.ratio = (pm && snm) ? (c.dur/pm)/snm : 1; c.flag = null;
     if (c.ratio >= LONG && (c.dur - c.base) >= FLOOR) c.flag = 'long';
     else if (c.ratio <= SHORT && (c.base - c.dur) >= FLOOR) c.flag = 'short';
   }
 
   const outliers = ok.filter((c)=>c.flag).sort((a,b)=> b.ratio - a.ratio);
   const chip = (c, comp) => `<span class="${comp?'comp':('clip'+(c.flag?' flag-'+c.flag:''))}">`
-    + `<button class="play" data-u="${c.url}">▶</button> <b>${esc(c.text)}</b> <code>${c.slug}</code> `
-    + `<i>v${c.persona}</i> ${c.dur.toFixed(3)}s</span>`;
+    + `<button class="play" data-u="${c.url}">▶</button> <b>${esc(c.text)}</b> <code>${c.slug}</code> <i>v${c.persona}</i> ${c.dur.toFixed(3)}s</span>`;
+  const missChip = (c) => `<span class="clip flag-missing"><b>${esc(c.text)}</b> <code>${c.slug}</code> <i>v${c.persona}</i> missing</span>`;
 
-  // outlier cards
-  document.getElementById('outliers').innerHTML = outliers.map((c) => {
-    const comps = ok.filter((x)=>x.game===c.game && x.slug===c.slug && x !== c).sort((a,b)=>a.persona-b.persona);
-    return `<div class="o-card"><div class="o-head">${c.game} · ${esc(GAMES[c.game].personas[c.persona])} · `
-      + `<b>${esc(c.text)}</b> <code>${c.slug}</code> — <span class="flag-${c.flag}">${c.dur.toFixed(3)}s `
-      + `(${c.flag}, ${c.ratio.toFixed(2)}× vs ${c.base.toFixed(3)}s)</span></div>`
+  document.getElementById('outliers').innerHTML = (outliers.map((c) => {
+    const comps = ok.filter((x)=>x.slug===c.slug && x !== c).sort((a,b)=>a.persona-b.persona);
+    return `<div class="o-card"><div class="o-head">${esc(gc.personas[c.persona])} · <b>${esc(c.text)}</b> <code>${c.slug}</code> — `
+      + `<span class="flag-${c.flag}">${c.dur.toFixed(3)}s (${c.flag}, ${c.ratio.toFixed(2)}× vs ${c.base.toFixed(3)}s)</span></div>`
       + `<div>${chip(c)}</div><div class="comps">comps: ${comps.map((x)=>chip(x,true)).join('')}</div></div>`;
-  }).join('') || '<p>No outliers flagged. 🎉</p>';
-  document.getElementById('ocount').textContent =
-    `${outliers.filter((c)=>c.flag==='long').length} long / ${outliers.filter((c)=>c.flag==='short').length} short`;
+  }).join('')) + (missing.length ? `<div class="o-card"><div class="o-head"><span class="flag-missing">${missing.length} missing clip(s)</span></div><div>${missing.map(missChip).join('')}</div></div>` : '')
+    || '<p>No outliers flagged. 🎉</p>';
+  document.getElementById('ocount').textContent = `${outliers.filter((c)=>c.flag==='long').length} long / ${outliers.filter((c)=>c.flag==='short').length} short / ${missing.length} missing`;
 
-  // full browse table grouped game -> persona -> family
   let html = '';
-  for (const [game, gc] of Object.entries(GAMES)) {
-    html += `<h2>${game}</h2>`;
-    for (const p of Object.keys(gc.personas).map(Number)) {
-      html += `<h3>${esc(gc.personas[p])}</h3>`;
-      for (const f of gc.families) {
-        const fc = ok.filter((c)=>c.game===game && c.persona===p && c.fam===f).sort((a,b)=>a.dur-b.dur);
-        if (!fc.length) continue;
-        html += `<div class="fam"><span class="fam-name">${f}</span>`
-          + `<span class="fam-med">median ${famMed[`${game}/${p}/${f}`].toFixed(3)}s</span>`
-          + `<div>${fc.map((c)=>chip(c)).join('')}</div></div>`;
-      }
+  for (const p of Object.keys(gc.personas).map(Number)) {
+    html += `<h3>${esc(gc.personas[p])}</h3>`;
+    for (const f of gc.families) {
+      const fc = ok.filter((c)=>c.persona===p && c.fam===f).sort((a,b)=>a.dur-b.dur);
+      if (!fc.length) continue;
+      html += `<div class="fam"><span class="fam-name">${f}</span><span class="fam-med">median ${famMed[`${p}/${f}`].toFixed(3)}s</span><div>${fc.map((c)=>chip(c)).join('')}</div></div>`;
     }
   }
   document.getElementById('all').innerHTML = html;
-
-  // one shared audio element for playback
-  let cur = null;
-  document.body.addEventListener('click', (e) => {
-    const b = e.target.closest('button.play'); if (!b) return;
-    if (cur) cur.pause();
-    cur = new Audio(b.dataset.u); cur.play();
-  });
-
-  status.textContent = `${ok.length} clips measured${missing?` (${missing} missing)`:''} · ${outliers.length} outlier(s)`;
+  status.textContent = `${ok.length} clips measured${missing.length?` · ${missing.length} missing`:''} · ${outliers.length} outlier(s)`;
   document.getElementById('content').hidden = false;
-})();
+}
 </script>
 </body>
 </html>
