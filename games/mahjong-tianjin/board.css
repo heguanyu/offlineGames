@@ -531,13 +531,13 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
    predefined position — a newly-discarded tile drops into the next slot without nudging the ones
    already laid down (the first row never shifts). */
 .b2-pool { position: absolute; left: 50%; top: 43%; transform: translate(-50%,-50%);
-  display: flex; gap: 8px; align-items: flex-end; justify-content: space-evenly; width: 70%; }
+  display: flex; gap: 8px; align-items: flex-end; justify-content: space-evenly; width: 60%; --pt: 20px; }
 
-.b2-pool-type { display: flex; flex-direction: column; gap: 1px; width: calc(24px * 5 + 1px * 4); } /* 5 slots wide */
+.b2-pool-type { display: flex; flex-direction: column; gap: 1px; width: calc(var(--pt) * 5 + 1px * 4); } /* 5 slots wide */
 
 .b2-pool-row { display: flex; gap: 1px; justify-content: flex-start; }
 
-.b2-pool .tile { --tw: 24px; --th: 32px; } /* sized so 5-per-row × 4 suits clears the side boxes */
+.b2-pool .tile { --tw: var(--pt); --th: calc(var(--pt) * 1.34); } /* smaller so 5×4 clears the side boxes with margin */
 
 /* the claimable tile, pulled out big + glowing */
 .b2-pending { position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%); }
@@ -566,10 +566,11 @@ body.flat #action-hud.claim .act-btn:not(.chow-btn) {
 .b2-htile.sel { transform: translateY(-13px);
   box-shadow: 0 0 0 2px rgba(232,196,102,0.9), 0 0 14px 4px rgba(232,196,102,0.5); }
 
-/* compact winning modal: 20% thinner + capped height so all four revealed handrows (玩家 below,
-   对家 above, 上家/下家 either side) stay visible around it. The per-seat 本局得分 grid is dropped
-   here — those scores now sit beside each handrow (see .seat-score). */
-body.flat #result-frame { width: min(544px, 75vw); transform: none; }
+/* compact winning modal, sized off vmax/vmin (NOT vw/vh — the board is force-landscape, so in a
+   portrait device vw/vh are swapped and the modal would collapse). Wide enough to exceed the
+   player's handrow + its 3-digit score; height capped so the 玩家/对家 rows stay visible around it.
+   The per-seat 本局得分 grid is dropped here — those scores sit beside each handrow (.seat-score). */
+body.flat #result-frame { width: min(600px, 84vmax); min-width: min(560px, 96vmax); transform: none; }
 
 body.flat #result-overlay .panel { max-width: none; }
 
@@ -577,7 +578,7 @@ body.flat #result-overlay .bd-totals { display: none; } /* scores shown beside t
 
 body.flat #result-overlay .seat-score { font-size: 33px; } /* ≈ the flat handrow card height */
 
-body.flat .panel { padding: 10px 14px; max-height: 66vh; border-radius: 14px; }
+body.flat .panel { padding: 10px 14px; max-height: 70vmin; border-radius: 14px; } /* vmin: board short side (force-landscape safe) */
 
 body.flat .panel h2 { font-size: 1.08rem; }
 
