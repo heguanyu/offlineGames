@@ -9,7 +9,7 @@
 // as WebGL, which is what we're avoiding on iPhone. The DOM board is rebuilt only
 // when sync() is called (i.e. on a real game event); a static board between turns
 // costs ~zero. No deck wall, no flight animations — just the live state.
-import { faceTileEl, seatBadgeHtml } from './ui-util.js';
+import { faceTileEl, seatBadgeHtml, preloadTileFaces } from './ui-util.js';
 import { updateRing } from '../mahjong-common/timer-ring.js';
 import { BOT_NAMES } from '../mahjong-common/bot-names.js';
 
@@ -45,6 +45,7 @@ export class MahjongScene2D {
     this._lastDrawn = undefined;
 
     new ResizeObserver(() => this.resize()).observe(this.mount);
+    preloadTileFaces(); // warm + decode tile PNGs so the first deal doesn't stall decoding them (slow iPhones)
   }
 
   setRotated(r) { this.rotated = !!r; }

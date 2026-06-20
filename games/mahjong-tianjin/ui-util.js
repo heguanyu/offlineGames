@@ -16,6 +16,15 @@ export function faceTileEl(kind, { lg = false, wild = false } = {}) {
   return el;
 }
 
+// Preload + decode all 34 tile faces up front so the flat 2D board's first deal doesn't fetch/decode
+// a dozen PNGs on the spot — a 1–2s stall on slow iPhones. (The 3D scene warms them via preloadDesigns;
+// the 2D board uses <img>, so it needs its own warm.) Idempotent.
+let _facesWarmed = false;
+export function preloadTileFaces() {
+  if (_facesWarmed) return; _facesWarmed = true;
+  for (let k = 0; k < 34; k++) { const img = new Image(); img.src = tileFaceUrl(k); if (img.decode) img.decode().catch(() => {}); }
+}
+
 // Status badges for a seat's nameplate: 👑 for the 庄, ⚔️ for a 拉庄 challenger. Shared
 // by the 3D HTML plates (main.js renderPlate) and the flat 2D board (scene2d) so the two
 // renderers stay in sync; CSS sizes .crown / .lazhuang per context. Decoupled from any
