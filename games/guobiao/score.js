@@ -3,8 +3,8 @@
 // This implements a substantial, commonly-occurring SUBSET of the official 81
 // fans (not all 81), with the major non-repeat exclusions applied. The minimum
 // to win is 8 fan (起和8番) — enforced by the engine, not here. Tile ids follow
-// the shared model in ../mahjong-tianjin/engine.js.
-import { suitOf, rankOf, isNumberSuit } from '../mahjong-tianjin/engine.js';
+// the shared model in ../mahjong-common/engine-core.js.
+import { suitOf, rankOf, isNumberSuit } from '../mahjong-common/engine-core.js';
 
 const isHonor = (id) => id >= 27;
 const isWind = (id) => id >= 27 && id < 31;       // 东南西北 = 0..3

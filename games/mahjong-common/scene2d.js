@@ -10,8 +10,8 @@
 // when sync() is called (i.e. on a real game event); a static board between turns
 // costs ~zero. No deck wall, no flight animations — just the live state.
 import { faceTileEl, seatBadgeHtml, preloadTileFaces } from './ui-util.js';
-import { updateRing } from '../mahjong-common/timer-ring.js';
-import { BOT_NAMES } from '../mahjong-common/bot-names.js';
+import { updateRing } from './timer-ring.js';
+import { BOT_NAMES } from './bot-names.js';
 
 const WIND = ['东', '南', '西', '北'];
 const HUMAN = 0;

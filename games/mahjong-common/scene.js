@@ -7,8 +7,8 @@
 // tile toward its target transform. That gives smooth selection lifts, hand
 // reflow when a tile leaves, and discards dropping into the pool — for free.
 import * as THREE from './lib/three.module.min.js';
-import { suitOf, rankOf, shuffle } from './engine.js';
-import { ringColor } from '../mahjong-common/timer-ring.js';
+import { suitOf, rankOf, shuffle } from './engine-core.js';
+import { ringColor } from './timer-ring.js';
 
 const TW = 1.0, TH = 1.35, TD = 0.62; // tile width / height / depth
 const FELT = 16;

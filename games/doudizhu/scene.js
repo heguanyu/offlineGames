@@ -5,7 +5,7 @@
 // Meshes are persistent and keyed by a stable id; sync() diffs the desired layout against
 // what's on the table and an animation loop eases each card toward its target transform, so
 // selection lifts, hand reflow, and cards sliding to the centre come for free.
-import * as THREE from '../mahjong-tianjin/lib/three.module.min.js';
+import * as THREE from '../poker-common/lib/three.module.min.js';
 import { rankLabel } from './engine.js';
 
 const CW = 1.0, CH = 1.45, CD = 0.014;  // card width / height / depth (very thin cards)
@@ -94,11 +94,11 @@ function backTexture() {
   backTex = new THREE.CanvasTexture(c); backTex.colorSpace = THREE.SRGBColorSpace; backTex.anisotropy = 4;
   return backTex;
 }
-// Table materials — SAME as the mahjong table (shared CC0 textures in ../mahjong-tianjin/textures):
+// Table materials — shared CC0 table textures in ../poker-common/textures:
 // felt = non-tiling green canvas (blotches + Gaussian grain, no visible repeat) + tiled Fabric034
 // normal/roughness; rim = Wood066 antique-chestnut. The normal maps need a directional light to read.
 const TEX = (file, srgb, rep) => {
-  const t = new THREE.TextureLoader().load(new URL(`../mahjong-tianjin/textures/${file}`, import.meta.url).href);
+  const t = new THREE.TextureLoader().load(new URL(`../poker-common/textures/${file}`, import.meta.url).href);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 8;
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   return t;

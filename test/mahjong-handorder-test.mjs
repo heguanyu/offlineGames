@@ -2,7 +2,7 @@
 // else sorted ascending. The freshly drawn tile is not pulled out — it sorts
 // into place (the renderer flanks it with a margin instead).
 // Usage: node test/mahjong-handorder-test.mjs
-import { buildOrder } from '../games/mahjong-tianjin/handorder.js';
+import { buildOrder } from '../games/mahjong-common/handorder.js';
 
 let passed = 0, failed = 0;
 const ok = (c, m) => { if (c) passed++; else { failed++; console.error('  FAIL:', m); } };

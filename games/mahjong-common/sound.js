@@ -8,7 +8,7 @@
 // 暗杠/金杠 + 胡啦(天津)/点炮·自摸(国标). Missing/unloaded clips fall back to SpeechSynthesis.
 // Qwen3-TTS clips live in the SHARED mahjong-common/voice (used by 天津 + 国标), per persona = WIND 0..3.
 const USE_CLIPS = true;
-const CLIP_BASE = new URL('../mahjong-common/voice/', import.meta.url).href;
+const CLIP_BASE = new URL('./voice/', import.meta.url).href;
 function tileSlug(id) {
   if (id < 9) return 'm' + (id + 1);
   if (id < 18) return 'p' + (id - 8);

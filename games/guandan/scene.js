@@ -6,7 +6,7 @@
 //
 // FOUR seats (vs 斗地主's three): 0 bottom (you), 1 right, 2 top (your partner), 3 left.
 // Turn order 0→1→2→3 clockwise. The ♥-level wildcards glow purple so you can spot 逢人配 at a glance.
-import * as THREE from '../mahjong-tianjin/lib/three.module.min.js';
+import * as THREE from '../poker-common/lib/three.module.min.js';
 import { rankLabel, isWild } from './engine.js';
 
 const CW = 1.0, CH = 1.45, CD = 0.014;
@@ -95,7 +95,7 @@ function backTexture() {
   return backTex;
 }
 const TEX = (file, srgb, rep) => {
-  const t = new THREE.TextureLoader().load(new URL(`../mahjong-tianjin/textures/${file}`, import.meta.url).href);
+  const t = new THREE.TextureLoader().load(new URL(`../poker-common/textures/${file}`, import.meta.url).href);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 8;
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   return t;
