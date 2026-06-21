@@ -138,8 +138,49 @@ export class MahjongGame {
     btns[this.resultFocus] && btns[this.resultFocus].focus();
   }
 
+  // ---- slide-up-to-play gesture (touch/iPad + mobile) ----------------------
+  // Was the drag from (sx,sy) to (ex,ey) an upward slide past ~2 tile-heights?
+  // The page force-rotates 90° on portrait, so the on-screen "up" axis is -Δy
+  // normally but +Δx when rotated. The rotation is rigid (1:1 px), so the scene's
+  // tile-height (in px) is directly comparable. We also require the up component to
+  // dominate the sideways one, so a horizontal swipe never plays a tile.
+  isSlideUp(sx, sy, ex, ey) {
+    const rotated = !!(this.scene && this.scene.rotated);
+    const up = rotated ? (ex - sx) : (sy - ey);
+    const side = rotated ? (ey - sy) : (ex - sx);
+    const tileH = (this.scene && this.scene.handTilePixelHeight) ? this.scene.handTilePixelHeight() : 48;
+    return up >= 2 * tileH && up >= Math.abs(side);
+  }
+
+  // Track a hand-tile pointer from pointerdown: on release, a big enough upward
+  // slide plays that tile directly (playTileAt); otherwise it's a normal tap
+  // (onPickTile — select / second-tap-to-discard). Call from each game's
+  // pointerdown after picking the tile under the finger.
+  trackTileGesture(e, idx) {
+    const sx = e.clientX, sy = e.clientY;
+    const onMove = () => {}; // tracked via the pointerup coords; move is a no-op
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+    };
+    const onUp = (ev) => {
+      cleanup();
+      if (this.isSlideUp(sx, sy, ev.clientX, ev.clientY) && this.playTileAt(idx)) return; // slid up → play directly
+      this.onPickTile(idx); // otherwise the normal tap (select, or second-tap discard)
+    };
+    const onCancel = () => { cleanup(); }; // gesture stolen (scroll/etc.) → neither play nor select
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+  }
+
   // ---- hooks each variant must implement -----------------------------------
   isClaimPhase() { throw new Error('isClaimPhase() not implemented'); }
   selectableHandIndices() { throw new Error('selectableHandIndices() not implemented'); }
   returnHub() { throw new Error('returnHub() not implemented'); }
+  onPickTile(idx) { throw new Error('onPickTile() not implemented'); }
+  // Discard the hand tile at rendered index `idx` directly if it's legal to play
+  // right now (the human's turn, a discardable tile). Returns true if it played.
+  playTileAt(idx) { return false; }
 }

@@ -300,6 +300,10 @@ class GuobiaoGame extends MahjongGame {
         $('result-overlay').classList.add('hidden'); // the next hand is dealing → hide the result panel
         this.selIndex = 0; this.focusIndex = 0; this.lockedTing = false; this.tingWaits = []; this.lastLogLen = 0;
         sound.stopMusic();
+        // Drop a 听 disclaimer left over from the hand just played — synchronously, before
+        // the deal animation, so it never lingers over 发牌中… (render() only clears it once
+        // the deal finishes). positionTingBanner re-adds 'show' later only while 听.
+        { const tb = $('ting-banner'); tb.textContent = ''; tb.classList.remove('show'); }
         if (!ONLINE) this.saveSession();
         if (this.scene && !FAST) { // serve the tiles from the wall, then play
           this.dealing = true;
@@ -415,6 +419,17 @@ class GuobiaoGame extends MahjongGame {
     }
     this.selIndex = Math.min(this.selIndex, Math.max(0, this.selectableHandIndices().length - 1));
     this.backend.discard(id); // the 'discard' event animates it, then the backend drives the bots
+  }
+  // Slide-up-to-play: discard the exact tile under the finger directly (a plain
+  // discard — slide-up doesn't declare 听). Only on your turn, not while 听 autopilot.
+  playTileAt(renderedIdx) {
+    if (this.game.turn !== HUMAN || this.game.phase !== PHASE.AWAIT_DISCARD || this.lockedTing) return false;
+    if (this.scene && this.scene.handDrawRevealing) return false; // wait until the drawn tile settles
+    const id = this.renderedHand()[renderedIdx];
+    if (id == null) return false;
+    this.selIndex = this.selectableHandIndices().indexOf(renderedIdx);
+    this.backend.discard(id);
+    return true;
   }
   doDeclareWin() { if (this.scene && this.scene.handDrawRevealing) return; this.backend.declareWin(); }
   doSelfKong(kind) { if (this.scene && this.scene.handDrawRevealing) return; if (this.game.turn === HUMAN && this.game.phase === PHASE.AWAIT_DISCARD) this.backend.selfKong(kind); }
@@ -708,7 +723,7 @@ $('scene').addEventListener('pointerdown', (e) => {
   sound.resume();
   if (app.game.turn !== HUMAN || app.game.phase !== PHASE.AWAIT_DISCARD) return;
   const idx = app.scene.pick(e.clientX, e.clientY);
-  if (idx != null) app.onPickTile(idx);
+  if (idx != null) app.trackTileGesture(e, idx); // tap = select / second-tap discard; slide up ~2 tiles = play directly
 });
 // PC only: hovering a hand tile selects it (same as a click-to-select). Mouse-only
 // so touch is unaffected; respects the same turn/听/draw-settle guards.
@@ -738,6 +753,7 @@ if (ONLINE) { $('start-overlay').classList.add('hidden'); app.gameStarted = true
 if (new URLSearchParams(location.search).get('fast')) {
   window.__gb = {
     phase: () => app.game && app.game.phase,
+    game: () => app.game,
     scene: () => app.scene,
     selInfo: () => ({ selIndex: app.selIndex, drawn: app.game && app.game.drawnTile, selKind: app.renderedHand()[app.selectableHandIndices()[app.selIndex]], revealing: !!(app.scene && app.scene.handDrawRevealing) }),
     claim: () => app.game && app.game.currentClaim(),

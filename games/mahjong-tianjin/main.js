@@ -450,6 +450,21 @@ class TianjinGame extends MahjongGame {
     this.backend.discard(id); // the 'discard' event animates it, then the backend drives the bots
   }
 
+  // Slide-up-to-play: discard the exact tile under the finger, skipping the tap-to-
+  // select step. Only on your turn, never a 混儿 (or as a viewer). Returns true if played.
+  playTileAt(renderedIdx) {
+    if (VIEWER) return false;
+    if (!this.game || this.game.turn !== HUMAN || this.game.phase !== PHASE.AWAIT_DISCARD) return false;
+    if (this.scene && this.scene.handDrawRevealing) return false; // wait until the drawn tile settles
+    const id = this.renderedHand()[renderedIdx];
+    if (id == null || this.game.isWild(id)) return false; // 混儿 can't be discarded
+    const pos = this.selectableHandIndices().indexOf(renderedIdx);
+    if (pos < 0) return false;
+    this.selIndex = pos; this.drawnWildSelected = false; this.noSel = true;
+    this.backend.discard(id);
+    return true;
+  }
+
   doDeclareWin() {
     if (this.scene && this.scene.handDrawRevealing) return; // wait until the drawn tile settles
     this.backend.declareWin();
@@ -1089,7 +1104,7 @@ $('scene').addEventListener('pointerdown', (e) => {
   if (!app.scene || !app.gameStarted || app.dealing || app.animating) return;
   sound.resume(); // touch is a user gesture — unlock audio
   const idx = app.scene.pick(e.clientX, e.clientY);
-  if (idx != null) app.onPickTile(idx); // onPickTile selects always (online) but only discards on your turn
+  if (idx != null) app.trackTileGesture(e, idx); // tap = select / second-tap discard; slide up ~2 tiles = play directly
 });
 // PC only: hovering a hand tile selects it (same as a click-to-select). Mouse-only
 // so touch is unaffected; 混儿 aren't selectable so hovering them is ignored.

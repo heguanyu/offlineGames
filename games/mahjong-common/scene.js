@@ -814,6 +814,16 @@ export class MahjongScene {
     return { x: (v.x * 0.5 + 0.5) * this.canvas.clientWidth, y: (-v.y * 0.5 + 0.5) * this.canvas.clientHeight };
   }
 
+  // Approximate on-screen height (px) of a human hand tile — the span a one-tile-deep
+  // segment at the hand row projects to. Used to scale the slide-up-to-play threshold.
+  // Rotation-agnostic: a rigid 90° page rotation preserves pixel distances, so this
+  // (screen-vertical) span equals a same-length slide along whichever axis is "up".
+  handTilePixelHeight() {
+    const a = this.worldToScreen(0, 0, R_HAND);
+    const b = this.worldToScreen(0, 0, R_HAND - TH); // one tile deeper toward the table centre
+    return Math.max(20, Math.abs(a.y - b.y));
+  }
+
   // The face-down deck wall: a 2-layer ring of backs around the pool that depletes
   // as the live wall is drawn down. Sets this.deckPos = the current draw point (in
   // front, where new draws fly from). Rendered before the hands so they read it.

@@ -113,6 +113,15 @@ export class MahjongScene2D {
     return null;
   }
 
+  // On-screen height (px) of a hand tile, used to scale the slide-up-to-play threshold.
+  // handRects hold CLIENT (post-transform) bounding boxes, so when the page is force-
+  // rotated 90° a tile's visual height is the box's WIDTH; otherwise its height.
+  handTilePixelHeight() {
+    const r = this.handRects.length ? this.handRects[0].rect : null;
+    if (!r) return 48;
+    return this.rotated ? r.width : r.height;
+  }
+
   // ---- rendering ----------------------------------------------------------
   _render(game, ui) {
     this._last = { game, ui };
