@@ -144,38 +144,46 @@ export class MahjongGame {
   _dragUpPx(sx, sy, ex, ey) {
     return (this.scene && this.scene.rotated) ? (ex - sx) : (sy - ey);
   }
-  // Was the drag an upward slide past ~2 tile-heights? The rotation is rigid (1:1 px),
-  // so the scene's tile-height (px) is directly comparable; the up component must also
-  // dominate the sideways one, so a horizontal swipe never plays a tile.
-  isSlideUp(sx, sy, ex, ey) {
-    const up = this._dragUpPx(sx, sy, ex, ey);
-    const side = (this.scene && this.scene.rotated) ? (ey - sy) : (ex - sx);
-    const tileH = (this.scene && this.scene.handTilePixelHeight) ? this.scene.handTilePixelHeight() : 48;
-    return up >= 2 * tileH && up >= Math.abs(side);
-  }
 
-  // Track a hand-tile pointer from pointerdown: the tile lifts to follow the finger as
-  // it slides up; on release a slide past the threshold plays it directly (playTileAt),
-  // otherwise it snaps back and it's a normal tap (onPickTile — select / second-tap
-  // discard). Call from each game's pointerdown after picking the tile under the finger.
+  // Track a hand-tile pointer from pointerdown.
+  //   - A small upward move "takes over" the selection (this tile becomes the lifted
+  //     one, deselecting whatever was selected) and the tile then tracks the finger.
+  //   - Crossing ~2 tile-heights up = "play": auto-discards immediately (no wait for
+  //     release), so the tile never drags up past that point.
+  //   - Releasing below the threshold leaves the tile SELECTED in the hand row (it
+  //     snaps back to the selected lift) — it does not discard.
+  //   - A plain tap (no real drag) keeps the old behaviour via onPickTile (select, or
+  //     second-tap-to-discard).
+  // Side movement must not dominate, so a horizontal swipe never engages.
   trackTileGesture(e, idx) {
     const sx = e.clientX, sy = e.clientY;
-    const lift = (px) => { if (this.scene && this.scene.setDragLift) this.scene.setDragLift(idx, px); };
+    const tileH = (this.scene && this.scene.handTilePixelHeight) ? this.scene.handTilePixelHeight() : 48;
+    const PLAY = 2 * tileH;                 // slide this far up → play
+    const DEAD = Math.max(8, tileH * 0.2);  // past this → it's a drag, not a tap
+    const canPlay = this.canPlayTileAt(idx);
+    let dragging = false, done = false;
     const drop = () => { if (this.scene && this.scene.clearDragLift) this.scene.clearDragLift(); };
-    const onMove = (ev) => lift(Math.max(0, this._dragUpPx(sx, sy, ev.clientX, ev.clientY)));
     const cleanup = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
     };
-    const onUp = (ev) => {
-      cleanup();
-      const slid = this.isSlideUp(sx, sy, ev.clientX, ev.clientY);
-      drop(); // stop tracking the finger (2D snaps back via CSS; 3D lerps back to the slot)
-      if (slid && this.playTileAt(idx)) return; // slid up far enough → play this tile directly
-      this.onPickTile(idx); // otherwise a normal tap (select / second-tap discard)
+    const onMove = (ev) => {
+      if (done || !canPlay) return; // 混儿 / off-turn → no drag; the release falls through to a tap
+      const up = this._dragUpPx(sx, sy, ev.clientX, ev.clientY);
+      const side = (this.scene && this.scene.rotated) ? (ev.clientY - sy) : (ev.clientX - sx);
+      if (up < DEAD || up < Math.abs(side)) return; // not (yet) an upward drag
+      if (up >= PLAY) { done = true; cleanup(); drop(); this.playTileAt(idx); return; } // reached play height → play now
+      if (!dragging) { dragging = true; this.selectTileAt(idx); } // take over the selection from any prior tile
+      if (this.scene && this.scene.setDragLift) this.scene.setDragLift(idx, up); // follow the finger (capped < PLAY)
     };
-    const onCancel = () => { cleanup(); drop(); }; // gesture stolen (scroll/etc.) → snap back, no action
+    const onUp = () => {
+      if (done) return;
+      cleanup(); drop();
+      if (dragging) return; // released below the play height → stays SELECTED (snaps back to the selected lift)
+      this.onPickTile(idx); // a tap (no real drag) → normal select / second-tap discard
+    };
+    const onCancel = () => { if (done) return; cleanup(); drop(); }; // gesture stolen (scroll/etc.) → snap back, no action
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
@@ -186,7 +194,12 @@ export class MahjongGame {
   selectableHandIndices() { throw new Error('selectableHandIndices() not implemented'); }
   returnHub() { throw new Error('returnHub() not implemented'); }
   onPickTile(idx) { throw new Error('onPickTile() not implemented'); }
-  // Discard the hand tile at rendered index `idx` directly if it's legal to play
-  // right now (the human's turn, a discardable tile). Returns true if it played.
+  // Can the hand tile at rendered index `idx` be played right now (human's turn, a
+  // discardable tile)? Gates the slide-up drag so 混儿/off-turn tiles don't lift.
+  canPlayTileAt(idx) { return false; }
+  // Discard the hand tile at `idx` directly. Returns true if it played.
   playTileAt(idx) { return false; }
+  // Make the tile at `idx` the selected (lifted) tile in the hand row, deselecting any
+  // other — used when a slide takes over the selection. No discard.
+  selectTileAt(idx) {}
 }

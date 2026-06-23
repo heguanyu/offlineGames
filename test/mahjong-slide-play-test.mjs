@@ -126,27 +126,52 @@ async function liftOf(page, dbgName, pickIdx) {
   }, dbgName, pickIdx);
 }
 
-// Negative + animation case: dragging partway up (~1.2 tiles) must LIFT the tile to track
-// the finger; releasing below the 2-tile threshold must snap it back and NOT discard.
+const selIdx = (page, n) => page.evaluate((n) => window[n].selInfo().selIndex, n);
+
+// Drag partway up (~1.2 tiles): the tile must LIFT to follow the finger AND take over the
+// selection from whatever was selected (bug 1). Releasing below the 2-tile threshold must
+// snap it back to the SELECTED lift (not discard) and leave it selected.
 async function expectLiftAndSnap(label, url, dbgName, vp) {
   const page = await browser.newPage();
   try {
     await reachHumanTurn(page, url, dbgName, vp);
     const plan = await planSlide(page, dbgName, 'notSelected', 1.2);
     assert(!plan.error, `${label}: ${plan.error}`);
+    const priorSel = await selIdx(page, dbgName);
+    assert(priorSel !== plan.pickIdx, `${label}: target tile was already the selected one (test setup)`);
     await ptr(page, 'pointerdown', plan.cx, plan.cy, false);
     await ptr(page, 'pointermove', plan.ex, plan.ey, true);
     await sleep(60); // let a render frame apply the lift (3D)
     const lift = await liftOf(page, dbgName, plan.pickIdx);
     assert(lift > (plan.flat ? 8 : 0.08), `${label}: tile did not lift to follow the finger (lift=${lift})`);
+    assert(await selIdx(page, dbgName) === plan.pickIdx, `${label}: drag did not take over the selection (bug 1)`);
     await ptr(page, 'pointerup', plan.ex, plan.ey, true);
     await sleep(400); // snap-back (CSS ease / lerp)
     const back = await liftOf(page, dbgName, plan.pickIdx);
-    const after = await page.evaluate((n) => ({ len: window[n].game().discardLog.length, human: window[n].humanTurn() }), dbgName);
+    const after = await page.evaluate((n) => ({ len: window[n].game().discardLog.length, human: window[n].humanTurn(), sel: window[n].selInfo().selIndex }), dbgName);
     assert(after.len === plan.beforeLen, `${label}: short slide discarded (${plan.beforeLen}→${after.len})`);
     assert(after.human, `${label}: short slide ended the human's turn`);
+    assert(after.sel === plan.pickIdx, `${label}: tile not left selected after short release`);
     assert(back < (plan.flat ? 4 : 0.05), `${label}: tile did not snap back after release (lift=${back})`);
-    console.log(`OK ${label}: drag lifts tile (${plan.flat ? Math.round(lift) + 'px' : lift.toFixed(2) + 'u'}), short release snaps back, no discard`);
+    console.log(`OK ${label}: drag lifts + takes over selection (${plan.flat ? Math.round(lift) + 'px' : lift.toFixed(2) + 'u'}), short release → stays selected, no discard`);
+  } finally { await page.close(); }
+}
+
+// Crossing the play height mid-drag must discard IMMEDIATELY — before the finger lifts.
+async function expectPlayOnMove(label, url, dbgName, vp) {
+  const page = await browser.newPage();
+  try {
+    await reachHumanTurn(page, url, dbgName, vp);
+    const plan = await planSlide(page, dbgName, 'any', 2.6); // ex/ey are 2.6 tile-heights up
+    assert(!plan.error, `${label}: ${plan.error}`);
+    const midX = plan.rotated ? plan.cx + (plan.ex - plan.cx) * 0.5 : plan.cx;
+    const midY = plan.rotated ? plan.cy : plan.cy + (plan.ey - plan.cy) * 0.5; // ~1.3 tiles (a drag, below play)
+    await ptr(page, 'pointerdown', plan.cx, plan.cy, false);
+    await ptr(page, 'pointermove', midX, midY, true);
+    await ptr(page, 'pointermove', plan.ex, plan.ey, true); // crosses the play height
+    await page.waitForFunction((n, b) => window[n].game().discardLog.length > b, { timeout: 3000 }, dbgName, plan.beforeLen);
+    await ptr(page, 'pointerup', plan.ex, plan.ey, true); // already played — a no-op
+    console.log(`OK ${label}: crossing the play height auto-discarded mid-drag (before release)`);
   } finally { await page.close(); }
 }
 
@@ -155,8 +180,8 @@ try {
   const TJ = `http://localhost:${PORT}/games/mahjong-tianjin/?fast=1`;
   const LAND = { width: 1024, height: 720 }, PORT_VP = { width: 560, height: 960 };
 
-  // 国标 3D landscape — positive + lift/snap-back negative
-  await expectPlay('国标 3D landscape', GB, '__gb', 'any', LAND);
+  // 国标 3D landscape — auto-play on move + lift/selection-takeover/snap-back
+  await expectPlayOnMove('国标 3D landscape', GB, '__gb', LAND);
   await expectLiftAndSnap('国标 3D landscape', GB, '__gb', LAND);
 
   // 国标 3D portrait (force-rotated 90°) — "up" becomes +clientX

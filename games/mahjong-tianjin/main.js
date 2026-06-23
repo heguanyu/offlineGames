@@ -450,19 +450,31 @@ class TianjinGame extends MahjongGame {
     this.backend.discard(id); // the 'discard' event animates it, then the backend drives the bots
   }
 
-  // Slide-up-to-play: discard the exact tile under the finger, skipping the tap-to-
-  // select step. Only on your turn, never a 混儿 (or as a viewer). Returns true if played.
-  playTileAt(renderedIdx) {
+  // Can the tile under the finger be discarded now? Only on your turn, never a 混儿
+  // (or as a viewer), and not mid drawn-tile reveal. Gates the slide-up drag.
+  canPlayTileAt(renderedIdx) {
     if (VIEWER) return false;
     if (!this.game || this.game.turn !== HUMAN || this.game.phase !== PHASE.AWAIT_DISCARD) return false;
     if (this.scene && this.scene.handDrawRevealing) return false; // wait until the drawn tile settles
     const id = this.renderedHand()[renderedIdx];
     if (id == null || this.game.isWild(id)) return false; // 混儿 can't be discarded
-    const pos = this.selectableHandIndices().indexOf(renderedIdx);
-    if (pos < 0) return false;
-    this.selIndex = pos; this.drawnWildSelected = false; this.noSel = true;
+    return this.selectableHandIndices().indexOf(renderedIdx) >= 0;
+  }
+  // Slide-up-to-play: discard the exact tile under the finger, skipping the tap-to-select step.
+  playTileAt(renderedIdx) {
+    if (!this.canPlayTileAt(renderedIdx)) return false;
+    const id = this.renderedHand()[renderedIdx];
+    this.selIndex = this.selectableHandIndices().indexOf(renderedIdx);
+    this.drawnWildSelected = false; this.noSel = true;
     this.backend.discard(id);
     return true;
+  }
+  // A slide takes over the selection: lift this tile, deselect any other. No discard.
+  selectTileAt(renderedIdx) {
+    const pos = this.selectableHandIndices().indexOf(renderedIdx);
+    if (pos < 0) return;
+    this.selIndex = pos; this.drawnWildSelected = false; this.noSel = false;
+    this.render();
   }
 
   doDeclareWin() {

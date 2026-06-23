@@ -420,16 +420,26 @@ class GuobiaoGame extends MahjongGame {
     this.selIndex = Math.min(this.selIndex, Math.max(0, this.selectableHandIndices().length - 1));
     this.backend.discard(id); // the 'discard' event animates it, then the backend drives the bots
   }
-  // Slide-up-to-play: discard the exact tile under the finger directly (a plain
-  // discard — slide-up doesn't declare 听). Only on your turn, not while 听 autopilot.
-  playTileAt(renderedIdx) {
+  // Can the tile under the finger be discarded now? Only on your turn, not while 听
+  // autopilot, and not mid drawn-tile reveal. Gates the slide-up drag.
+  canPlayTileAt(renderedIdx) {
     if (this.game.turn !== HUMAN || this.game.phase !== PHASE.AWAIT_DISCARD || this.lockedTing) return false;
     if (this.scene && this.scene.handDrawRevealing) return false; // wait until the drawn tile settles
+    return this.renderedHand()[renderedIdx] != null;
+  }
+  // Slide-up-to-play: discard the exact tile under the finger (a plain discard — slide-up doesn't declare 听).
+  playTileAt(renderedIdx) {
+    if (!this.canPlayTileAt(renderedIdx)) return false;
     const id = this.renderedHand()[renderedIdx];
-    if (id == null) return false;
     this.selIndex = this.selectableHandIndices().indexOf(renderedIdx);
     this.backend.discard(id);
     return true;
+  }
+  // A slide takes over the selection: lift this tile, deselect any other. No discard.
+  selectTileAt(renderedIdx) {
+    const pos = this.selectableHandIndices().indexOf(renderedIdx);
+    if (pos < 0) return;
+    this.selIndex = pos; this.render();
   }
   doDeclareWin() { if (this.scene && this.scene.handDrawRevealing) return; this.backend.declareWin(); }
   doSelfKong(kind) { if (this.scene && this.scene.handDrawRevealing) return; if (this.game.turn === HUMAN && this.game.phase === PHASE.AWAIT_DISCARD) this.backend.selfKong(kind); }
