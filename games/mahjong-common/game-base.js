@@ -139,26 +139,30 @@ export class MahjongGame {
   }
 
   // ---- slide-up-to-play gesture (touch/iPad + mobile) ----------------------
-  // Was the drag from (sx,sy) to (ex,ey) an upward slide past ~2 tile-heights?
-  // The page force-rotates 90° on portrait, so the on-screen "up" axis is -Δy
-  // normally but +Δx when rotated. The rotation is rigid (1:1 px), so the scene's
-  // tile-height (in px) is directly comparable. We also require the up component to
+  // Upward drag distance (px) from the pointerdown. The page force-rotates 90° on
+  // portrait, so the on-screen "up" axis is -Δy normally but +Δx when rotated.
+  _dragUpPx(sx, sy, ex, ey) {
+    return (this.scene && this.scene.rotated) ? (ex - sx) : (sy - ey);
+  }
+  // Was the drag an upward slide past ~2 tile-heights? The rotation is rigid (1:1 px),
+  // so the scene's tile-height (px) is directly comparable; the up component must also
   // dominate the sideways one, so a horizontal swipe never plays a tile.
   isSlideUp(sx, sy, ex, ey) {
-    const rotated = !!(this.scene && this.scene.rotated);
-    const up = rotated ? (ex - sx) : (sy - ey);
-    const side = rotated ? (ey - sy) : (ex - sx);
+    const up = this._dragUpPx(sx, sy, ex, ey);
+    const side = (this.scene && this.scene.rotated) ? (ey - sy) : (ex - sx);
     const tileH = (this.scene && this.scene.handTilePixelHeight) ? this.scene.handTilePixelHeight() : 48;
     return up >= 2 * tileH && up >= Math.abs(side);
   }
 
-  // Track a hand-tile pointer from pointerdown: on release, a big enough upward
-  // slide plays that tile directly (playTileAt); otherwise it's a normal tap
-  // (onPickTile — select / second-tap-to-discard). Call from each game's
-  // pointerdown after picking the tile under the finger.
+  // Track a hand-tile pointer from pointerdown: the tile lifts to follow the finger as
+  // it slides up; on release a slide past the threshold plays it directly (playTileAt),
+  // otherwise it snaps back and it's a normal tap (onPickTile — select / second-tap
+  // discard). Call from each game's pointerdown after picking the tile under the finger.
   trackTileGesture(e, idx) {
     const sx = e.clientX, sy = e.clientY;
-    const onMove = () => {}; // tracked via the pointerup coords; move is a no-op
+    const lift = (px) => { if (this.scene && this.scene.setDragLift) this.scene.setDragLift(idx, px); };
+    const drop = () => { if (this.scene && this.scene.clearDragLift) this.scene.clearDragLift(); };
+    const onMove = (ev) => lift(Math.max(0, this._dragUpPx(sx, sy, ev.clientX, ev.clientY)));
     const cleanup = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
@@ -166,10 +170,12 @@ export class MahjongGame {
     };
     const onUp = (ev) => {
       cleanup();
-      if (this.isSlideUp(sx, sy, ev.clientX, ev.clientY) && this.playTileAt(idx)) return; // slid up → play directly
-      this.onPickTile(idx); // otherwise the normal tap (select, or second-tap discard)
+      const slid = this.isSlideUp(sx, sy, ev.clientX, ev.clientY);
+      drop(); // stop tracking the finger (2D snaps back via CSS; 3D lerps back to the slot)
+      if (slid && this.playTileAt(idx)) return; // slid up far enough → play this tile directly
+      this.onPickTile(idx); // otherwise a normal tap (select / second-tap discard)
     };
-    const onCancel = () => { cleanup(); }; // gesture stolen (scroll/etc.) → neither play nor select
+    const onCancel = () => { cleanup(); drop(); }; // gesture stolen (scroll/etc.) → snap back, no action
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);

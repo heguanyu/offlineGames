@@ -122,6 +122,27 @@ export class MahjongScene2D {
     return this.rotated ? r.width : r.height;
   }
 
+  // Slide-up-to-play: lift the hand tile at rendered index `pick` so it tracks the finger.
+  // `px` is the upward drag distance; translateY in the tile's own frame is visually up in
+  // both orientations (the element is inside the force-rotated board). Transition is off
+  // while dragging (1:1 tracking); clearDragLift restores it for a smooth snap-back.
+  setDragLift(pick, px) {
+    if (!this.handEl) return;
+    const el = [...this.handEl.children].find((t) => +t.dataset.pick === pick);
+    if (!el) return;
+    this._dragEl = el;
+    el.style.transition = 'none';
+    el.style.transform = `translateY(${-Math.max(0, px)}px)`;
+    el.style.zIndex = '40';
+  }
+  clearDragLift() {
+    const el = this._dragEl; this._dragEl = null;
+    if (!el) return;
+    el.style.transition = ''; // restore the CSS 0.08s ease → smooth snap-back to the slot
+    el.style.transform = '';
+    el.style.zIndex = '';
+  }
+
   // ---- rendering ----------------------------------------------------------
   _render(game, ui) {
     this._last = { game, ui };

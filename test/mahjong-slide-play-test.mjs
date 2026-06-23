@@ -104,19 +104,49 @@ async function expectPlay(label, url, dbgName, which, vp) {
   } finally { await page.close(); }
 }
 
-// A negative case: a short slide (~1 tile) must NOT discard — it only selects.
-async function expectNoPlay(label, url, dbgName, vp) {
+async function ptr(page, type, x, y, onWindow) {
+  await page.evaluate((type, x, y, onWindow) => {
+    const t = onWindow ? window : document.getElementById('scene');
+    t.dispatchEvent(new PointerEvent(type, { pointerType: 'touch', clientX: x, clientY: y, bubbles: true, isPrimary: true, pointerId: 1 }));
+  }, type, x, y, onWindow);
+}
+
+// How far the dragged tile is currently lifted from its resting slot: world-Y units in
+// 3D, screen px (from the inline translateY) in flat 2D. ~0 means at rest.
+async function liftOf(page, dbgName, pickIdx) {
+  return page.evaluate((dbgName, pickIdx) => {
+    if (document.body.classList.contains('flat')) {
+      const el = [...document.querySelector('.b2-hand').children].find((t) => +t.dataset.pick === pickIdx);
+      const m = el && /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(el.style.transform || '');
+      return m ? -parseFloat(m[1]) : 0;
+    }
+    const sc = window[dbgName].scene();
+    for (const [k, r] of sc.tiles) if (k[0] === 'h' && r.mesh.userData.pick === pickIdx) return r.mesh.position.y - r.tp.y;
+    return 0;
+  }, dbgName, pickIdx);
+}
+
+// Negative + animation case: dragging partway up (~1.2 tiles) must LIFT the tile to track
+// the finger; releasing below the 2-tile threshold must snap it back and NOT discard.
+async function expectLiftAndSnap(label, url, dbgName, vp) {
   const page = await browser.newPage();
   try {
     await reachHumanTurn(page, url, dbgName, vp);
-    const plan = await planSlide(page, dbgName, 'notSelected', 1.0);
+    const plan = await planSlide(page, dbgName, 'notSelected', 1.2);
     assert(!plan.error, `${label}: ${plan.error}`);
-    await doSlide(page, plan);
-    await sleep(600);
+    await ptr(page, 'pointerdown', plan.cx, plan.cy, false);
+    await ptr(page, 'pointermove', plan.ex, plan.ey, true);
+    await sleep(60); // let a render frame apply the lift (3D)
+    const lift = await liftOf(page, dbgName, plan.pickIdx);
+    assert(lift > (plan.flat ? 8 : 0.08), `${label}: tile did not lift to follow the finger (lift=${lift})`);
+    await ptr(page, 'pointerup', plan.ex, plan.ey, true);
+    await sleep(400); // snap-back (CSS ease / lerp)
+    const back = await liftOf(page, dbgName, plan.pickIdx);
     const after = await page.evaluate((n) => ({ len: window[n].game().discardLog.length, human: window[n].humanTurn() }), dbgName);
     assert(after.len === plan.beforeLen, `${label}: short slide discarded (${plan.beforeLen}→${after.len})`);
     assert(after.human, `${label}: short slide ended the human's turn`);
-    console.log(`OK ${label}: short slide (1x) selected without discarding`);
+    assert(back < (plan.flat ? 4 : 0.05), `${label}: tile did not snap back after release (lift=${back})`);
+    console.log(`OK ${label}: drag lifts tile (${plan.flat ? Math.round(lift) + 'px' : lift.toFixed(2) + 'u'}), short release snaps back, no discard`);
   } finally { await page.close(); }
 }
 
@@ -125,15 +155,16 @@ try {
   const TJ = `http://localhost:${PORT}/games/mahjong-tianjin/?fast=1`;
   const LAND = { width: 1024, height: 720 }, PORT_VP = { width: 560, height: 960 };
 
-  // 国标 3D landscape — positive + negative
+  // 国标 3D landscape — positive + lift/snap-back negative
   await expectPlay('国标 3D landscape', GB, '__gb', 'any', LAND);
-  await expectNoPlay('国标 3D landscape', GB, '__gb', LAND);
+  await expectLiftAndSnap('国标 3D landscape', GB, '__gb', LAND);
 
   // 国标 3D portrait (force-rotated 90°) — "up" becomes +clientX
   await expectPlay('国标 3D portrait(rotated)', GB, '__gb', 'any', PORT_VP);
 
-  // 国标 flat 2D (scene2d.js) landscape
+  // 国标 flat 2D (scene2d.js) landscape — positive + lift/snap-back
   await expectPlay('国标 flat 2D', GB + '&flat=1', '__gb', 'any', LAND);
+  await expectLiftAndSnap('国标 flat 2D', GB + '&flat=1', '__gb', LAND);
 
   // 天津 3D — slide a NON-混儿 tile (混儿 can't be discarded)
   await expectPlay('天津 3D landscape', TJ, '__mj', 'nonWild', LAND);

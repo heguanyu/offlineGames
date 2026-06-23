@@ -209,6 +209,7 @@ export class MahjongScene {
     if (!designs.size) preloadDesigns();
 
     this.tiles = new Map();   // key -> { mesh, tp:Vector3, trx, try_, ts }
+    this._dragPick = null; this._dragPx = 0; // slide-up gesture: a hand tile tracking the finger
     this.claimDemo = null;    // { player, t0 } — a bot's just-claimed meld being shown off
     this.discardDemo = null;  // { player, idx, t0, ms } — a bot's discard flying via the center halt
     this.deal = null;         // initial-deal animation state (see beginDeal)
@@ -824,6 +825,12 @@ export class MahjongScene {
     return Math.max(20, Math.abs(a.y - b.y));
   }
 
+  // Slide-up-to-play: lift the human hand tile at rendered index `pick` so it tracks the
+  // finger. `px` is the upward drag distance in screen px; the tick loop maps it to a world
+  // rise (≈ the same on-screen lift) and overrides that tile's y each frame until cleared.
+  setDragLift(pick, px) { this._dragPick = pick; this._dragPx = Math.max(0, px); }
+  clearDragLift() { this._dragPick = null; this._dragPx = 0; } // release → tile lerps back to its slot
+
   // The face-down deck wall: a 2-layer ring of backs around the pool that depletes
   // as the live wall is drawn down. Sets this.deckPos = the current draw point (in
   // front, where new draws fly from). Rendered before the hands so they read it.
@@ -1054,6 +1061,14 @@ export class MahjongScene {
         m.rotation.x += (rec.trx - m.rotation.x) * a;
         m.rotation.y += (rec.try_ - m.rotation.y) * a;
         m.rotation.z += ((rec.trz || 0) - m.rotation.z) * a;
+      }
+      // slide-up gesture: the dragged hand tile snaps to follow the finger (overrides the
+      // lerp so it tracks 1:1), lifting world +y by the on-screen drag distance.
+      if (this._dragPick != null && this._dragPx > 0) {
+        const lift = (this._dragPx / this.handTilePixelHeight()) * TH;
+        for (const [k, rec] of this.tiles) {
+          if (k[0] === 'h' && rec.mesh.userData.pick === this._dragPick) { rec.mesh.position.y = rec.tp.y + lift; break; }
+        }
       }
       // selection outline rides the selected tile's (animated) transform
       const selRec = this.selKey && this.tiles.get(this.selKey);
