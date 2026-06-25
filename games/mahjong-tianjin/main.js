@@ -14,6 +14,7 @@ import { buildOrder } from '../mahjong-common/handorder.js';
 import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands, seatBadgeHtml } from '../mahjong-common/ui-util.js';
 import { BOT_NAMES } from '../mahjong-common/bot-names.js';
 import { serverUrl } from '../mahjong-common-online/server-url.js';
+import { clientUidSync } from '../../shared/client-id.js';
 import { MahjongGame, HUMAN, WIND, SEAT_LABEL } from '../mahjong-common/game-base.js';
 
 const sound = new Sound();
@@ -754,7 +755,7 @@ class TianjinGame extends MahjongGame {
   // resyncs the game in progress.
   connectOnline() {
     if (!this.scene) { this.scene = new Renderer($('scene')); this.scene.setRotated(this.isPortrait); this.scene.resize(); this.scene.onHandDrawSettled = () => this.selectDrawnTile(); }
-    this.backend = createBackend({ mode: 'remote', url: ONLINE_URL, uid: localStorage.getItem('mahjong-online-uid') || '', name: localStorage.getItem('mahjong-online-name') || '',
+    this.backend = createBackend({ mode: 'remote', url: ONLINE_URL, uid: clientUidSync(), name: localStorage.getItem('mahjong-online-name') || '',
       spectate: VIEWER ? { table: 0, seat: VIEWER_SEAT } : null });
     this.backend.onEvent((ev) => this.onBackendEvent(ev));
     this.backend.connect();

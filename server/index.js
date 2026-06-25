@@ -26,6 +26,7 @@ import { ruleset as guobiao, freeRuleset as guobiaoFree } from './rulesets/guobi
 import { BOT_NAMES } from '../games/mahjong-common/bot-names.js';
 import db from './db.js';
 import { startWeather, getWeatherJson } from './weather.js';
+import { handleEmuSave } from './emu-saves.js';
 
 // The games the lobby can host. Each table hosts ONE game; the lobby is split per game (the hub's
 // online cards deep-link a game). Every game shares the same lobby + reconnect + { type:'game' }
@@ -391,6 +392,16 @@ async function serveStatic(req, res) {
 // ---- HTTP + WebSocket -----------------------------------------------------
 const server = http.createServer((req, res) => {
   if (req.url === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('mahjong-online ok'); return; }
+  // Cloud backup of emulator saves (manual upload/download), keyed by browser uid. Handled before the
+  // GET-only gate so PUT/DELETE/OPTIONS reach it. CORS-enabled like /api/weather so the Pages mirror
+  // can reach the Azure backend cross-origin; the uid is the only credential.
+  if (req.url.split('?')[0] === '/api/emu-save') {
+    const origin = req.headers.origin;
+    const cors = {};
+    if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
+    handleEmuSave(req, res, cors);
+    return;
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
   // Server-polled weather for the tourguide dial. CORS-enabled (no isolate()) so the GitHub Pages
   // mirror can read it cross-origin; never cached (dynamic). 503 until the first poll lands.

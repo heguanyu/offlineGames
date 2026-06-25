@@ -5,6 +5,7 @@
 // ready players/bots the server sends 'gameStart'.
 import { createRing, updateRing } from '../mahjong-common/timer-ring.js';
 import { serverUrl } from './server-url.js';
+import { clientUidSync } from '../../shared/client-id.js';
 const $ = (id) => document.getElementById(id);
 
 // The game server (WebSocket) endpoint — see server-url.js (the single source of truth).
@@ -33,9 +34,8 @@ let activeTable = 0; // index of GAME's table within the lobby frame's tables li
 let ws = null;
 let state = { tables: [], you: { name: '', seat: null, ready: false } };
 let name = localStorage.getItem('mahjong-online-name') || '';
-// A persistent per-device id so a dropped connection reclaims its seat on reconnect.
-let uid = localStorage.getItem('mahjong-online-uid');
-if (!uid) { uid = (crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2)); localStorage.setItem('mahjong-online-uid', uid); }
+// A persistent per-device id so a dropped connection reclaims its seat on reconnect (shared/client-id.js).
+let uid = clientUidSync();
 let pendingSit = null;          // a {table, seat} sit queued until a name is entered
 let reconnectTimer = null;
 let lastSig = null;             // structural signature of the last rendered frame (everything but the countdowns)

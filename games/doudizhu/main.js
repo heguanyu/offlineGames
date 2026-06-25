@@ -9,6 +9,7 @@ import { DouScene2D } from './scene2d.js';
 import { SmartSelection } from './select.js';
 import { sfx, speak, setMuted, isMuted, resume } from './sound.js';
 import { serverUrl } from '../mahjong-common-online/server-url.js';
+import { clientUidSync } from '../../shared/client-id.js';
 
 const $ = (id) => document.getElementById(id);
 // Online mode (?online=1): the authoritative game lives on the server (server/poker-table.js); this
@@ -131,8 +132,7 @@ function startOnline() {
   $('menu-restart').hidden = true;                 // no local score reset online
   $('menu-forfeit').hidden = VIEWER;               // spectators can't forfeit
   // round-info shows the 场 progress online; difficulty is server-controlled
-  let uid = localStorage.getItem('mahjong-online-uid');
-  if (!uid) { uid = (crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2)); localStorage.setItem('mahjong-online-uid', uid); }
+  const uid = clientUidSync();
   const name = localStorage.getItem('mahjong-online-name') || '';
   const cfg = { mode: 'remote', url: serverUrl(), uid, name };
   if (VIEWER) cfg.spectate = { table: +QS.get('vtable') || 0, seat: +QS.get('vseat') || 0 };
