@@ -4,7 +4,7 @@
 // QUEUE with 吃 (chow) and wins off a discard (点炮), no 拉庄 (no pre-hand decision), no 混儿.
 //
 // Events pushed to the UI: 'deal' / 'discard' / 'claim' / 'selfKong' / 'await' / 'over'
-// (+ 'sync' / 'potOver' / 'disconnected' / 'gameGone' online). There is no 'lazhuang'.
+// (+ 'sync' / 'matchOver' / 'disconnected' / 'gameGone' online). There is no 'lazhuang'.
 import { Game, PHASE } from './engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong } from './ai.js';
 import { RemoteBackendBase } from '../mahjong-common/remote-backend.js';
@@ -174,8 +174,8 @@ export function mapServerEvent(ev, c, view) {
     case 'discard': return { type: 'discard', player: rot(ev.player), tile: ev.tile, discardIndex: view.discardLog.length - 1 };
     case 'claim': return { type: 'claim', player: rot(ev.player), claimType: ev.claim, kind: ev.kind };
     case 'selfKong': return { type: 'selfKong', player: rot(ev.player), kind: ev.kind };
-    case 'over': return { type: 'over', result: view.result, readied: ev.readied, potEnd: ev.potEnd };
-    case 'potOver': return { type: 'potOver', scores: byD(ev.scores), rounds: (ev.rounds || []).map((r) => ({ wind: r.wind, scores: byD(r.scores) })) };
+    case 'over': return { type: 'over', result: view.result, readied: ev.readied, matchEnd: ev.matchEnd };
+    case 'matchOver': return { type: 'matchOver', scores: byD(ev.scores), rounds: (ev.rounds || []).map((r) => ({ wind: r.wind, scores: byD(r.scores) })) };
     case 'sync': return { type: 'sync' };
     default: return null;
   }

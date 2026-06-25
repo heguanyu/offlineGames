@@ -31,7 +31,7 @@ try {
   await page.evaluateOnNewDocument(() => { localStorage.setItem('mahjong-online-name', '无定番'); localStorage.setItem('mahjong-online-uid', 'gbfree-play-e2e-uid'); });
 
   // the 无定番 split lobby (?game=guobiao-free) shows only its table (index 2 in the default lineup)
-  await page.goto(`http://localhost:${SITE}/games/mahjong-tianjin-online/?server=ws://localhost:${PORT}&fast=1&game=guobiao-free`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${SITE}/games/mahjong-common-online/?server=ws://localhost:${PORT}&fast=1&game=guobiao-free`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.getElementById('conn')?.className.includes('on'), { timeout: 6000 });
   await page.waitForSelector('.chair[data-table="2"][data-seat="0"]');
   await sit(page, 2, 0);

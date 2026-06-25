@@ -8,8 +8,16 @@ import { DouScene } from './scene.js';
 import { DouScene2D } from './scene2d.js';
 import { SmartSelection } from './select.js';
 import { sfx, speak, setMuted, isMuted, resume } from './sound.js';
+import { serverUrl } from '../mahjong-common-online/server-url.js';
 
 const $ = (id) => document.getElementById(id);
+// Online mode (?online=1): the authoritative game lives on the server (server/poker-table.js); this
+// page becomes a pure renderer talking to it via the RemoteBackend. ?viewer=1 + ?vtable/?vseat is a
+// read-only spectator of a seat. Offline (no ?online) is the original local engine+AI game.
+const QS = new URLSearchParams(location.search);
+const ONLINE = QS.has('online');
+const VIEWER = QS.has('viewer');
+const LOBBY_URL = '../mahjong-common-online/?game=doudizhu';
 // FAST is a hidden test override (?fast=1) — there's no user-facing 快速 mode.
 const FAST = new URLSearchParams(location.search).has('fast');
 // Phones use the flat 2D DOM board (rectangle table); desktops use the 3D scene. ?flat=1 / ?d3=1 override.
@@ -44,6 +52,11 @@ const state = {
   awaiting: null,             // 'play' | 'bid' | null
   userTouched: false,         // has the human adjusted the auto-selection this turn?
   hintMoves: null, hintIdx: -1,
+  // ---- online ----
+  online: false, viewer: false,
+  readied: false, matchEnd: false, // result-modal ready toggle / final-hand flag
+  reconnectTimer: null,
+  ttHandle: null, ttDeadline: 0, ttTotal: 30000, ttSeat: -1, // turn-countdown ring
 };
 
 // ---- boot ------------------------------------------------------------------
@@ -81,19 +94,52 @@ function boot() {
     b.addEventListener('click', () => { state.level = +b.dataset.level; LS.level = state.level; markDiff(b); });
   }
   $('start-btn').addEventListener('click', () => { resume(); $('start-overlay').hidden = true; newGame(); });
-  $('next-btn').addEventListener('click', () => { $('result-overlay').hidden = true; newGame(); });
-  $('result-home').addEventListener('click', () => { location.replace('../../index.html'); });
+  $('next-btn').addEventListener('click', onNextBtn);
+  $('result-home').addEventListener('click', returnHome);
   $('mute-btn').addEventListener('click', () => { LS.mute = !isMuted(); setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊'; });
   $('menu-btn').addEventListener('click', () => { $('menu-overlay').hidden = false; });
   $('menu-continue').addEventListener('click', () => { $('menu-overlay').hidden = true; });
   $('menu-restart').addEventListener('click', () => { LS.scores = [0, 0, 0]; updateScoreboard(null); $('menu-overlay').hidden = true; $('result-overlay').hidden = true; newGame(); });
-  $('menu-home').addEventListener('click', () => { location.replace('../../index.html'); });
+  $('menu-home').addEventListener('click', returnHome);
+  $('menu-forfeit').addEventListener('click', () => { $('menu-overlay').hidden = true; if (state.backend && state.backend.forfeit) state.backend.forfeit(); returnHome(); });
 
   $('scene').addEventListener('pointerdown', onPointerDown);
   window.addEventListener('keydown', onKey);
   window.addEventListener('resize', positionOverlays);
+  window.addEventListener('resize', () => drawTurnTimer());
   updateScoreboard(null);
   pollPad();
+  if (ONLINE) startOnline();
+}
+
+// Result modal's primary button: offline deals a fresh local hand; online readies for the next hand
+// (or, on the 场's final hand, sends the ack that closes it → back to the lobby).
+function onNextBtn() {
+  if (!state.online) { $('result-overlay').hidden = true; newGame(); return; }
+  if (state.matchEnd) { state.backend.next(); return; } // final hand → closes the 场, server sends matchOver
+  state.readied = !state.readied;
+  if (state.readied) state.backend.next(); else state.backend.unready();
+  refreshResultBtn();
+}
+function returnHome() { location.replace(state.online ? LOBBY_URL : '../../index.html'); }
+
+// ---- online: connect to the authoritative server -------------------------
+function startOnline() {
+  state.online = true; state.viewer = VIEWER;
+  document.body.classList.add('online');
+  $('start-overlay').hidden = true;
+  $('menu-restart').hidden = true;                 // no local score reset online
+  $('menu-forfeit').hidden = VIEWER;               // spectators can't forfeit
+  // round-info shows the 场 progress online; difficulty is server-controlled
+  let uid = localStorage.getItem('mahjong-online-uid');
+  if (!uid) { uid = (crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2)); localStorage.setItem('mahjong-online-uid', uid); }
+  const name = localStorage.getItem('mahjong-online-name') || '';
+  const cfg = { mode: 'remote', url: serverUrl(), uid, name };
+  if (VIEWER) cfg.spectate = { table: +QS.get('vtable') || 0, seat: +QS.get('vseat') || 0 };
+  state.backend = createBackend(cfg);
+  state.backend.onEvent(onEvent);
+  state.backend.connect();
+  resume(); // unlock audio (best-effort; a user gesture may still be needed on iOS)
 }
 function markDiff(btn) { for (const b of document.querySelectorAll('.diff-btn')) b.classList.toggle('sel', b === btn); }
 
@@ -112,17 +158,22 @@ async function onEvent(ev) {
   const g = state.backend.getState();
   switch (ev.type) {
     case 'deal': {
+      if (state.online) { $('result-overlay').hidden = true; state.readied = false; state.matchEnd = false; clearTurnTimer(); }
       state.phase = 'bid'; state.trick = {}; state.discard = []; state.reveal = false; state.sel.clear(); state.hint.clear();
       state.bottom = null; clearBubbles();
       const dealt = state.scene.beginDeal({ hand: g.hands[HUMAN], fast: FAST });
       sfx.deal(); render();
       await dealt; render();
       state.scene.showBottomReveal(g.bottom, { faceDown: true, title: '底 牌' }); // 底牌 box (face-down) shown through bidding
+      if (state.online) state.backend.dealDone(); // tell the server our deal animation finished → it drives the bots
       break;
     }
     case 'askBid':
-      state.awaiting = 'bid'; showBidBar(g); render(); break;
+      clearTurnTimer();
+      if (!state.viewer) { state.awaiting = 'bid'; showBidBar(g); startTurnTimer(HUMAN, ev); }
+      render(); break;
     case 'bid': {
+      clearTurnTimer();
       bubble(ev.seat, ev.call > 0 ? `叫 ${ev.call} 分` : '不叫', ev.call === 0);
       const dur = speak(ev.call > 0 ? [`${ev.call}分`] : ['过'], ev.seat);
       hideActions(); render();
@@ -141,6 +192,7 @@ async function onEvent(ev) {
     case 'redeal':
       clearBubbles(); state.bottom = null; state.scene.hideBottomReveal(); render(); await wait(500); break;
     case 'play': {
+      clearTurnTimer();
       state.trick[ev.seat] = ev.cards;
       const dur = announcePlay(ev); clearBubble(ev.seat);
       if (ev.seat === HUMAN) { state.sel.clear(); state.hint.clear(); }
@@ -149,6 +201,7 @@ async function onEvent(ev) {
       break;
     }
     case 'pass': {
+      clearTurnTimer();
       bubble(ev.seat, '不出', true);
       const dur = speak(['过'], ev.seat);
       render();
@@ -164,15 +217,32 @@ async function onEvent(ev) {
       flushTrickToDiscard(); clearBubbles(); render(); break;
     }
     case 'await': {
+      clearTurnTimer();
+      if (state.viewer) { render(); break; }     // a spectator never acts
       state.awaiting = 'play'; state.cursor = Math.min(state.cursor, g.hands[HUMAN].length - 1);
       const against = g.leadSeat === HUMAN ? null : g.lead;
       state.sel.setHand(g.hands[HUMAN]);
       state.sel.setContext({ legalMoves: legalMoves(g.hands[HUMAN].map((c) => c.rank), against) });
       autoSelect(g);
-      showPlayBar(); render(); break;
+      showPlayBar(); startTurnTimer(HUMAN, ev); render(); break;
     }
     case 'over':
-      state.awaiting = null; state.reveal = true; hideActions(); render(); showResult(ev.result); break;
+      clearTurnTimer();
+      state.awaiting = null; state.reveal = true; state.matchEnd = !!ev.matchEnd; hideActions(); render(); showResult(ev.result); break;
+
+    // ---- online-only events ----
+    case 'turn':                                   // another seat is on the clock → ring over them
+      startTurnTimer(ev.seat, ev); break;
+    case 'sync':                                   // reconnect/spectator catch-up: rebuild the table from the view
+      hideReconnecting(); resyncFromView(g); break;
+    case 'handEnd':                                // server is waiting for 下一局 acks (result modal already shown by 'over')
+      break;
+    case 'matchOver':                                // the 场 finished → its scores are recorded; back to the lobby
+      clearTurnTimer(); returnHome(); break;
+    case 'disconnected':                           // socket dropped; the RemoteBackend auto-retries
+      showReconnecting(); break;
+    case 'gameGone':                               // no live game on the server for us → lobby
+      returnHome(); break;
   }
 }
 
@@ -238,9 +308,10 @@ function render() {
   if (state.awaiting === 'play') refreshPlayBar();
 }
 
-// Cumulative scoreboard (top-right): each seat's running total, 👑 on the landlord.
+// Cumulative scoreboard (top-right): each seat's running total, 👑 on the landlord. Online reads the
+// server's running 场 scores (carried on the view, rotated so seat 0 is me); offline uses LS.
 function updateScoreboard(g) {
-  const scores = LS.scores;
+  const scores = (state.online && g && g.scores) ? g.scores : LS.scores;
   $('scores').innerHTML = [0, 1, 2].map((s) => {
     const crown = g && g.landlord === s ? '👑' : '';
     const v = scores[s];
@@ -250,7 +321,7 @@ function updateScoreboard(g) {
 
 // Top-bar round info: difficulty, and during play the 底分 + 倍数.
 function updateRoundInfo(g) {
-  const diff = ['新手', '普通', '高手'][state.level] || '';
+  const diff = state.online ? '📶 联机' : (['新手', '普通', '高手'][state.level] || '');
   let s = `<b>${diff}</b>`;
   if (g && g.phase === 'play' && g.bid > 0) {
     const mult = Math.pow(2, g.bombs || 0);
@@ -461,7 +532,16 @@ function pollPad() {
 // ---- result ----------------------------------------------------------------
 function showResult(r) {
   const youWon = (r.landlord === HUMAN) === r.landlordWon;
-  const scores = LS.scores; for (let s = 0; s < 3; s++) scores[s] += r.delta[s]; LS.scores = scores;
+  // Cumulative 场 standings: online reads the server's running scores (which don't yet include THIS
+  // hand at result time) + this hand's delta; offline accumulates into LS.
+  let scores;
+  if (state.online) {
+    const g = state.backend.getState();
+    const base = (g && g.scores) || [0, 0, 0];
+    scores = base.map((v, s) => v + (r.delta[s] || 0));
+  } else {
+    scores = LS.scores; for (let s = 0; s < 3; s++) scores[s] += r.delta[s]; LS.scores = scores;
+  }
   updateScoreboard(state.backend && state.backend.getState());
   $('result-title').textContent = youWon ? '你赢了！' : '你输了';
   $('result-title').className = youWon ? 'win' : 'lose';
@@ -474,7 +554,70 @@ function showResult(r) {
   const bar = $('result-scorebar'); bar.innerHTML = '';
   scores.forEach((v, s) => { const d = document.createElement('div'); d.innerHTML = `${SEAT_NAME[s]}<br><span class="${v >= 0 ? 's-pos' : 's-neg'}">${v >= 0 ? '+' : ''}${v}</span>`; bar.appendChild(d); });
   if (youWon) sfx.win(); else sfx.lose();
+  refreshResultBtn();
   $('result-overlay').hidden = false;
+}
+
+// The result modal's primary button: offline "再来一局"; online toggles readiness for the next hand,
+// or on the 场's final hand shows the closer. Hidden for a spectator (they can't ready).
+function refreshResultBtn() {
+  const btn = $('next-btn');
+  if (!state.online) { btn.hidden = false; btn.textContent = '再来一局'; return; }
+  if (state.viewer) { btn.hidden = true; return; }
+  btn.hidden = false;
+  btn.textContent = state.matchEnd ? '结束并查看总成绩' : (state.readied ? '✓ 已准备' : '我准备好了');
+}
+
+// ---- online: reconnect banner --------------------------------------------
+function showReconnecting() {
+  const el = $('reconnect-overlay'); if (el) el.classList.remove('hidden');
+  if (!state.reconnectTimer) state.reconnectTimer = setTimeout(returnHome, 8000); // can't recover in time → lobby
+}
+function hideReconnecting() {
+  if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
+  const el = $('reconnect-overlay'); if (el) el.classList.add('hidden');
+}
+
+// ---- online: reconnect/spectator catch-up — rebuild the table from a fresh view --------
+function resyncFromView(g) {
+  if (!g) { render(); return; }
+  state.phase = g.phase === 'bid' ? 'bid' : 'play';
+  state.trick = {}; state.discard = []; // we can't reconstruct opponents' exact played cards/suits — start the felt clean
+  state.reveal = g.phase === 'over';
+  state.bottom = null; state.sel.clear(); state.hint.clear(); clearBubbles();
+  if (g.phase === 'bid') state.scene.showBottomReveal(g.bottom, { faceDown: true, title: '底 牌' });
+  else state.scene.hideBottomReveal();
+  render();
+}
+
+// ---- online: turn-countdown ring over whoever is on the clock ------------
+function startTurnTimer(seat, ev) {
+  if (!state.online) return;
+  state.ttSeat = seat;
+  state.ttDeadline = Date.now() + (ev && +ev.timeout > 0 ? +ev.timeout : 30000);
+  state.ttTotal = ev && +ev.total > 0 ? +ev.total : 30000;
+  if (!state.ttHandle) state.ttHandle = setInterval(drawTurnTimer, 100);
+  drawTurnTimer();
+}
+function clearTurnTimer() {
+  state.ttSeat = -1;
+  if (state.ttHandle) { clearInterval(state.ttHandle); state.ttHandle = null; }
+  const el = $('turn-timer'); if (el) el.classList.add('hidden');
+}
+function drawTurnTimer() {
+  const el = $('turn-timer'); if (!el) return;
+  if (!state.online || state.ttSeat < 0) { el.classList.add('hidden'); return; }
+  const left = Math.max(0, state.ttDeadline - Date.now());
+  const frac = state.ttTotal > 0 ? Math.min(1, left / state.ttTotal) : 0;
+  el.classList.remove('hidden');
+  el.classList.toggle('low', left <= 5000);
+  el.querySelector('.tt-secs').textContent = Math.ceil(left / 1000);
+  const arc = el.querySelector('.tt-arc'); const C = 2 * Math.PI * 16;
+  arc.style.strokeDasharray = C; arc.style.strokeDashoffset = C * (1 - frac);
+  // anchor: under the hand for me; over the seat tag for opponents
+  if (state.ttSeat === HUMAN) { el.style.left = '50%'; el.style.bottom = '92px'; el.style.top = 'auto'; el.style.transform = 'translateX(-50%)'; }
+  else { const p = state.scene.seatScreen(state.ttSeat, 2.7); el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; el.style.bottom = 'auto'; el.style.transform = 'translate(-50%, -50%)'; }
+  if (left <= 0) clearTurnTimer();
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

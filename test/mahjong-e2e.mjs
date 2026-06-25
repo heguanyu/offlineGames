@@ -118,7 +118,7 @@ try {
   await page.evaluate(() => {
     localStorage.removeItem('mahjong-history');
     window.__mj.game().scores = [7, -3, -2, -2];
-    window.__mj.recordPot();
+    window.__mj.recordMatch();
   });
   if (await page.evaluate(() => JSON.parse(localStorage.getItem('mahjong-history')).length) !== 1)
     throw new Error('历史战绩 did not record the finished 锅');

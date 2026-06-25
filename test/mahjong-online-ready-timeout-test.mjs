@@ -20,7 +20,7 @@ await new Promise((res) => { srv.stdout.on('data', (d) => { if (/listening/.test
 
 const site = await startServer(SITE_PORT);
 const browser = await launchBrowser();
-const url = `http://localhost:${SITE_PORT}/games/mahjong-tianjin-online/?server=ws://localhost:${LOBBY_PORT}`;
+const url = `http://localhost:${SITE_PORT}/games/mahjong-common-online/?server=ws://localhost:${LOBBY_PORT}`;
 const seatCls = (p) => p.$eval('.chair[data-table="0"][data-seat="0"]', (e) => e.className);
 
 try {

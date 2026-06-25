@@ -60,13 +60,17 @@ try {
         const i = r.uid.indexOf('|');
         const game = i >= 0 ? r.uid.slice(0, i) : 'tianjin';
         const uid = i >= 0 ? r.uid.slice(i + 1) : r.uid;
-        (o[game] || (o[game] = {}))[uid] = { name: r.name, total: r.total, pots: r.pots };
+        // The SQLite columns `pots`/`pot` are legacy STORAGE names (renaming them would need a
+        // migration that breaks the live DB); the app-level field is `matches`/`match`.
+        (o[game] || (o[game] = {}))[uid] = { name: r.name, total: r.total, matches: r.pots };
       }
       return o;
     },
-    savePlayer(game, uid, rec) { qUpsertPlayer.run({ uid: game + '|' + uid, name: rec.name || '', total: rec.total | 0, pots: rec.pots | 0 }); },
-    loadTables() { const out = []; for (const r of qTables.all()) out[r.id] = { seats: JSON.parse(r.seats || 'null'), pot: JSON.parse(r.pot || 'null') }; return out; },
-    saveTable(id, seats, pot) { qUpsertTable.run({ id, seats: JSON.stringify(seats ?? null), pot: JSON.stringify(pot ?? null) }); },
+    // `pots` is the legacy column/key (kept for the live DB); accept a legacy `rec.pots` too so the
+    // JSON→DB migration and any old in-memory record still record the match count.
+    savePlayer(game, uid, rec) { qUpsertPlayer.run({ uid: game + '|' + uid, name: rec.name || '', total: rec.total | 0, pots: (rec.matches ?? rec.pots) | 0 }); },
+    loadTables() { const out = []; for (const r of qTables.all()) out[r.id] = { seats: JSON.parse(r.seats || 'null'), match: JSON.parse(r.pot || 'null') }; return out; },
+    saveTable(id, seats, match) { qUpsertTable.run({ id, seats: JSON.stringify(seats ?? null), pot: JSON.stringify(match ?? null) }); },
   };
   if (legacy) {
     const tx = sdb.transaction(() => {
@@ -111,13 +115,15 @@ if (!impl) {
         const i = k.indexOf('|');
         const game = i >= 0 ? k.slice(0, i) : 'tianjin';
         const uid = i >= 0 ? k.slice(i + 1) : k;
-        (o[game] || (o[game] = {}))[uid] = rec;
+        // stored under the legacy `pots`/`pot` keys (shared with the SQLite columns); surfaced to the
+        // app as `matches`/`match`.
+        (o[game] || (o[game] = {}))[uid] = { name: rec.name, total: rec.total, matches: rec.pots };
       }
       return o;
     },
-    savePlayer(game, uid, rec) { state.scoreBook[game + '|' + uid] = { name: rec.name || '', total: rec.total | 0, pots: rec.pots | 0 }; flush(); },
-    loadTables() { return state.tables; },
-    saveTable(id, seats, pot) { state.tables[id] = { seats: seats ?? null, pot: pot ?? null }; flush(); },
+    savePlayer(game, uid, rec) { state.scoreBook[game + '|' + uid] = { name: rec.name || '', total: rec.total | 0, pots: (rec.matches ?? rec.pots) | 0 }; flush(); },
+    loadTables() { return (state.tables || []).map((t) => t && { seats: t.seats ?? null, match: t.pot ?? null }); },
+    saveTable(id, seats, match) { state.tables[id] = { seats: seats ?? null, pot: match ?? null }; flush(); },
   };
   console.log(`[db] JSON file at ${DB_FILE}`); // informational; the fallback itself was already warned above
 }

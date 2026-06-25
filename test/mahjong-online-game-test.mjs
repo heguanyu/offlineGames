@@ -13,7 +13,7 @@ import { ROOT as root } from './harness.mjs';
 
 const PORT = 8191;
 const UID = 'test-uid-1';
-// a fresh per-run score file so the leaderboard assertion is deterministic (pots === 1)
+// a fresh per-run score file so the leaderboard assertion is deterministic (matches === 1)
 const SCORES_FILE = path.join(os.tmpdir(), `mj-online-test-scores-${PORT}.json`);
 try { fs.unlinkSync(SCORES_FILE); } catch {}
 const srv = spawn(process.execPath, [path.join(root, 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), BOT_THINK_MS: '20', SCORES_FILE }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -21,10 +21,10 @@ let srvErr = '';
 srv.stderr.on('data', (d) => { srvErr += d; });
 await new Promise((res) => { srv.stdout.on('data', (d) => { if (/listening/.test(d)) res(); }); setTimeout(res, 2500); });
 
-let ws = null, setup = false, didReconnect = false, playedAfterReconnect = false, potDone = false;
+let ws = null, setup = false, didReconnect = false, playedAfterReconnect = false, matchDone = false;
 let overSeen = 0, awaitCount = 0;
 const events = [];
-const overPotEnds = []; // ev.potEnd on each 'over' — only the 锅's final hand should be true
+const overMatchEnds = []; // ev.matchEnd on each 'over' — only the 锅's final hand should be true
 const deadline = Date.now() + 90000; // a full 锅 (4 圈) over a reconnect
 
 function done(code, msg) { console.log(msg); try { ws && ws.terminate(); } catch {} try { fs.unlinkSync(SCORES_FILE); } catch {} srv.kill(); process.exit(code); }
@@ -51,12 +51,12 @@ function reconnect() {
 
 function onMsg(msg) {
   if (msg.type === 'lobby') {
-    if (potDone) { // the 锅 just finished → the server must have recorded it to the leaderboard
+    if (matchDone) { // the 锅 just finished → the server must have recorded it to the leaderboard
       if (!didReconnect || !playedAfterReconnect) return fail('reconnect drill did not resume play before the 锅 finished');
       const me = (msg.leaderboard || []).find((r) => r.mine);
       if (!me) return fail('leaderboard is missing the player after the 锅 finished');
-      if (me.pots !== 1) return fail(`expected 1 finished 锅 on the leaderboard, got ${me.pots}`);
-      return done(0, `full 锅 over a reconnect; leaderboard recorded (me: ${me.total >= 0 ? '+' : ''}${me.total} / ${me.pots}锅)\nMAHJONG ONLINE GAME TEST PASS`);
+      if (me.matches !== 1) return fail(`expected 1 finished 锅 on the leaderboard, got ${me.matches}`);
+      return done(0, `full 锅 over a reconnect; leaderboard recorded (me: ${me.total >= 0 ? '+' : ''}${me.total} / ${me.matches}锅)\nMAHJONG ONLINE GAME TEST PASS`);
     }
     if (!setup && msg.you && !msg.you.seat) { // first lobby → sit, fill with bots, ready
       send({ type: 'sit', table: 0, seat: 0 });
@@ -71,14 +71,14 @@ function onMsg(msg) {
   events.push(ev.t);
 
   // Play the WHOLE 锅: each hand ends with 'over' (result) then 'handEnd' (→ 下一局); the 锅
-  // ends with 'potOver'. Partway through we DROP and reconnect (same uid) and must resume.
+  // ends with 'matchOver'. Partway through we DROP and reconnect (same uid) and must resume.
   if (ev.t === 'deal') { act({ do: 'dealDone' }); return; }  // a real client acks when its deal animation ends → server drives the bots
-  if (ev.t === 'potOver') {
-    if (overPotEnds[overPotEnds.length - 1] !== true) return fail('the 锅\'s final hand was not flagged potEnd');
-    if (overPotEnds.slice(0, -1).some((x) => x)) return fail('a non-final hand was wrongly flagged potEnd');
-    potDone = true; return; // wait for the lobby frame that records the score
+  if (ev.t === 'matchOver') {
+    if (overMatchEnds[overMatchEnds.length - 1] !== true) return fail('the 锅\'s final hand was not flagged matchEnd');
+    if (overMatchEnds.slice(0, -1).some((x) => x)) return fail('a non-final hand was wrongly flagged matchEnd');
+    matchDone = true; return; // wait for the lobby frame that records the score
   }
-  if (ev.t === 'over') { overSeen++; overPotEnds.push(!!ev.potEnd); return; } // result pushed; the server follows with handEnd
+  if (ev.t === 'over') { overSeen++; overMatchEnds.push(!!ev.matchEnd); return; } // result pushed; the server follows with handEnd
   if (ev.t === 'handEnd') { act({ do: 'next' }); return; }
   if (ev.t === 'lazhuang') {
     // blind 拉庄: while WE'RE a pending challenger our own hand must be redacted (all -1)
@@ -103,5 +103,5 @@ function openClient() {
 
 openClient();
 const watchdog = setInterval(() => {
-  if (Date.now() > deadline) { clearInterval(watchdog); fail(`timed out — events seen: ${[...new Set(events)].join(',')} | reconnect=${didReconnect} resumed=${playedAfterReconnect} over=${overSeen} potDone=${potDone}`); }
+  if (Date.now() > deadline) { clearInterval(watchdog); fail(`timed out — events seen: ${[...new Set(events)].join(',')} | reconnect=${didReconnect} resumed=${playedAfterReconnect} over=${overSeen} matchDone=${matchDone}`); }
 }, 1000);

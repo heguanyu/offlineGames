@@ -326,7 +326,7 @@ body.flat #ting-center { left: 98px; }
 .rounds-table .rd-empty { color: #9fd3bf; padding: 14px; }
 .rounds-table .pos { color: #7ddf8a; } .rounds-table .neg { color: #ef9a9a; } .rounds-table .zero { color: #cfe7db; }
 
-/* ---------- 一锅 final standings ---------- */
+/* ---------- match (天津 锅 / 国标 场) final standings ---------- */
 #final-congrats { color: var(--gold); font-weight: 800; font-size: 1.12rem; margin: 10px 0; min-height: 1.2em; }
 #final-standings { margin: 8px 0; }
 .standing { display: flex; align-items: center; gap: 12px; padding: 9px 13px; border-radius: 11px; margin: 6px 0;

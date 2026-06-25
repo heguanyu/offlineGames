@@ -133,7 +133,7 @@ class TianjinGame extends MahjongGame {
     try { const h = JSON.parse(localStorage.getItem('mahjong-history')); if (Array.isArray(h)) return h; } catch {}
     return [];
   }
-  recordPotHistory() {
+  recordMatchHistory() {
     const hist = this.loadHistory();
     hist.push({ at: Date.now(), scores: this.game.scores.slice() });
     while (hist.length > 50) hist.shift(); // cap growth; keep the most recent 50 锅
@@ -393,12 +393,12 @@ class TianjinGame extends MahjongGame {
 
       case 'over':
         this.render();      // flush the 自摸 / 荒牌 toast + win/lose sound from the log
-        this.onlineEndsPot = ONLINE && !!ev.potEnd; // set BEFORE showResult so it picks the right button label
+        this.onlineEndsMatch = ONLINE && !!ev.matchEnd; // set BEFORE showResult so it picks the right button label
         this.showResult();
         // resync after a refresh: reflect a choice we'd already made
         if (ev.readied) {
           const b = $('next-hand-btn');
-          if (this.onlineEndsPot) { b.disabled = true; b.textContent = '结算中…'; }        // already chose to finish the 锅
+          if (this.onlineEndsMatch) { b.disabled = true; b.textContent = '结算中…'; }        // already chose to finish the 锅
           else { this.onlineReadied = true; b.textContent = '✓ 已准备 · 取消'; b.classList.add('readied'); } // already readied
         }
         return;
@@ -410,7 +410,7 @@ class TianjinGame extends MahjongGame {
         this.render();
         return;
 
-      case 'potOver': // the server finished the 锅 → final standings (server-authoritative)
+      case 'matchOver': // the server finished the 锅 → final standings (server-authoritative)
         $('result-overlay').classList.add('hidden');
         this.showFinalBoard({ scores: ev.scores, rounds: ev.rounds });
         return;
@@ -633,9 +633,9 @@ class TianjinGame extends MahjongGame {
     renderSeatHands(this.game, (id) => this.game.isWild(id)); // reveal every seat's hand on its border
     if (!ONLINE) this.saveSession();
     // If this hand closes the 北圈, the 锅 is finished — the button ENDS it and shows the 最终成绩.
-    // Offline we compute it from the session; online the server flags it (onlineEndsPot, set on 'over')
+    // Offline we compute it from the session; online the server flags it (onlineEndsMatch, set on 'over')
     // because the rotated view can't tell which absolute seat is the 锅's first 庄.
-    const endsPot = ONLINE ? this.onlineEndsPot : (this.game.nextDealer() === 0 && this.game.dealer !== 0 && this.session.prevailingWind === 3);
+    const endsPot = ONLINE ? this.onlineEndsMatch : (this.game.nextDealer() === 0 && this.game.dealer !== 0 && this.session.prevailingWind === 3);
     const nb = $('next-hand-btn'); nb.disabled = false; nb.classList.remove('readied'); this.onlineReadied = false; // fresh result → not ready
     nb.textContent = endsPot ? '结束并查看总成绩 🏆' : (ONLINE ? '我准备好了' : '下一局');
     ov.classList.remove('hidden');
@@ -699,8 +699,8 @@ class TianjinGame extends MahjongGame {
   nextHand() {
     if (VIEWER) return; // a spectator can't ready up — the next hand deals when the real players are ready
     if (ONLINE) {
-      if (this.onlineEndsPot) {
-        // Final hand of the 锅: this only ENDS it — the server replies with 'potOver' → 最终成绩. No
+      if (this.onlineEndsMatch) {
+        // Final hand of the 锅: this only ENDS it — the server replies with 'matchOver' → 最终成绩. No
         // un-ready toggle (you can't un-finish a 锅); just lock the button while the server settles.
         this.backend.next();
         const btn = $('next-hand-btn'); btn.disabled = true; btn.textContent = '结算中…';
@@ -723,7 +723,7 @@ class TianjinGame extends MahjongGame {
       // Snapshot the cumulative scores at the close of the 圈 just finished (每圈成绩).
       this.session.rounds.push({ wind: this.session.prevailingWind, scores: this.game.scores.slice() });
       if (this.session.prevailingWind === 3) { // 北圈 done → 锅 complete; stop and tally
-        this.recordPotHistory(); // append this 锅's final scores to the persistent 历史战绩
+        this.recordMatchHistory(); // append this 锅's final scores to the persistent 历史战绩
         this.saveSession();
         this.showFinalBoard();
         return;
@@ -1259,7 +1259,7 @@ if (new URLSearchParams(location.search).get('fast')) {
     // e2e: deal a real hand with the human 拉庄 vs 庄 = 下家(1) (exercises the backend 拉庄 flow).
     dealLz: () => { app.lzTestChoice = true; app.session.dealer = 1; app.startHand(); },
     // e2e: append the live game's scores to 历史战绩 (the 锅-completion record path).
-    recordPot: () => app.recordPotHistory(),
+    recordMatch: () => app.recordMatchHistory(),
     // e2e/visual: the 拉庄 confirmation panel (records the click on window.__lz).
     debugLzPanel: () => app.showLaZhuangPanel(1, [HUMAN], {}, (yes) => { window.__lz = yes; }),
     // visual/e2e: a 拉庄 win — human (0) 拉庄 vs 庄 = 下家(1); the 下家 row carries 庄x2 +

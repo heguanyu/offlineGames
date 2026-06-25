@@ -32,7 +32,7 @@ export class MahjongGame {
     this.gameStarted = false;
     this.resultFocus = 0;     // 0 = 下一局, 1 = 返回
     this.onlineReadied = false; // result-modal ready toggle (online): 我准备好了 ⇄ ✓已准备
-    this.onlineEndsPot = false; // this result closes the 锅 (server-flagged) → finish button
+    this.onlineEndsMatch = false; // this result closes the match (天津 锅 / 国标 场, server-flagged) → finish button
     this.reconnectTimer = null;
     // online turn countdown: ttDeadline/ttTotal in ms, ttWaiting while a human is on the clock.
     this.ttHandle = null; this.ttDeadline = 0; this.ttTotal = 30000; this.ttWaiting = false;
@@ -123,8 +123,8 @@ export class MahjongGame {
   openMenu() { $('menu-overlay').classList.remove('hidden'); }
   closeOverlays() { for (const id of ['menu-overlay', 'rules-overlay']) $(id).classList.add('hidden'); }
 
-  // Forfeit the live game: tell the server (our seat becomes a bot; this 锅 isn't scored for us),
-  // then return to the lobby. The server concludes the 锅 if we were the last human.
+  // Forfeit the live game: tell the server (our seat becomes a bot; this match isn't scored for us),
+  // then return to the lobby. The server concludes the match if we were the last human.
   doForfeit() {
     $('forfeit-confirm-overlay').classList.add('hidden');
     if (this.backend && this.backend.forfeit) this.backend.forfeit();

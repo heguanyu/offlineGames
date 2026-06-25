@@ -3,7 +3,7 @@
 // GAME_TYPE=guobiao, drives a raw WebSocket client (1 human + 3 bots): sit → bots → ready →
 // the server runs a full 锅 (4 圈). The human auto-passes claims (taking any offered 胡), auto-
 // discards, and takes self-draw wins. Validates the 国标 claim QUEUE (吃/点炮), the no-拉庄 flow,
-// and that the shared network layer reaches 'potOver' + records the leaderboard for 国标.
+// and that the shared network layer reaches 'matchOver' + records the leaderboard for 国标.
 // Usage: node test/mahjong-online-guobiao-test.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -21,10 +21,10 @@ let srvErr = '';
 srv.stderr.on('data', (d) => { srvErr += d; });
 await new Promise((res) => { srv.stdout.on('data', (d) => { if (/listening/.test(d)) res(); }); setTimeout(res, 2500); });
 
-let ws = null, setup = false, potDone = false;
+let ws = null, setup = false, matchDone = false;
 let overSeen = 0, claimsSeen = 0;
 const events = new Set();
-const overPotEnds = [];
+const overMatchEnds = [];
 const deadline = Date.now() + 120000; // a full 国标 锅 (4 圈)
 
 function done(code, msg) { console.log(msg); try { ws && ws.terminate(); } catch {} try { fs.unlinkSync(SCORES_FILE); } catch {} srv.kill(); process.exit(code); }
@@ -47,11 +47,11 @@ function actOnTurn(view) {
 
 function onMsg(msg) {
   if (msg.type === 'lobby') {
-    if (potDone) {
+    if (matchDone) {
       const me = (msg.leaderboard || []).find((r) => r.mine);
       if (!me) return fail('leaderboard missing the player after the 锅');
-      if (me.pots !== 1) return fail(`expected 1 finished 锅, got ${me.pots}`);
-      return done(0, `full 国标 锅; leaderboard recorded (me: ${me.total >= 0 ? '+' : ''}${me.total} / ${me.pots}锅; wins taken=${claimsSeen}, overs=${overSeen})\nGUOBIAO ONLINE TEST PASS`);
+      if (me.matches !== 1) return fail(`expected 1 finished 锅, got ${me.matches}`);
+      return done(0, `full 国标 锅; leaderboard recorded (me: ${me.total >= 0 ? '+' : ''}${me.total} / ${me.matches}锅; wins taken=${claimsSeen}, overs=${overSeen})\nGUOBIAO ONLINE TEST PASS`);
     }
     if (!setup && msg.you && !msg.you.seat) {
       send({ type: 'sit', table: 0, seat: 0 });
@@ -67,12 +67,12 @@ function onMsg(msg) {
   if (ev.t === 'lazhuang') return fail('国标 must never emit a 拉庄 event');
   if (ev.t === 'deal') { act({ do: 'dealDone' }); return; }
   if (ev.t === 'claim') { claimsSeen++; return; }
-  if (ev.t === 'potOver') {
-    if (overPotEnds[overPotEnds.length - 1] !== true) return fail("the 锅's final hand was not flagged potEnd");
-    if (overPotEnds.slice(0, -1).some((x) => x)) return fail('a non-final hand was wrongly flagged potEnd');
-    potDone = true; return;
+  if (ev.t === 'matchOver') {
+    if (overMatchEnds[overMatchEnds.length - 1] !== true) return fail("the 锅's final hand was not flagged matchEnd");
+    if (overMatchEnds.slice(0, -1).some((x) => x)) return fail('a non-final hand was wrongly flagged matchEnd');
+    matchDone = true; return;
   }
-  if (ev.t === 'over') { overSeen++; overPotEnds.push(!!ev.potEnd); return; }
+  if (ev.t === 'over') { overSeen++; overMatchEnds.push(!!ev.matchEnd); return; }
   if (ev.t === 'handEnd') { act({ do: 'next' }); return; }
   if (ev.t === 'sync') { actOnTurn(view); return; }
   if (ev.t === 'await' && ev.seat === 0) actOnTurn(view);
@@ -86,5 +86,5 @@ function openClient() {
 }
 openClient();
 const watchdog = setInterval(() => {
-  if (Date.now() > deadline) { clearInterval(watchdog); fail(`timed out — events: ${[...events].join(',')} overs=${overSeen} potDone=${potDone}`); }
+  if (Date.now() > deadline) { clearInterval(watchdog); fail(`timed out — events: ${[...events].join(',')} overs=${overSeen} matchDone=${matchDone}`); }
 }, 1000);

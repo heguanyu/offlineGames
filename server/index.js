@@ -20,20 +20,30 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Table } from './table.js';
+import { PokerTable } from './poker-table.js';
 import { ruleset as tianjin } from './rulesets/tianjin.js';
 import { ruleset as guobiao, freeRuleset as guobiaoFree } from './rulesets/guobiao.js';
 import { BOT_NAMES } from '../games/mahjong-common/bot-names.js';
 import db from './db.js';
 import { startWeather, getWeatherJson } from './weather.js';
 
-// The game each table hosts. Same lobby + Table + protocol for every entry; the ruleset is the only
-// difference (server/rulesets/*.js). One table per game type — the lobby's game tabs pick which.
+// The games the lobby can host. Each table hosts ONE game; the lobby is split per game (the hub's
+// online cards deep-link a game). Every game shares the same lobby + reconnect + { type:'game' }
+// protocol — what differs is the seat count, the table driver, and (for mahjong) the ruleset:
+//   kind 'mahjong' → 4 seats, server/table.js + a ruleset (server/rulesets/*.js)
+//   kind 'poker'   → 3 seats, server/poker-table.js (runs games/doudizhu's engine + AI directly)
 // TABLE_GAMES overrides the lineup; GAME_TYPE keeps the legacy single-type form (used by tests).
-const RULESETS = { tianjin, guobiao, 'guobiao-free': guobiaoFree };
+const GAMES = {
+  tianjin: { kind: 'mahjong', seats: 4, ruleset: tianjin, label: '天津麻将', page: 'mahjong-tianjin' },
+  guobiao: { kind: 'mahjong', seats: 4, ruleset: guobiao, label: '国标麻将', page: 'guobiao' },
+  'guobiao-free': { kind: 'mahjong', seats: 4, ruleset: guobiaoFree, label: '国标无定番', page: 'guobiao-free' },
+  doudizhu: { kind: 'poker', seats: 3, label: '斗地主', page: 'doudizhu' },
+};
 const TABLE_GAMES = (process.env.TABLE_GAMES ? process.env.TABLE_GAMES.split(',')
   : process.env.GAME_TYPE ? [process.env.GAME_TYPE]
-  : ['tianjin', 'guobiao', 'guobiao-free']).map((g) => g.trim()).filter((g) => RULESETS[g]);
+  : ['tianjin', 'guobiao', 'guobiao-free', 'doudizhu']).map((g) => g.trim()).filter((g) => GAMES[g]);
 if (!TABLE_GAMES.length) TABLE_GAMES.push('tianjin');
+const seatsOf = (gameType) => (GAMES[gameType] || GAMES.tianjin).seats;
 
 const PORT = process.env.PORT || 8090;
 const ALLOWED = (process.env.ALLOWED_ORIGINS ||
@@ -45,20 +55,20 @@ const ALLOWED = (process.env.ALLOWED_ORIGINS ||
 // a local checkout and for the staged Azure package. Override with STATIC_ROOT if needed.
 const STATIC_ROOT = process.env.STATIC_ROOT || fileURLToPath(new URL('..', import.meta.url));
 
-const TABLES = TABLE_GAMES.length, SEATS = 4;
-const WIND = ['东', '南', '西', '北'];
+const TABLES = TABLE_GAMES.length;
+const WIND = ['东', '南', '西', '北']; // mahjong seat → 风; poker games carry no wind (the client ignores it)
 const READY_MS = +process.env.READY_MS || 60_000; // a seated human must ready within this window or the server frees their seat (tests set it low)
-const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将', 'guobiao-free': '国标无定番' };
-const GAME_PAGE = { tianjin: 'mahjong-tianjin', guobiao: 'guobiao', 'guobiao-free': 'guobiao-free' }; // lobby navigates here
+const GAME_LABEL = Object.fromEntries(Object.entries(GAMES).map(([g, c]) => [g, c.label]));
+const GAME_PAGE = Object.fromEntries(Object.entries(GAMES).map(([g, c]) => [g, c.page])); // lobby navigates here
 
 // ---- persistence (lifetime scores + the live 锅 state) ---------------------
 // All durable state lives in the SQLite database (server/db.js): the lifetime leaderboard
-// (scoreBook: uid → {name,total,pots}) and a per-table snapshot — its seats + the current 锅's
+// (scoreBook: uid → {name,total,matches}) and a per-table snapshot — its seats + the current 锅's
 // standings (scores / 圈 / 庄 / 每圈成绩). The scoreBook is loaded into memory once for fast
 // leaderboard reads and written through on every change; the table snapshot is written after each
 // hand. A restart RESTORES the seats + 锅 standings (the in-progress hand is dropped); the 锅 then
 // auto-resumes from the same round — it never resets to round 1.
-// Per-game leaderboards: scoreBook[gameType] → { uid: {name,total,pots} }. Each game has its own
+// Per-game leaderboards: scoreBook[gameType] → { uid: {name,total,matches} }. Each game has its own
 // lifetime board (the lobby is split per game), so a 天津 锅 never mixes into the 国标 standings.
 const scoreBook = db.loadScoreBook();
 for (const g of TABLE_GAMES) if (!scoreBook[g]) scoreBook[g] = {};
@@ -69,11 +79,12 @@ const savedTables = db.loadTables();
 // table: { id, status:'waiting'|'playing', seats:[4], game: Table|null, resume: 锅-snapshot|null }
 const tables = Array.from({ length: TABLES }, (_, id) => {
   const sv = savedTables[id];
-  const seats = (sv && Array.isArray(sv.seats) ? sv.seats : []).map((s) => !s ? null
+  const nseats = seatsOf(TABLE_GAMES[id]);
+  const seats = (sv && Array.isArray(sv.seats) ? sv.seats : []).slice(0, nseats).map((s) => !s ? null
     : s.kind === 'bot' ? { kind: 'bot' }
     : (s.kind === 'human' && s.uid) ? { kind: 'human', uid: s.uid, name: s.name || '', ready: false } : null);
-  while (seats.length < SEATS) seats.push(null);
-  return { id, status: 'waiting', seats, game: null, resume: (sv && sv.pot) || null, gameType: TABLE_GAMES[id] };
+  while (seats.length < nseats) seats.push(null);
+  return { id, status: 'waiting', seats, game: null, resume: (sv && sv.match) || null, gameType: TABLE_GAMES[id] };
 });
 
 // Backfill on restart: a human seat restored from the DB carries no readyBy (it's not persisted, and
@@ -91,20 +102,20 @@ function persist() { for (const t of tables) db.saveTable(t.id, t.seats, t.game 
 const flushState = persist;
 // Record one finished 锅 onto THAT game's board: each human seat's final score is added to their
 // lifetime total for `game` (forfeiters are bots by now, so they're skipped → no score for them).
-function recordPot(game, seats, finalScores) {
+function recordMatch(game, seats, finalScores) {
   const book = scoreBook[game] || (scoreBook[game] = {});
-  for (let s = 0; s < SEATS; s++) {
+  for (let s = 0; s < seats.length; s++) {
     const seat = seats[s];
     if (seat && seat.kind === 'human' && seat.uid) {
-      const rec = book[seat.uid] || (book[seat.uid] = { name: seat.name, total: 0, pots: 0 });
-      rec.name = seat.name || rec.name; rec.total += finalScores[s] | 0; rec.pots += 1;
+      const rec = book[seat.uid] || (book[seat.uid] = { name: seat.name, total: 0, matches: 0 });
+      rec.name = seat.name || rec.name; rec.total += finalScores[s] | 0; rec.matches += 1;
       db.savePlayer(game, seat.uid, rec);
     }
   }
 }
 const leaderboard = (game, uid) => Object.entries(scoreBook[game] || {})
   .sort((a, b) => b[1].total - a[1].total).slice(0, 50)
-  .map(([k, r]) => ({ name: r.name, total: r.total, pots: r.pots, mine: k === uid }));
+  .map(([k, r]) => ({ name: r.name, total: r.total, matches: r.matches, mine: k === uid }));
 const clients = new Map(); // clientId → { ws, id, uid, name }
 const uidWs = new Map();    // uid → the live socket for that player (for routing game frames)
 let nextId = 1;
@@ -126,7 +137,7 @@ const send = (ws, msg) => { if (ws && ws.readyState === ws.OPEN) ws.send(JSON.st
 
 function seatOf(uid) {
   if (!uid) return null;
-  for (const t of tables) for (let s = 0; s < SEATS; s++) {
+  for (const t of tables) for (let s = 0; s < t.seats.length; s++) {
     const seat = t.seats[s];
     if (seat && seat.kind === 'human' && seat.uid === uid) return { table: t.id, seat: s };
   }
@@ -166,7 +177,7 @@ const broadcastLobby = () => { for (const c of clients.values()) send(c.ws, lobb
 function startGame(t) {
   t.status = 'playing';
   const gameSeats = t.seats.map((s, i) => s.kind === 'bot' ? { kind: 'bot', name: BOT_NAMES[i] } : { kind: 'human', uid: s.uid, name: s.name });
-  for (let s = 0; s < SEATS; s++) if (gameSeats[s].kind === 'human') send(uidWs.get(gameSeats[s].uid), { type: 'gameStart', table: t.id, seat: s, wind: WIND[s], game: t.gameType, page: GAME_PAGE[t.gameType] });
+  for (let s = 0; s < gameSeats.length; s++) if (gameSeats[s].kind === 'human') send(uidWs.get(gameSeats[s].uid), { type: 'gameStart', table: t.id, seat: s, wind: WIND[s], game: t.gameType, page: GAME_PAGE[t.gameType] });
   broadcastLobby();
   // route each seat's frames to that player's current socket (reconnection-safe), AND fan them out
   // to any spectators watching that seat (viewer mode — they see exactly what the player sees).
@@ -176,9 +187,15 @@ function startGame(t) {
     for (const c of clients.values()) if (c.spectate && c.spectate.table === t.id && c.spectate.seat === seatIdx) send(c.ws, msg);
   };
   // online bots play at the hardest level; t.resume carries the 锅 standings across a restart;
-  // persist after every hand so a crash resumes from the latest round. The ruleset picks the game.
-  const ruleset = RULESETS[t.gameType] || tianjin;
-  t.game = new Table(t.id, gameSeats, emit, (finalScores) => onPotOver(t, gameSeats, finalScores), 3, t.resume, persist, ruleset);
+  // persist after every hand so a crash resumes from the latest round. The game kind picks the driver:
+  // mahjong → Table (+ ruleset); poker (斗地主) → PokerTable (engine + AI imported directly).
+  const onMatch = (finalScores) => onMatchOver(t, gameSeats, finalScores);
+  if ((GAMES[t.gameType] || {}).kind === 'poker') {
+    t.game = new PokerTable(t.id, gameSeats, emit, onMatch, 2, t.resume, persist);
+  } else {
+    const ruleset = (GAMES[t.gameType] || {}).ruleset || tianjin;
+    t.game = new Table(t.id, gameSeats, emit, onMatch, 3, t.resume, persist, ruleset);
+  }
   persist();
 }
 
@@ -203,8 +220,8 @@ function resumeTable(t) {
 
 // 锅 finished → persist each player's lifetime score, then back to the lobby (same occupants,
 // humans un-readied for a rematch). The 锅 is done, so its resume snapshot is cleared.
-function onPotOver(t, gameSeats, finalScores) {
-  if (gameSeats && finalScores) recordPot(t.gameType, gameSeats, finalScores); // onto this table's game board
+function onMatchOver(t, gameSeats, finalScores) {
+  if (gameSeats && finalScores) recordMatch(t.gameType, gameSeats, finalScores); // onto this table's game board
   if (t.game) t.game.dispose();
   t.game = null; t.resume = null;
   t.status = 'waiting';
@@ -214,7 +231,7 @@ function onPotOver(t, gameSeats, finalScores) {
 }
 
 // A seated human FORFEITS the live game: their seat becomes a bot in place — it plays on for any
-// remaining humans, but recordPot (keyed on seat.kind === 'human') never records a lifetime score for
+// remaining humans, but recordMatch (keyed on seat.kind === 'human') never records a lifetime score for
 // it. If they were the last human, the 锅 is concluded immediately (nobody left to play for). The
 // forfeiter's client returns to the lobby on its own; their seat no longer carries their uid, so they
 // land back in the lobby unseated.
@@ -225,8 +242,8 @@ function forfeitSeat(t, seat) {
   if (t.game.humans().length === 0) {
     // no humans left → conclude the 锅 NOW and reset the table to empty (clear the orphaned bots, so it
     // doesn't linger as a phantom all-bot table — which maybeStart would otherwise have auto-started).
-    t.seats = [null, null, null, null];
-    onPotOver(t, t.game.seats, t.game.scores.slice()); // records nothing (all bots); disposes + back to waiting
+    t.seats = t.seats.map(() => null);
+    onMatchOver(t, t.game.seats, t.game.scores.slice()); // records nothing (all bots); disposes + back to waiting
   } else {
     t.game.pushEvent({ t: 'sync' }); // remaining players re-render with the bot takeover (nameplate → 机器人)
     broadcastLobby();
@@ -235,7 +252,7 @@ function forfeitSeat(t, seat) {
 }
 
 // ---- per-connection messages ----------------------------------------------
-const inRange = (ti, si) => ti >= 0 && ti < TABLES && si >= 0 && si < SEATS;
+const inRange = (ti, si) => ti >= 0 && ti < TABLES && si >= 0 && si < tables[ti].seats.length;
 
 function handle(client, msg) {
   // in-game moves route straight to the authoritative table (no lobby broadcast)
@@ -252,7 +269,7 @@ function handle(client, msg) {
     case 'hello': {
       client.uid = String(msg.uid || '').slice(0, 64) || ('anon-' + client.id);
       client.name = sanitizeName(msg.name) || `玩家${client.id}`;
-      if (RULESETS[msg.game]) client.game = msg.game; // which game's split lobby this client is viewing
+      if (GAMES[msg.game] && TABLE_GAMES.includes(msg.game)) client.game = msg.game; // which game's split lobby this client is viewing
       uidWs.set(client.uid, client.ws);
       // Spectator: a NON-seated client asked to watch a specific human seat of a live table. Register
       // it (the seat's frames fan out to it via emit) and seed it with the current catch-up frame.
@@ -430,7 +447,7 @@ const readySweep = setInterval(() => {
   for (const t of tables) {
     if (t.status !== 'waiting') continue;
     let abandon = false;
-    for (let s = 0; s < SEATS; s++) {
+    for (let s = 0; s < t.seats.length; s++) {
       const seat = t.seats[s];
       if (!seat || seat.kind !== 'human' || seat.ready || !seat.readyBy) continue;
       if (now > seat.readyBy) {
@@ -438,7 +455,7 @@ const readySweep = setInterval(() => {
         t.seats[s] = null; changed = true;
       } else counting = true;
     }
-    if (abandon) { t.seats = [null, null, null, null]; t.resume = null; changed = true; }
+    if (abandon) { t.seats = t.seats.map(() => null); t.resume = null; changed = true; }
   }
   if (changed) persist();
   if (changed || counting) broadcastLobby();

@@ -47,6 +47,10 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
 .chair.south { grid-column: 3; grid-row: 2; }
 .chair.west  { grid-column: 2; grid-row: 1; }
 .chair.north { grid-column: 1; grid-row: 2; }
+/* 斗地主: a 3-seat triangle on the same grid — me bottom-centre, the two opponents in the top corners */
+.chair.dou0 { grid-column: 2; grid-row: 3; }
+.chair.dou1 { grid-column: 3; grid-row: 1; }
+.chair.dou2 { grid-column: 1; grid-row: 1; }
 /* the seat (bigger rectangle) is 60% along the table-edge axis; the back (thin wood strip) is the
    SAME width as the seat and centred behind it, so each chair reads as one piece. */
 .chair .seat-pad { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -55,11 +59,14 @@ main#lobby { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;
   box-shadow: 0 3px 6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.18); transition: box-shadow .1s; }
 .chair.east .seat-pad, .chair.west  .seat-pad { width: 60%; }   /* top/bottom seats: narrow horizontally */
 .chair.north .seat-pad, .chair.south .seat-pad { height: 60%; } /* side seats: narrow vertically */
+.chair.dou0 .seat-pad, .chair.dou1 .seat-pad, .chair.dou2 .seat-pad { width: 72%; } /* 斗地主 corners + bottom */
 .chair::after { content: ''; position: absolute; background: linear-gradient(#7a4f26, #543619); border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.45); }
 .chair.east::after  { left: 20%; right: 20%; bottom: -10px; height: 12px; }
 .chair.west::after  { left: 20%; right: 20%; top: -10px; height: 12px; }
 .chair.north::after { top: 20%; bottom: 20%; left: -10px; width: 12px; }
 .chair.south::after { top: 20%; bottom: 20%; right: -10px; width: 12px; }
+.chair.dou0::after  { left: 24%; right: 24%; bottom: -10px; height: 12px; }
+.chair.dou1::after, .chair.dou2::after { left: 24%; right: 24%; top: -10px; height: 12px; }
 /* only empty seats are clickable (click to sit) — show the affordance there */
 .chair.empty:not(.playing) { cursor: pointer; }
 .chair.empty:not(.playing):hover .seat-pad { box-shadow: 0 0 0 2px var(--gold), 0 3px 6px rgba(0,0,0,0.45); }

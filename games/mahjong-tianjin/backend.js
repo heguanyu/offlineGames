@@ -233,11 +233,11 @@ export function mapServerEvent(ev, c, view) {
     case 'discard': return { type: 'discard', player: rot(ev.player), tile: ev.tile, discardIndex: view.discardLog.length - 1 };
     case 'claim': return { type: 'claim', player: rot(ev.player), claimType: ev.claim, kind: ev.kind };
     case 'selfKong': return { type: 'selfKong', player: rot(ev.player), kind: ev.kind };
-    case 'over': return { type: 'over', result: view.result, readied: ev.readied, potEnd: ev.potEnd }; // potEnd: this hand closes the 锅
+    case 'over': return { type: 'over', result: view.result, readied: ev.readied, matchEnd: ev.matchEnd }; // matchEnd: this hand closes the 锅
     case 'lazhuang': return { type: 'lazhuang', dealer: rot(ev.dealer), // halts for everyone — no countdown
       need: (ev.need || []).map(rot), // seats still to choose (rotated to display)
       answers: Object.fromEntries(Object.entries(ev.answers || {}).map(([s, v]) => [rot(+s), v])) };
-    case 'potOver': return { type: 'potOver', scores: byD(ev.scores), rounds: (ev.rounds || []).map((r) => ({ wind: r.wind, scores: byD(r.scores) })) };
+    case 'matchOver': return { type: 'matchOver', scores: byD(ev.scores), rounds: (ev.rounds || []).map((r) => ({ wind: r.wind, scores: byD(r.scores) })) };
     case 'sync': return { type: 'sync' };
     default: return null; // 'handEnd' is server-internal (the result modal's 我准备好了 sends 'next')
   }

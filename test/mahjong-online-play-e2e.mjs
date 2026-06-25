@@ -28,7 +28,7 @@ try {
   await page.evaluateOnNewDocument(() => { localStorage.setItem('mahjong-online-name', '阿玩'); localStorage.setItem('mahjong-online-uid', 'play-e2e-uid'); });
 
   // --- lobby: sit at seat 0 (dealer → no 拉庄), fill with bots, ready ---
-  await page.goto(`http://localhost:${SITE}/games/mahjong-tianjin-online/?server=ws://localhost:${PORT}&fast=1`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${SITE}/games/mahjong-common-online/?server=ws://localhost:${PORT}&fast=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.getElementById('conn')?.className.includes('on'), { timeout: 6000 });
   await page.waitForSelector('.chair[data-table="0"][data-seat="0"]');
   await sit(page, 0, 0);

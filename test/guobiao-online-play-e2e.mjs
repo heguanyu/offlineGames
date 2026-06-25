@@ -30,7 +30,7 @@ try {
   await page.evaluateOnNewDocument(() => { localStorage.setItem('mahjong-online-name', '国标客'); localStorage.setItem('mahjong-online-uid', 'gb-play-e2e-uid'); });
 
   // the 国标 split lobby (?game=guobiao) shows only the 国标 table (index 1 in the default lineup)
-  await page.goto(`http://localhost:${SITE}/games/mahjong-tianjin-online/?server=ws://localhost:${PORT}&fast=1&game=guobiao`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${SITE}/games/mahjong-common-online/?server=ws://localhost:${PORT}&fast=1&game=guobiao`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.getElementById('conn')?.className.includes('on'), { timeout: 6000 });
   await page.waitForSelector('.chair[data-table="1"][data-seat="0"]');
   await sit(page, 1, 0);

@@ -10,13 +10,24 @@ const $ = (id) => document.getElementById(id);
 // The game server (WebSocket) endpoint — see server-url.js (the single source of truth).
 const SERVER_URL = serverUrl();
 
-const WINDS = ['东', '南', '西', '北'];          // seat index → wind label
-const POS = ['east', 'south', 'west', 'north'];  // seat index → chair CSS position
-const GAME_PAGE = { tianjin: '../mahjong-tianjin/', guobiao: '../guobiao/', 'guobiao-free': '../guobiao-free/' }; // gameType → game page
-const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将', 'guobiao-free': '国标无定番' };
-// This lobby is split per game (?game=tianjin|guobiao|guobiao-free, default 天津): one table, no tabs,
-// its own leaderboard. The hub's three online cards each deep-link a game.
+const GAME_PAGE = { tianjin: '../mahjong-tianjin/', guobiao: '../guobiao/', 'guobiao-free': '../guobiao-free/', doudizhu: '../doudizhu/' }; // gameType → game page
+const GAME_LABEL = { tianjin: '天津麻将', guobiao: '国标麻将', 'guobiao-free': '国标无定番', doudizhu: '斗地主' };
+const GAME_ICON = { tianjin: '🀄', guobiao: '🀄', 'guobiao-free': '🀄', doudizhu: '🃏' };
+// Per-game seat layout: the chair's fixed label (mahjong winds; poker seat numbers) and its CSS
+// position class. Mahjong is a 4-seat square (东南西北); 斗地主 is a 3-seat triangle (bottom + two top).
+const SEATING = {
+  mahjong: { labels: ['东', '南', '西', '北'], pos: ['east', 'south', 'west', 'north'] },
+  doudizhu: { labels: ['①', '②', '③'], pos: ['dou0', 'dou1', 'dou2'] },
+};
+// This lobby is split per game (?game=tianjin|guobiao|guobiao-free|doudizhu, default 天津): one table,
+// no tabs, its own leaderboard. The hub's online cards each deep-link a game.
 const GAME = (() => { const g = new URLSearchParams(location.search).get('game'); return GAME_PAGE[g] ? g : 'tianjin'; })();
+const seating = GAME === 'doudizhu' ? SEATING.doudizhu : SEATING.mahjong;
+const WINDS = seating.labels;  // seat index → fixed chair label (wind / number)
+const POS = seating.pos;       // seat index → chair CSS position class
+// One full game (a leaderboard entry) is a "锅" only in 天津麻将 (where the term originates); 国标 +
+// 斗地主 call it "场". Used for the leaderboard column + the empty-board prompt.
+const MATCH_WORD = GAME === 'tianjin' ? '锅' : '场';
 let activeTable = 0; // index of GAME's table within the lobby frame's tables list
 
 let ws = null;
@@ -260,11 +271,11 @@ function render() {
   const lb = document.createElement('aside'); lb.id = 'leaderboard';
   const rows = state.leaderboard || [];
   lb.innerHTML = `<h2>🏆 排行榜</h2>` + (rows.length
-    ? `<table class="lb-table"><thead><tr><th>#</th><th>玩家</th><th>总分</th><th>锅</th></tr></thead><tbody>` +
+    ? `<table class="lb-table"><thead><tr><th>#</th><th>玩家</th><th>总分</th><th>${MATCH_WORD}</th></tr></thead><tbody>` +
       rows.map((r, i) => `<tr class="${r.mine ? 'me' : ''}"><td class="lb-rank">${i + 1}</td><td class="lb-name">${esc(r.name)}</td>` +
-        `<td class="lb-pts ${r.total > 0 ? 'pos' : r.total < 0 ? 'neg' : 'zero'}">${r.total > 0 ? '+' : ''}${r.total}</td><td class="lb-pots">${r.pots}</td></tr>`).join('') +
+        `<td class="lb-pts ${r.total > 0 ? 'pos' : r.total < 0 ? 'neg' : 'zero'}">${r.total > 0 ? '+' : ''}${r.total}</td><td class="lb-pots">${r.matches}</td></tr>`).join('') +
       `</tbody></table>`
-    : `<p class="lb-empty">还没有人打完一锅 — 打完一锅即可上榜！</p>`);
+    : `<p class="lb-empty">还没有人打完一${MATCH_WORD} — 打完一${MATCH_WORD}即可上榜！</p>`);
   root.appendChild(lb);
 }
 
@@ -286,7 +297,10 @@ function watchSeat(seat) {
   location.replace(pageFor(state.tables[activeTable].game) + '?' + params.toString());
 }
 function showStart(m) {
-  $('start-text').textContent = `你坐在「${m.wind}」位，正在进入${GAME_LABEL[m.game] || ''}…`;
+  // mahjong announces the seat's wind; 斗地主 has no wind, so just the entry line
+  $('start-text').textContent = (m.game === 'doudizhu')
+    ? `正在进入${GAME_LABEL[m.game] || ''}…`
+    : `你坐在「${m.wind}」位，正在进入${GAME_LABEL[m.game] || ''}…`;
   $('start-overlay').classList.remove('hidden');
   goToGame();
 }
@@ -296,7 +310,7 @@ $('start-back').addEventListener('click', () => { $('start-overlay').classList.a
 {
   const label = GAME_LABEL[GAME] || '麻将';
   const h1 = document.querySelector('header h1');
-  if (h1) h1.innerHTML = `🀄 ${label}联机 <span class="wifi">📶</span>`;
+  if (h1) h1.innerHTML = `${GAME_ICON[GAME] || '🀄'} ${label}联机 <span class="wifi">📶</span>`;
   document.title = `${label}联机版 · 大厅`;
 }
 

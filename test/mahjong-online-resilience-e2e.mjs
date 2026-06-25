@@ -25,7 +25,7 @@ try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1024, height: 720 });
   await page.evaluateOnNewDocument(() => { localStorage.setItem('mahjong-online-name', '阿弹'); localStorage.setItem('mahjong-online-uid', 'resil-uid'); });
-  await page.goto(`http://localhost:${SITE}/games/mahjong-tianjin-online/?server=ws://localhost:${PORT}&fast=1`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${SITE}/games/mahjong-common-online/?server=ws://localhost:${PORT}&fast=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.getElementById('conn')?.className.includes('on'), { timeout: 6000 });
   await page.waitForSelector('.chair[data-table="0"][data-seat="0"]');
   await sit(page, 0, 0);
@@ -44,7 +44,7 @@ try {
   // the game page shows the reconnect banner, then returns to the lobby (the 8s fallback)
   await page.waitForFunction(() => !document.getElementById('reconnect-overlay').classList.contains('hidden'), { timeout: 5000 });
   console.log('reconnect banner shown on the game page');
-  await page.waitForFunction(() => location.pathname.includes('/mahjong-tianjin-online/'), { timeout: 12000 });
+  await page.waitForFunction(() => location.pathname.includes('/mahjong-common-online/'), { timeout: 12000 });
   console.log('bounced back to the lobby');
 
   // the lobby shows the maintenance status while the server is down

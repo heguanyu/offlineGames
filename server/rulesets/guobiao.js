@@ -1,7 +1,7 @@
 // 国标麻将 (MCR) ruleset — the game-specific half of an online Table, mirroring
 // server/rulesets/tianjin.js. Differences from 天津: a priority claim QUEUE (胡 > 碰/杠 > 吃)
 // with 吃 (chow) and wins off a discard (点炮); no 拉庄 (no pre-hand decision); no 混儿. The
-// generic Table drives the same deal / 下一局 / 锅-圈 loop around these hooks.
+// generic Table drives the same deal / 下一局 / 场-圈 loop around these hooks.
 import { Game, PHASE, MIN_FAN } from '../../games/guobiao/engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong } from '../../games/guobiao/ai.js';
 

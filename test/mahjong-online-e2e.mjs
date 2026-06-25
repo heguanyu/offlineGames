@@ -25,7 +25,7 @@ const site = await startServer(SITE_PORT);
 // backgrounded page, and mirrors real multi-device play).
 const browserA = await launchBrowser();
 const browserB = await launchBrowser();
-const url = `http://localhost:${SITE_PORT}/games/mahjong-tianjin-online/?server=ws://localhost:${LOBBY_PORT}`;
+const url = `http://localhost:${SITE_PORT}/games/mahjong-common-online/?server=ws://localhost:${LOBBY_PORT}`;
 const vis = (p, id) => p.evaluate((i) => { const e = document.getElementById(i); return e && !e.classList.contains('hidden'); }, id);
 const seatText = (p, t, s) => p.$eval(`.chair[data-table="${t}"][data-seat="${s}"] .who`, (e) => e.textContent);
 // Seat interactions: clicking an empty chair sits directly; a 🤖 button on the chair adds a bot,
@@ -92,7 +92,7 @@ try {
   await A.evaluate(() => [...document.querySelectorAll('.btn.ready')].find((b) => b.textContent.includes('准备')).click());
   await A.waitForFunction(() => document.querySelector('.chair[data-table="0"][data-seat="0"] .ready.yes'), { timeout: 4000 });
   await new Promise((r) => setTimeout(r, 250));
-  if (!(await A.evaluate(() => location.pathname)).includes('mahjong-tianjin-online')) throw new Error('game started before the table was full');
+  if (!(await A.evaluate(() => location.pathname)).includes('mahjong-common-online')) throw new Error('game started before the table was full');
   console.log('A readied (table not full → no start)');
 
   // Then fill with bots. The table completes on the LAST bot, which must re-trigger the

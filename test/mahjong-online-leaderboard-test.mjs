@@ -1,6 +1,6 @@
 // The reported bug: score history didn't survive a server restart. Play a FULL 锅 so the player's
 // lifetime total + 锅 count land on the leaderboard, KILL the server, restart on the same DB file,
-// reconnect, and confirm the leaderboard still shows the same total/pots (now backed by SQLite).
+// reconnect, and confirm the leaderboard still shows the same total/matches (now backed by SQLite).
 // Usage: node test/mahjong-online-leaderboard-test.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -21,7 +21,7 @@ function startServer() {
 }
 const firstDiscardable = (v) => v.hands[0].find((t) => t >= 0 && !(v.wilds || []).includes(t));
 
-let srv, ws, setup = false, phase = 1, potDone = false, expected = null;
+let srv, ws, setup = false, phase = 1, matchDone = false, expected = null;
 const done = (c, m) => { console.log(m); try { ws && ws.terminate(); } catch {} try { srv && srv.kill(); } catch {} cleanDb(); process.exit(c); };
 const fail = (m) => done(1, 'LEADERBOARD TEST FAIL: ' + m);
 const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
@@ -31,15 +31,15 @@ function onMsg(m) {
   if (m.type === 'lobby') {
     if (phase === 1 && !setup && m.you && !m.you.seat) { send({ type: 'sit', table: 0, seat: 0 }); for (const s of [1, 2, 3]) send({ type: 'addBot', table: 0, seat: s }); send({ type: 'ready', ready: true }); setup = true; return; }
     const me = (m.leaderboard || []).find((r) => r.mine);
-    if (phase === 1 && potDone) { // 锅 finished → capture the leaderboard, then restart the server
-      if (!me || me.pots !== 1) return fail('leaderboard not recorded after the 锅: ' + JSON.stringify(me));
-      expected = { total: me.total, pots: me.pots };
-      console.log(`  锅 finished; leaderboard = total ${me.total}, pots ${me.pots} — restarting server…`);
+    if (phase === 1 && matchDone) { // 锅 finished → capture the leaderboard, then restart the server
+      if (!me || me.matches !== 1) return fail('leaderboard not recorded after the 锅: ' + JSON.stringify(me));
+      expected = { total: me.total, matches: me.matches };
+      console.log(`  锅 finished; leaderboard = total ${me.total}, matches ${me.matches} — restarting server…`);
       return restart();
     }
     if (phase === 2 && me) { // after restart: the leaderboard must be unchanged (NOT reset)
-      if (me.total !== expected.total || me.pots !== expected.pots) return fail(`leaderboard reset! after restart total=${me.total} pots=${me.pots}, expected total=${expected.total} pots=${expected.pots}`);
-      return done(0, `score history SURVIVED the restart — total ${me.total}, pots ${me.pots}\nMAHJONG ONLINE LEADERBOARD TEST PASS`);
+      if (me.total !== expected.total || me.matches !== expected.matches) return fail(`leaderboard reset! after restart total=${me.total} matches=${me.matches}, expected total=${expected.total} matches=${expected.matches}`);
+      return done(0, `score history SURVIVED the restart — total ${me.total}, matches ${me.matches}\nMAHJONG ONLINE LEADERBOARD TEST PASS`);
     }
     return;
   }
@@ -48,7 +48,7 @@ function onMsg(m) {
   if (ev.t === 'deal') { act({ do: 'dealDone' }); return; }
   if (ev.t === 'lazhuang') { act({ do: 'lazhuang', yes: false }); return; }
   if (ev.t === 'handEnd') { act({ do: 'next' }); return; }
-  if (ev.t === 'potOver') { potDone = true; return; } // wait for the lobby frame that records the score
+  if (ev.t === 'matchOver') { matchDone = true; return; } // wait for the lobby frame that records the score
   if (ev.t === 'await' && ev.seat === 0) {
     if (view.canWin) { act({ do: 'win' }); return; }
     if (view.phase === 'await-claim' && view.claim && view.claim.player === 0) { act({ do: 'pass' }); return; }

@@ -372,11 +372,11 @@ class GuobiaoGame extends MahjongGame {
 
       case 'over':
         this.render(); // flush the 自摸 / 点炮 / 荒牌 toast + win/lose sound from the log
-        this.onlineEndsPot = ONLINE && !!ev.potEnd; // set BEFORE showResult so it picks the right button label
+        this.onlineEndsMatch = ONLINE && !!ev.matchEnd; // set BEFORE showResult so it picks the right button label
         this.showResult();
         if (ev.readied) { // resync after a refresh: reflect a choice we'd already made
           const b = $('next-hand-btn');
-          if (this.onlineEndsPot) { b.disabled = true; b.textContent = '结算中…'; }
+          if (this.onlineEndsMatch) { b.disabled = true; b.textContent = '结算中…'; }
           else { this.onlineReadied = true; b.textContent = '✓ 已准备 · 取消'; b.classList.add('readied'); }
         }
         return;
@@ -386,7 +386,7 @@ class GuobiaoGame extends MahjongGame {
         this.lastLogLen = this.game.log ? this.game.log.length : 0; // online views carry no log; suppress toasts
         this.ensureSelection(); this.render();
         return;
-      case 'potOver': // server finished the 锅 → final standings
+      case 'matchOver': // server finished the 场 → final standings
         $('result-overlay').classList.add('hidden');
         this.showFinalBoard({ scores: ev.scores, rounds: ev.rounds });
         return;
@@ -531,16 +531,16 @@ class GuobiaoGame extends MahjongGame {
     renderSeatHands(this.game); // reveal every seat's hand on its border
     sound.stopMusic(); // 听 (if any) is over
     if (!ONLINE) this.saveSession();
-    // Online: 下一局 becomes a readiness toggle (我准备好了); the final hand of a 锅 ENDS it.
+    // Online: 下一局 becomes a readiness toggle (我准备好了); the final hand of a 场 ENDS it.
     const nb = $('next-hand-btn'); nb.disabled = false; nb.classList.remove('readied'); this.onlineReadied = false;
-    nb.textContent = this.onlineEndsPot ? '结束并查看总成绩 🏆' : (ONLINE ? '我准备好了' : '下一局');
+    nb.textContent = this.onlineEndsMatch ? '结束并查看总成绩 🏆' : (ONLINE ? '我准备好了' : '下一局');
     ov.classList.remove('hidden');
     this.resultFocus = 0; this.focusResultBtn(); // 下一局 focused by default
   }
   nextHand() {
     if (VIEWER) return; // a spectator can't ready up — the next hand deals when the real players are ready
     if (ONLINE) {
-      if (this.onlineEndsPot) { this.backend.next(); const b = $('next-hand-btn'); b.disabled = true; b.textContent = '结算中…'; return; }
+      if (this.onlineEndsMatch) { this.backend.next(); const b = $('next-hand-btn'); b.disabled = true; b.textContent = '结算中…'; return; }
       this.onlineReadied = !this.onlineReadied; // toggle readiness; the server deals once EVERY human is ready
       const b = $('next-hand-btn');
       if (this.onlineReadied) { this.backend.next(); b.textContent = '✓ 已准备 · 取消'; b.classList.add('readied'); }
@@ -555,7 +555,7 @@ class GuobiaoGame extends MahjongGame {
     this.startHand();
   }
   // Online: connect to the server's table (or spectate a seat). The server is the ground truth — it
-  // deals, drives opponents, and PUSHES frames into onBackendEvent; no local session/锅 bookkeeping.
+  // deals, drives opponents, and PUSHES frames into onBackendEvent; no local session/场 bookkeeping.
   connectOnline() {
     if (!this.scene) { this.scene = new Renderer($('scene')); this.scene.setRotated(this.isPortrait); this.scene.resize(); this.scene.onHandDrawSettled = () => this.selectDrawnTile(); }
     this.backend = createBackend({ mode: 'remote', url: ONLINE_URL, uid: localStorage.getItem('mahjong-online-uid') || '', name: localStorage.getItem('mahjong-online-name') || '',
@@ -564,7 +564,7 @@ class GuobiaoGame extends MahjongGame {
     this.backend.connect();
   }
 
-  // 一锅结束 · 最终成绩 (online only — the server owns the 锅). data: { scores, rounds }.
+  // 一场结束 · 最终成绩 (online only — the server owns the 场). data: { scores, rounds }.
   showFinalBoard(data) {
     const scores = data.scores.slice();
     const order = [0, 1, 2, 3].sort((a, b) => scores[b] - scores[a]);
@@ -578,17 +578,17 @@ class GuobiaoGame extends MahjongGame {
         `<span class="pts ${v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero'}">${v > 0 ? '+' : ''}${v}</span></div>`;
     }).join('');
     const tiedTop = scores.filter((s) => s === top).length > 1;
-    $('final-congrats').textContent = scores[HUMAN] === top ? (tiedTop ? '🎉 恭喜并列第一！' : '🎉 恭喜你赢得这一锅！') : '本锅惜败，下一锅再战！';
+    $('final-congrats').textContent = scores[HUMAN] === top ? (tiedTop ? '🎉 恭喜并列第一！' : '🎉 恭喜你赢得这一场！') : '本场惜败，下一场再战！';
     $('final-rounds').innerHTML = this.roundsTableHtml(data.rounds || []);
     $('final-overlay').classList.remove('hidden');
   }
-  // 每圈成绩 table from the 锅's completed-圈 snapshots (cumulative scores per 圈).
+  // 每圈成绩 table from the 场's completed-圈 snapshots (cumulative scores per 圈).
   roundsTableHtml(rounds) {
     const seats = [0, 1, 2, 3];
     const cell = (v) => `<td class="${v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero'}">${v > 0 ? '+' : ''}${v}</td>`;
     let prev = [0, 0, 0, 0], body = '';
     for (const r of rounds) { body += `<tr><td class="rd-wind">${WIND[r.wind]}圈</td>${seats.map((p) => cell(r.scores[p] - prev[p])).join('')}</tr>`; prev = r.scores; }
-    if (!body) body = `<tr><td class="rd-empty" colspan="5">本锅还没有完成的圈</td></tr>`;
+    if (!body) body = `<tr><td class="rd-empty" colspan="5">本场还没有完成的圈</td></tr>`;
     const total = rounds.length ? rounds[rounds.length - 1].scores : [0, 0, 0, 0];
     const head = `<tr><th></th>${seats.map((p) => `<th class="${p === HUMAN ? 'me' : ''}">${SEAT_LABEL[p]}</th>`).join('')}</tr>`;
     const foot = `<tr><td class="rd-wind">合计</td>${seats.map((p) => cell(total[p])).join('')}</tr>`;

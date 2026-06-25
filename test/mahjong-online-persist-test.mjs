@@ -22,7 +22,7 @@ function startServer() {
 }
 const firstDiscardable = (v) => v.hands[0].find((t) => t >= 0 && !(v.wilds || []).includes(t));
 
-let srv, ws, phase = 1, setup = false, deals = 0, armed = false, savedPot = null, savedHand = null;
+let srv, ws, phase = 1, setup = false, deals = 0, armed = false, savedMatch = null, savedHand = null;
 const done = (c, m) => { console.log(m); try { ws && ws.terminate(); } catch {} try { srv && srv.kill(); } catch {} cleanDb(); process.exit(c); };
 const fail = (m) => done(1, 'PERSIST TEST FAIL: ' + m);
 const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
@@ -45,7 +45,7 @@ function onMsg(m) {
   if (ev.t === 'deal') {
     deals++;
     act({ do: 'dealDone' }); // ack the deal (as a real client does) so the server drives the bots without the 8s fallback
-    if (deals >= 4) { armed = true; savedPot = { scores: view.scores.slice(), prevailingWind: view.prevailingWind, dealer: view.dealer }; } // hands 1-3 committed; arm the kill
+    if (deals >= 4) { armed = true; savedMatch = { scores: view.scores.slice(), prevailingWind: view.prevailingWind, dealer: view.dealer }; } // hands 1-3 committed; arm the kill
     return;
   }
   if (ev.t === 'await' && ev.seat === 0) {
@@ -55,15 +55,15 @@ function onMsg(m) {
     return onTurn(view);
   }
   if (ev.t === 'handEnd') { act({ do: 'next' }); return; }
-  if (ev.t === 'potOver') { if (phase === 1) fail('锅 finished before the restart (unlucky) — re-run'); return; }
+  if (ev.t === 'matchOver') { if (phase === 1) fail('锅 finished before the restart (unlucky) — re-run'); return; }
 }
 
 async function restart() {
-  if (!savedPot || !Array.isArray(savedPot.scores)) return fail('no standings captured before restart');
+  if (!savedMatch || !Array.isArray(savedMatch.scores)) return fail('no standings captured before restart');
   try { ws.close(); } catch {}
   srv.kill('SIGTERM');                         // graceful → the server flushes the committed snapshot to the DB
   await new Promise((r) => srv.on('exit', r));
-  console.log(`  killed mid-锅; standings before restart: scores=${JSON.stringify(savedPot.scores)} 圈=${savedPot.prevailingWind} 庄=${savedPot.dealer}`);
+  console.log(`  killed mid-锅; standings before restart: scores=${JSON.stringify(savedMatch.scores)} 圈=${savedMatch.prevailingWind} 庄=${savedMatch.dealer}`);
   phase = 2; setup = false; deals = 0;
   srv = await startServer();
   openClient();
@@ -71,9 +71,9 @@ async function restart() {
 
 function checkResume(v) {
   const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  if (!eq(v.scores, savedPot.scores)) return fail(`resumed scores ${JSON.stringify(v.scores)} ≠ saved ${JSON.stringify(savedPot.scores)} (the 锅 reset!)`);
-  if (v.prevailingWind !== savedPot.prevailingWind) return fail(`resumed 圈 ${v.prevailingWind} ≠ saved ${savedPot.prevailingWind}`);
-  if (v.dealer !== savedPot.dealer) return fail(`resumed 庄 ${v.dealer} ≠ saved ${savedPot.dealer}`);
+  if (!eq(v.scores, savedMatch.scores)) return fail(`resumed scores ${JSON.stringify(v.scores)} ≠ saved ${JSON.stringify(savedMatch.scores)} (the 锅 reset!)`);
+  if (v.prevailingWind !== savedMatch.prevailingWind) return fail(`resumed 圈 ${v.prevailingWind} ≠ saved ${savedMatch.prevailingWind}`);
+  if (v.dealer !== savedMatch.dealer) return fail(`resumed 庄 ${v.dealer} ≠ saved ${savedMatch.dealer}`);
   const k = v.seatKinds || [];
   if (!(k[0] === 'human' && k[1] === 'bot' && k[3] === 'bot')) return fail('seats not restored: ' + JSON.stringify(k));
   // the IN-PROGRESS hand itself must come back (Option B) — not a fresh re-deal of hand 4.

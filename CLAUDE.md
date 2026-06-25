@@ -1,6 +1,6 @@
 # offlineGames — repo notes for Claude
 
-PWA hub of offline games for airplane-mode iPad play, plus an online 麻将 mode. The same
+PWA hub of offline games for airplane-mode iPad play, plus online multiplayer (麻将 + 斗地主). The same
 Node process (`server/index.js`) serves BOTH the static site AND the WebSocket lobby/game
 backend; GitHub Pages (`deploy.yml`) is a static-only mirror. Pages is built in **"GitHub
 Actions" mode** (not legacy branch-serving), so `deploy.yml` — including its `tools/pack-voice.js`
@@ -10,12 +10,27 @@ step — is what actually gets published; serving the raw branch would 404 on CI
 The WebSocket backend host is defined in ONE place: `games/mahjong-common-online/server-url.js`
 (`ONLINE_SERVER` + `serverUrl()`). Every online client imports `serverUrl()` from it — the lobby
 (`mahjong-common-online/lobby.js`) and each game page (`mahjong-tianjin/main.js`,
-`guobiao/main.js`). **Do NOT hardcode the backend host (`wss://…azurewebsites.net`) anywhere else.**
+`guobiao/main.js`, `doudizhu/main.js`). **Do NOT hardcode the backend host (`wss://…azurewebsites.net`) anywhere else.**
 To move the backend to a new host/region, change only that constant. The server's matching CORS
 allowlist is `ALLOWED` in `server/index.js` (env `ALLOWED_ORIGINS`) — update it there in tandem.
 
 Current backend: `offlinegames.azurewebsites.net` (Azure App Service, West Central US). Deploy
 workflow: `.github/workflows/main_offlinegames.yml`.
+
+## Online is multi-game — seat count + table driver are per-game
+`server/index.js` hosts one table per game in the `GAMES` registry; each entry declares `kind`,
+`seats`, `label`, `page` (mahjong: `ruleset`). The lobby/reconnect/score plumbing is seat-count
+agnostic (no hard-coded 4). Two table drivers share the `{ type:'game', ev, view }` protocol:
+- **mahjong** (`kind:'mahjong'`, 4 seats) → `server/table.js` + a `server/rulesets/*.js`.
+- **斗地主** (`kind:'poker'`, 3 seats) → `server/poker-table.js`, which runs `games/doudizhu/`'s
+  engine + AI **directly** (no DOM). A 锅 ends the hand AFTER any player first reaches `DOU_POT_TARGET`
+  (default 100) points.
+
+The server pushes ABSOLUTE-seat redacted views; the client rotates so the receiving human is seat 0.
+For 斗地主 that lives in `games/doudizhu/backend.js` `RemoteBackend` (`buildView`/`mapEvent`) — its
+`buildView` rebuilds a Game-like view exposing `validatePlay`/`roleOf` so `main.js` + the local
+auto-select AI render online identically to offline. Same lobby page (`mahjong-common-online`,
+`?game=doudizhu`); the 3-seat triangle layout is selected by `SEATING` in `lobby.js`.
 
 ## Navigation — ALWAYS `location.replace`, never push a history entry
 The hub, lobby, and each game/tool are separate pages. On iPad/iOS the edge-swipe just walks

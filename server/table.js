@@ -21,16 +21,16 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 export class Table {
   // seats: [4] of { kind:'human', uid, name } | { kind:'bot' }
   // emit(seat, msg): deliver to that seat's live human socket (no-op if bot/offline)
-  // onPotOver(): the 锅 finished — caller returns the table to the lobby
+  // onMatchOver(): the 锅 finished — caller returns the table to the lobby
   // resume: a snapshot() from a previous run — continue the 锅 from those standings (drop the hand).
   // onState(): called after each hand so the caller can persist the 锅 progress.
   // ruleset: the per-game adapter (defaults to 天津).
-  constructor(id, seats, emit, onPotOver, level = 2, resume = null, onState = null, ruleset = tianjin) {
+  constructor(id, seats, emit, onMatchOver, level = 2, resume = null, onState = null, ruleset = tianjin) {
     this.id = id;
     this.r = ruleset;
     this.seats = seats;
     this.emit = emit;
-    this.onPotOver = onPotOver;
+    this.onMatchOver = onMatchOver;
     this.level = level;
     this.onState = onState;
     this.scores = resume ? (resume.scores || [0, 0, 0, 0]).slice() : [0, 0, 0, 0];
@@ -61,9 +61,9 @@ export class Table {
   humans() { const a = []; for (let s = 0; s < 4; s++) if (this.isHuman(s)) a.push(s); return a; }
 
   // Does the just-ended hand close the 锅? The 庄 button laps back to the 锅's first 庄 (seat 0) at
-  // the end of the 北圈 (prevailingWind 3) — same rule _advanceMatch uses to fire 'potOver'. Lets the
+  // the end of the 北圈 (prevailingWind 3) — same rule _advanceMatch uses to fire 'matchOver'. Lets the
   // result modal show "结束并查看总成绩" (no ready-toggle) on the final hand.
-  _potEnd() { const g = this.game; return !!(g && g.phase === this.r.PHASE.OVER && g.nextDealer() === 0 && this.dealer !== 0 && this.prevailingWind === 3); }
+  _matchEnd() { const g = this.game; return !!(g && g.phase === this.r.PHASE.OVER && g.nextDealer() === 0 && this.dealer !== 0 && this.prevailingWind === 3); }
 
   // What to persist so a restart resumes the 锅: the last COMMITTED between-hands standings PLUS,
   // when a hand is actually in play, the serialized live hand (so the restart resumes mid-hand, not
@@ -98,7 +98,7 @@ export class Table {
     if (this._lz && this.isHuman(seat)) ev = { t: 'lazhuang', dealer: this.dealer, need: [...this._lz.need], answers: { ...this._lz.answers } }; // re-show the 拉庄 decision / 庄 tally
     else if (this._dealAck && this._dealAck.need.has(seat)) ev = { t: 'deal' }; // re-run the deal animation; its 'dealDone' releases the bots
     else if (this._waiting && this._waiting.seat === seat) ev = { t: 'await', who: this._waiting.kind, seat, timeout: Math.max(1000, this._waiting.deadline - Date.now()), total: TURN_TIMEOUT_MS };
-    else if (this._next) ev = { t: 'over', readied: !this._next.need.has(seat), potEnd: this._potEnd() }; // re-show the result on refresh — even for a player who already readied (then it's a 'waiting' state)
+    else if (this._next) ev = { t: 'over', readied: !this._next.need.has(seat), matchEnd: this._matchEnd() }; // re-show the result on refresh — even for a player who already readied (then it's a 'waiting' state)
     return { type: 'game', ev, view: this.viewFor(seat) };
   }
 
@@ -158,15 +158,15 @@ export class Table {
         if (gen !== this._gen) return;
       } else {
         // resumed an already-finished hand → re-show the result, then wait for 下一局 as usual
-        this.pushEvent({ t: 'over', result: this.r.safeResult(this.game.result), winningTile: this.game.drawnTile, potEnd: this._potEnd() });
+        this.pushEvent({ t: 'over', result: this.r.safeResult(this.game.result), winningTile: this.game.drawnTile, matchEnd: this._matchEnd() });
       }
       this.scores = this.game.scores.slice();
       await this._awaitNext(gen);            // wait for 下一局 from every human (or time out)
       if (gen !== this._gen) return;
 
-      const potOver = this._advanceMatch();  // 锅/圈 flow: rotate 庄/圈, snapshot the 锅 standings
+      const matchOver = this._advanceMatch();  // 锅/圈 flow: rotate 庄/圈, snapshot the 锅 standings
       if (gen !== this._gen) return;
-      if (potOver) { this.pushEvent({ t: 'potOver', rounds: this.rounds, scores: this.scores }); this.onPotOver(this.scores.slice()); return; }
+      if (matchOver) { this.pushEvent({ t: 'matchOver', rounds: this.rounds, scores: this.scores }); this.onMatchOver(this.scores.slice()); return; }
       if (this.onState) this.onState(); // persist the 锅 standings between hands (a restart resumes here)
     }
   }
@@ -190,7 +190,7 @@ export class Table {
     for (;;) {
       if (gen !== this._gen) return;
       this._save(); // persist this decision point so a restart resumes exactly here (incl. the OVER showdown)
-      if (g.phase === r.PHASE.OVER) { this.pushEvent({ t: 'over', result: r.safeResult(g.result), winningTile: g.drawnTile, potEnd: this._potEnd() }); return; }
+      if (g.phase === r.PHASE.OVER) { this.pushEvent({ t: 'over', result: r.safeResult(g.result), winningTile: g.drawnTile, matchEnd: this._matchEnd() }); return; }
 
       if (g.phase === r.PHASE.AWAIT_CLAIM) {
         const p = r.claimSeat(g);

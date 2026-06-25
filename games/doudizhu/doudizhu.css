@@ -168,7 +168,20 @@ body.flat #scores .sb-row { gap: 6px; }
   position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
   background: rgba(4,14,10,0.74); padding: 20px;
 }
-.overlay[hidden] { display: none; }
+.overlay[hidden], .overlay.hidden { display: none; }
+
+/* online: turn-countdown ring over whoever is on the clock */
+.turn-timer {
+  position: absolute; z-index: 8; width: 46px; height: 46px; pointer-events: none;
+  display: grid; place-items: center;
+}
+.turn-timer.hidden { display: none; }
+.turn-timer svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.turn-timer .tt-bg { fill: rgba(4,14,10,0.6); stroke: rgba(255,255,255,0.18); stroke-width: 3; }
+.turn-timer .tt-arc { fill: none; stroke: #5fe0a0; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .1s linear; }
+.turn-timer.low .tt-arc { stroke: #ff6b6b; }
+.turn-timer .tt-secs { position: relative; font-size: 0.95rem; font-weight: 700; color: #eafff4; }
+.turn-timer.low .tt-secs { color: #ff8c8c; }
 .panel {
   background: linear-gradient(#114030, #0c3122); border: 1px solid #2c8160; border-radius: 18px;
   padding: 26px; max-width: 460px; width: 100%; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.6);
