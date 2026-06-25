@@ -59,13 +59,22 @@ try {
     await page.evaluate((seat) => document.querySelector(`.chair[data-seat="${seat}"] .seat-bot`).click(), s);
     await page.waitForFunction((seat) => !!document.querySelector(`.chair[data-seat="${seat}"].bot`), { timeout: 8000 }, s);
   }
+  // bot seats must use the 斗地主 NPC names (阿牛/阿强/阿美), not the mahjong chair names
+  const botNames = await page.evaluate(() => [1, 2].map((s) => (document.querySelector(`.chair[data-seat="${s}"]`) || {}).textContent || ''));
+  const DOU = ['阿牛', '阿强', '阿美'];
+  if (!botNames.every((txt) => DOU.some((n) => txt.includes(n)))) fail('lobby bot seats not named 阿牛/阿强/阿美: ' + JSON.stringify(botNames));
+  console.log('  bot seats named:', botNames.map((t) => DOU.find((n) => t.includes(n))).join(', '));
+
   await page.waitForSelector('.table-ready', { timeout: 8000 });
   await page.evaluate(() => document.querySelector('.table-ready').click());
 
   // ---- the lobby navigates into the game page (?online=1) ----
   await page.waitForFunction(() => /\/games\/doudizhu\//.test(location.pathname), { timeout: 12000 });
   await page.waitForFunction(() => !!window.__dou, { timeout: 12000 });
-  console.log('  entered the online 斗地主 game page');
+  // the difficulty start screen must NEVER show in online mode (it's gated off before first paint)
+  const diffShown = await page.evaluate(() => { const e = document.getElementById('start-overlay'); return !!e && getComputedStyle(e).display !== 'none'; });
+  if (diffShown) fail('difficulty start overlay is visible in online mode');
+  console.log('  entered the online 斗地主 game page (no difficulty popup)');
 
   // ---- drive the human until the hand resolves ----
   const deadline = Date.now() + 45000;

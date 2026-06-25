@@ -33,12 +33,16 @@ import { startWeather, getWeatherJson } from './weather.js';
 //   kind 'mahjong' → 4 seats, server/table.js + a ruleset (server/rulesets/*.js)
 //   kind 'poker'   → 3 seats, server/poker-table.js (runs games/doudizhu's engine + AI directly)
 // TABLE_GAMES overrides the lineup; GAME_TYPE keeps the legacy single-type form (used by tests).
+// `bots` names a game's NPC seats (by seat index). Mahjong uses the 东南西北 chair names; 斗地主 has
+// its own trio (阿牛 / 阿强 / 阿美).
+const DOU_BOT_NAMES = ['阿牛', '阿强', '阿美'];
 const GAMES = {
-  tianjin: { kind: 'mahjong', seats: 4, ruleset: tianjin, label: '天津麻将', page: 'mahjong-tianjin' },
-  guobiao: { kind: 'mahjong', seats: 4, ruleset: guobiao, label: '国标麻将', page: 'guobiao' },
-  'guobiao-free': { kind: 'mahjong', seats: 4, ruleset: guobiaoFree, label: '国标无定番', page: 'guobiao-free' },
-  doudizhu: { kind: 'poker', seats: 3, label: '斗地主', page: 'doudizhu' },
+  tianjin: { kind: 'mahjong', seats: 4, ruleset: tianjin, label: '天津麻将', page: 'mahjong-tianjin', bots: BOT_NAMES },
+  guobiao: { kind: 'mahjong', seats: 4, ruleset: guobiao, label: '国标麻将', page: 'guobiao', bots: BOT_NAMES },
+  'guobiao-free': { kind: 'mahjong', seats: 4, ruleset: guobiaoFree, label: '国标无定番', page: 'guobiao-free', bots: BOT_NAMES },
+  doudizhu: { kind: 'poker', seats: 3, label: '斗地主', page: 'doudizhu', bots: DOU_BOT_NAMES },
 };
+const botNamesFor = (gameType) => (GAMES[gameType] || GAMES.tianjin).bots;
 const TABLE_GAMES = (process.env.TABLE_GAMES ? process.env.TABLE_GAMES.split(',')
   : process.env.GAME_TYPE ? [process.env.GAME_TYPE]
   : ['tianjin', 'guobiao', 'guobiao-free', 'doudizhu']).map((g) => g.trim()).filter((g) => GAMES[g]);
@@ -162,7 +166,7 @@ function lobbyFor(uid, game) {
     tables: tables.map((t) => ({
       id: t.id, status: t.status, game: t.gameType, gameLabel: GAME_LABEL[t.gameType] || t.gameType,
       seats: t.seats.map((seat, i) => !seat ? null
-        : seat.kind === 'bot' ? { kind: 'bot', name: BOT_NAMES[i] } // bots are named by seat (东方雨…)
+        : seat.kind === 'bot' ? { kind: 'bot', name: botNamesFor(t.gameType)[i] } // bots are named by seat (麻将 东方雨… / 斗地主 阿牛…)
         // readyIn lets every client show a not-ready player's own countdown (未准备(mm:ss)) — no uid leaks
         : { kind: 'human', name: seat.name, ready: !!seat.ready,
             readyIn: (!seat.ready && seat.readyBy) ? Math.max(0, seat.readyBy - Date.now()) : null }),
@@ -176,7 +180,7 @@ const broadcastLobby = () => { for (const c of clients.values()) send(c.ws, lobb
 // open the game page, then routes that seat's frames to the player's current socket.
 function startGame(t) {
   t.status = 'playing';
-  const gameSeats = t.seats.map((s, i) => s.kind === 'bot' ? { kind: 'bot', name: BOT_NAMES[i] } : { kind: 'human', uid: s.uid, name: s.name });
+  const gameSeats = t.seats.map((s, i) => s.kind === 'bot' ? { kind: 'bot', name: botNamesFor(t.gameType)[i] } : { kind: 'human', uid: s.uid, name: s.name });
   for (let s = 0; s < gameSeats.length; s++) if (gameSeats[s].kind === 'human') send(uidWs.get(gameSeats[s].uid), { type: 'gameStart', table: t.id, seat: s, wind: WIND[s], game: t.gameType, page: GAME_PAGE[t.gameType] });
   broadcastLobby();
   // route each seat's frames to that player's current socket (reconnection-safe), AND fan them out
