@@ -22,7 +22,7 @@
 // (never rejects); inject loader.js after it so the emulator sees them.
 // The page's database must already define 'states' and 'settings' object
 // stores (both keyPath 'key').
-function setupEmuPersistence({ dbName, gameName, system }) {
+function setupEmuPersistence({ dbName, gameName, system, variant }) {
   const SHARED_CONTROLS = '__shared-controls__';
   // The key EmulatorJS reads this game's settings from (getLocalStorageKey):
   // gameId defaults to 1; the core part is the generic system name ('gba'
@@ -57,11 +57,42 @@ function setupEmuPersistence({ dbName, gameName, system }) {
   }
 
   function putState(slot, data) {
-    return putRows('states', [{ key: gameName + '|' + slot, slot: String(slot), game: gameName, data }]);
+    // Tag each state with the core build that produced it. RetroArch states are
+    // binary-incompatible across core variants (e.g. threaded vs single-thread
+    // melonDS, or mGBA vs VBA-M); loading a foreign state hard-freezes the WASM
+    // module. The variant lets the restore step skip mismatched states.
+    return putRows('states', [{ key: gameName + '|' + slot, slot: String(slot), game: gameName, variant, data }]);
   }
 
   async function statesForGame() {
     return (await getAllRows('states')).filter((s) => s.game === gameName);
+  }
+
+  // Battery (.sav) saves get their OWN durable copy in IndexedDB, written on
+  // every save event — the same explicit-blob path quick states use. This does
+  // NOT rely on emscripten's IDBFS autoPersist (a debounced syncfs that iOS
+  // routinely drops on a home-screen swipe / force-quit), which is why in-game
+  // saves were being lost on melonDS. The 'saves' store may not exist on older
+  // page DB versions, so both helpers degrade gracefully.
+  async function getSave() {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains('saves')) return null;
+    return new Promise((resolve) => {
+      const req = db.transaction('saves', 'readonly').objectStore('saves').get(gameName);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  }
+
+  async function putSave(data) {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains('saves')) return;
+    return new Promise((resolve) => {
+      const t = db.transaction('saves', 'readwrite');
+      t.objectStore('saves').put({ key: gameName, game: gameName, data });
+      t.oncomplete = resolve;
+      t.onerror = resolve;
+    });
   }
 
   // Re-seed localStorage from the IndexedDB mirror — the mirror is the
@@ -116,14 +147,48 @@ function setupEmuPersistence({ dbName, gameName, system }) {
       mirrorSettings(em);
     };
 
-    // Restore quick states from previous sessions into the emulator FS.
+    // Restore quick states from previous sessions into the emulator FS — but
+    // ONLY states made by the core build now running. Writing a foreign state's
+    // file would let quickLoad feed it to the core and freeze the WASM module.
+    // Legacy rows (saved before variant tagging) carry no variant and are
+    // restored as before. A skipped state's file simply doesn't exist, so a
+    // later quickLoad on that slot is a harmless no-op.
     try {
       for (const s of await statesForGame()) {
+        if (variant && s.variant != null && s.variant !== variant) continue;
         gm.FS.writeFile('/' + s.slot + '-quick.state', new Uint8Array(s.data));
       }
     } catch (e) {
       console.warn('quick state restore failed:', e);
     }
+
+    // Restore the battery save from our durable copy if the FS came up without
+    // one (IDBFS autoPersist dropped it). Cartridge saves are read when the
+    // player picks "Continue", which is after this runs, so the restored bytes
+    // are picked up this session. Seeding the FS path also re-persists it via
+    // syncfs so the next boot has it even if IDBFS stays flaky.
+    try {
+      const saved = await getSave();
+      if (saved && saved.data) {
+        const path = gm.getSaveFilePath();
+        let cur = null;
+        try { cur = gm.FS.readFile(path); } catch (e) { /* no save file yet */ }
+        if (!cur || cur.length === 0) {
+          gm.FS.writeFile(path, new Uint8Array(saved.data));
+          if (gm.FS.syncfs) gm.FS.syncfs(false, (e) => { if (e) console.warn('save syncfs failed:', e); });
+        }
+      }
+    } catch (e) {
+      console.warn('battery save restore failed:', e);
+    }
+
+    // Mirror every battery save into our durable copy. EmulatorJS fires this
+    // event from saveSaveFiles() with the .sav bytes (getSaveFile) — the 30s
+    // timer, quick-save flush, page-hide flush and exit handler all route
+    // through it, so the copy is current the moment a save is written.
+    em.on('saveSaveFiles', (file) => {
+      if (file && file.length) putSave(file.slice()).catch((e) => console.warn('save mirror failed:', e));
+    });
 
     // Force the IDBFS mount (/data/saves) to commit to IndexedDB on EVERY battery-save write.
     // EmulatorJS's saveSaveFiles() only writes the in-memory FS and leaves persistence to emscripten
@@ -151,6 +216,14 @@ function setupEmuPersistence({ dbName, gameName, system }) {
         }
       }
       return ok;
+    };
+
+    // Cheap insurance: never let a quick load throw out of the input handler.
+    // (Variant-skipping above is the real guard against foreign states; this
+    // just keeps an unexpected error from killing the controls.)
+    const origQuickLoad = gm.quickLoad.bind(gm);
+    gm.quickLoad = (slot) => {
+      try { return origQuickLoad(slot); } catch (e) { console.warn('quick load failed:', e); }
     };
 
     // Flush battery saves when the page is hidden (tab switch, going to

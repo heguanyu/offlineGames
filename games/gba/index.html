@@ -95,12 +95,13 @@
 
     function openDB() {
       return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 3);
+        const req = indexedDB.open(DB_NAME, 4);
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'name' });
           if (!db.objectStoreNames.contains('states')) db.createObjectStore('states', { keyPath: 'key' });
           if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
+          if (!db.objectStoreNames.contains('saves')) db.createObjectStore('saves', { keyPath: 'key' });
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -251,7 +252,9 @@
 
       // Restore mirrored settings into localStorage first, so the emulator
       // boots with the durable copy (and the shared controls profile).
-      setupEmuPersistence({ dbName: DB_NAME, gameName: window.EJS_gameName, system: 'gba' }).then(() => {
+      // mGBA and VBA-M states are incompatible; tag each state by its core so
+      // restore never feeds the other core a foreign state.
+      setupEmuPersistence({ dbName: DB_NAME, gameName: window.EJS_gameName, system: 'gba', variant: CORE }).then(() => {
         const script = document.createElement('script');
         script.src = '../../emulatorjs/data/loader.js';
         document.body.appendChild(script);
