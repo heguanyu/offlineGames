@@ -269,6 +269,67 @@
     }
 
     refreshList();
+
+    // iOS touch → mouse bridge for the DS lower (touch) screen.
+    //
+    // The melonDS core *does* bind real touch listeners to its <canvas>
+    // (verified in the core glue), but iOS/WebKit doesn't drive the libretro
+    // pointer through them — the lower screen is dead to touch on iPad while a
+    // desktop mouse works fine. So we re-dispatch each touch that lands on the
+    // emulator canvas as the equivalent mouse event; that goes through the
+    // mouse-pointer path the core already handles. Desktop is unaffected (no
+    // touch events), and the on-screen D-pad/buttons are separate elements, so
+    // they keep their own handlers.
+    (function setupNdsTouchBridge() {
+      let activeId = null;
+      let activeCanvas = null;
+
+      const ejsCanvas = (el) =>
+        (el && el.tagName === 'CANVAS' && el.classList.contains('ejs_canvas')) ? el : null;
+
+      const fire = (type, canvas, touch, buttons) => {
+        canvas.dispatchEvent(new MouseEvent(type, {
+          bubbles: true, cancelable: true, view: window,
+          clientX: touch.clientX, clientY: touch.clientY,
+          button: 0, buttons,
+        }));
+      };
+
+      const findActive = (list) => {
+        for (const t of list) if (t.identifier === activeId) return t;
+        return null;
+      };
+
+      document.addEventListener('touchstart', (e) => {
+        const canvas = ejsCanvas(e.target);
+        if (!canvas || activeId !== null) return;   // one pointer at a time
+        const t = e.changedTouches[0];
+        activeId = t.identifier;
+        activeCanvas = canvas;
+        e.preventDefault();                          // suppress iOS's own delayed synthetic mouse + scroll
+        fire('mousemove', canvas, t, 0);             // position the pointer before pressing
+        fire('mousedown', canvas, t, 1);
+      }, { capture: true, passive: false });
+
+      document.addEventListener('touchmove', (e) => {
+        if (activeId === null) return;
+        const t = findActive(e.changedTouches);
+        if (!t) return;
+        e.preventDefault();
+        fire('mousemove', activeCanvas, t, 1);
+      }, { capture: true, passive: false });
+
+      const end = (e) => {
+        if (activeId === null) return;
+        const t = findActive(e.changedTouches);
+        if (!t) return;
+        fire('mouseup', activeCanvas, t, 0);
+        activeId = null;
+        activeCanvas = null;
+      };
+      document.addEventListener('touchend', end, { capture: true, passive: false });
+      document.addEventListener('touchcancel', end, { capture: true, passive: false });
+    })();
   </script>
 </body>
 </html>
