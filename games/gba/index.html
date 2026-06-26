@@ -61,6 +61,10 @@
     position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 50;
     display: flex; align-items: center; justify-content: center; padding: 20px;
   }
+  /* The id-selector `display:flex` above beats the UA `[hidden]{display:none}`
+     rule (author origin wins over UA), so the menu would show at page load.
+     This id+attr rule (higher specificity) restores hide-ability. */
+  #menu-overlay[hidden] { display: none; }
   #menu-panel {
     background: #16213e; border: 1px solid #2c3a63; border-radius: 14px;
     width: 100%; max-width: 360px; padding: 16px; display: flex; flex-direction: column; gap: 8px;
