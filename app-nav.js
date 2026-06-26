@@ -26,4 +26,36 @@
     e.preventDefault();
     location.replace(url.href);                             // REPLACE → no back/forward entry to swipe to
   }, true);
+
+  // --- keep EVERY page on the latest deployed app version (see sw.js) -----------------------------
+  // The service worker serves cached pages, so a sub-page entered directly (or kept alive by the iOS
+  // PWA) would otherwise stay on an OLD version until the hub happened to trigger an update — the cause
+  // of stale sub-pages after a deploy. Since app-nav.js loads on every page, we centralize the fix here:
+  // on entry, ask the SW to check for a new version; and when a NEW worker takes control, reload to swap
+  // in the fresh page + assets. Two escape hatches keep it from interrupting anything:
+  //   • window.__appHandlesUpdate — the page owns its own update UX (the hub) → app-nav stays out.
+  //   • the page is mid-activity → defer the reload. Detected generically (an emulator ROM running, or a
+  //     mahjong/斗地主/掼蛋 hand past its start screen) or via an explicit window.appBusy() hook.
+  function pageBusy() {
+    if (typeof window.appBusy === 'function') { try { return !!window.appBusy(); } catch (e) {} }
+    var gw = document.getElementById('game-wrap');                 // emulator: a ROM is running
+    if (gw && !gw.hidden) return true;
+    var so = document.getElementById('start-overlay');             // card/tile games: hidden once a hand is in play
+    if (so) { try { if (getComputedStyle(so).display === 'none') return true; } catch (e) {} }
+    return false;
+  }
+  try {
+    if ('serviceWorker' in navigator) {
+      var hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadController) { hadController = true; return; }       // first-ever claim isn't an update (no reload loop on first visit)
+        if (window.__appHandlesUpdate || pageBusy()) return;       // hub owns updates / don't reload mid-game
+        location.reload();
+      });
+      addEventListener('DOMContentLoaded', function () {
+        if (window.__appHandlesUpdate) return;
+        try { navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}); } catch (e) {}
+      });
+    }
+  } catch (e) {}
 })();

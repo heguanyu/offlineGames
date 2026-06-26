@@ -25,7 +25,8 @@ let VER = 1; // server-side "deployed version"; bump to simulate a new deploy
 const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png',
   '.json': 'application/json', '.wav': 'audio/wav', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg',
   '.webmanifest': 'application/manifest+json', '.wasm': 'application/wasm', '.data': 'application/octet-stream' };
-const TRIMMED_ASSETS = "['./','./index.html','./sw.js','./app-nav.js','./games/gba/','./games/gba/index.html']";
+const TRIMMED_ASSETS = "['./','./index.html','./sw.js','./app-nav.js','./games/gba/','./games/gba/index.html','./games/doudizhu/','./games/doudizhu/index.html']";
+const isSubPageHtml = (p) => /^\/games\/(gba|doudizhu)\/index\.html$/.test(p); // pages we tag with a build marker
 
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
@@ -38,7 +39,7 @@ const server = http.createServer((req, res) => {
     s = s.replace(/const CACHE = '[^']*';/, `const CACHE = 'offline-games-test-v${VER}';`);
     s = s.replace(/const ASSETS = \[[\s\S]*?\];/, `const ASSETS = ${TRIMMED_ASSETS};`);
     body = Buffer.from(s);
-  } else if (p === '/games/gba/index.html') {
+  } else if (isSubPageHtml(p)) {
     body = Buffer.from(body.toString('utf8') + `\n<script>window.__BUILD=${VER};</script>`);
   }
   // no-store so the browser HTTP cache never shadows what the SW re-fetches on update
@@ -80,26 +81,31 @@ try {
   const b1 = await page.evaluate(() => window.__BUILD);
   check('GBA sub-page serves v1', b1 === 1, 'build=' + b1);
 
-  // 3) deploy v2 (sub-page content changes + sw.js CACHE bumps).
+  // 3) deploy v2, and let a new worker take over. We OBSERVE the transition from a BUSY page (a ROM
+  //    showing), which by design won't auto-reload — so detection is stable and not racing a reload.
   VER = 2;
-  console.log('[v2] deployed — driving update from the hub');
-
-  // 4) drive the hub update path: reg.update() finds the new SW; sw.js skipWaiting()s + claims.
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' });
-  await page.evaluate(async () => {
+  console.log('[v2] deployed — new worker should take over');
+  await page.evaluate(() => { document.getElementById('game-wrap').hidden = false; }); // mark busy (won't reload)
+  const drive = async () => page.evaluate(async () => {
     const reg = await navigator.serviceWorker.getRegistration();
     await reg.update();
     const w = reg.installing || reg.waiting;
-    if (w && w.state === 'installed') w.postMessage('skipWaiting'); // nudge in case it lingers
-  });
-  const updated = await waitFor(async () => (await swVersion(page)) === 'offline-games-test-v2');
+    if (w && w.state === 'installed') w.postMessage('skipWaiting');
+  }).catch(() => {});
+  await drive();
+  const updated = await waitFor(async () => (await swVersion(page)) === 'offline-games-test-v2', 20000);
   check('SW updated to v2 (new worker controls)', updated, await swVersion(page));
 
-  // verify the old cache was cleared on activate.
-  const caches = await page.evaluate(() => self.caches ? caches.keys() : []);
-  check('old cache (v1) deleted on activate', !caches.includes('offline-games-test-v1') && caches.includes('offline-games-test-v2'), caches.join(','));
+  // old cache cleared on activate (poll briefly — claim/controllerchange can fire just before the
+  // activate handler's cache-delete fully settles).
+  let cacheKeys = [];
+  const cacheClean = await waitFor(async () => {
+    cacheKeys = await page.evaluate(() => caches.keys()).catch(() => []);
+    return !cacheKeys.includes('offline-games-test-v1') && cacheKeys.includes('offline-games-test-v2');
+  }, 6000);
+  check('old cache (v1) deleted on activate', cacheClean, cacheKeys.join(','));
 
-  // 5) THE point: navigating to the sub-page now serves v2, not the stale v1 cache.
+  // 4) THE point: a FRESH navigation to the sub-page now serves v2, not the stale v1 cache.
   await page.goto(`http://localhost:${PORT}/games/gba/`, { waitUntil: 'load' });
   const b2 = await page.evaluate(() => window.__BUILD);
   check('GBA sub-page updates to v2 after SW update', b2 === 2, 'build=' + b2);
@@ -133,6 +139,41 @@ try {
   await sleep(800); // give any (incorrect) reload a chance to happen
   const stillV3 = await page.evaluate(() => window.__BUILD).catch(() => null);
   check('mid-game: NO auto-reload while #game-wrap visible (stays v3)', stillV3 === 3, 'build=' + stillV3);
+
+  // 8) Generalization to NON-emulator sub-pages: the doudizhu game page auto-updates via the same
+  //    centralized app-nav.js logic, using the #start-overlay heuristic. At its start screen (overlay
+  //    visible → not busy) a new deploy should reload it.
+  await page.goto(`http://localhost:${PORT}/games/doudizhu/`, { waitUntil: 'load' }).catch(() => {});
+  const dBuild = await page.evaluate(() => window.__BUILD).catch(() => null);
+  check('doudizhu sub-page serves current build (v4)', dBuild === 4, 'build=' + dBuild);
+  const atStart = await page.evaluate(() => { const o = document.getElementById('start-overlay'); return o ? getComputedStyle(o).display !== 'none' : false; });
+  check('doudizhu at start screen (overlay visible → not busy)', atStart);
+  VER = 5;
+  console.log('[v5] deployed — doudizhu at start screen should self-reload');
+  await page.evaluate(async () => {
+    const r = await navigator.serviceWorker.getRegistration();
+    await r.update();
+    const w = r.installing || r.waiting;
+    if (w && w.state === 'installed') w.postMessage('skipWaiting');
+  });
+  const dReloaded = await waitFor(async () => (await page.evaluate(() => window.__BUILD).catch(() => null)) === 5, 20000);
+  check('doudizhu auto-reloads to v5 at start screen', dReloaded);
+
+  // 9) In-play guard for game pages: with #start-overlay hidden (a hand in progress), a new deploy
+  //    must NOT reload.
+  await page.evaluate(() => document.getElementById('start-overlay').classList.add('hidden'));
+  VER = 6;
+  console.log('[v6] deployed — doudizhu mid-hand must NOT reload');
+  await page.evaluate(async () => {
+    const r = await navigator.serviceWorker.getRegistration();
+    await r.update();
+    const w = r.installing || r.waiting;
+    if (w && w.state === 'installed') w.postMessage('skipWaiting');
+  });
+  await waitFor(async () => (await swVersion(page)) === 'offline-games-test-v6', 15000);
+  await sleep(800);
+  const dStill5 = await page.evaluate(() => window.__BUILD).catch(() => null);
+  check('mid-hand: NO auto-reload while #start-overlay hidden (stays v5)', dStill5 === 5, 'build=' + dStill5);
 } finally {
   await browser.close();
   server.close();

@@ -281,6 +281,10 @@
     </nav>
   </section>
   <script>
+    // The hub owns its own service-worker update UX (the 检查更新 button + progress bar + reload below),
+    // so app-nav.js's generic auto-update stays out of its way.
+    window.__appHandlesUpdate = true;
+
     // ---- internationalization (hub only) — default Chinese, choice persisted ----
     const I18N = {
       zh: {

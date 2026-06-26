@@ -468,18 +468,9 @@
     }
 
     refreshList();
-
-    // Pick up a newly-deployed app version on this sub-page (the hub isn't the only entry point). Ask
-    // the service worker to check for an update on entry; if a new worker then takes control while
-    // we're still on the ROM library, reload to swap in the fresh page + assets. Guarded by #game-wrap
-    // so a background update can never reload mid-game. (Coexists with the cross-origin-isolation
-    // reload above: that one is a guarded one-shot for the FIRST visit; this one handles later updates.)
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then((r) => r && r.update()).catch(() => {});
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (document.getElementById('game-wrap').hidden) location.reload();
-      });
-    }
+    // (App-version auto-update — check on entry + reload on a new worker, never mid-game — is handled
+    // centrally in app-nav.js, which infers "in a game" from #game-wrap below. It coexists with the
+    // cross-origin-isolation reload near the top: that one is a guarded one-shot for the FIRST visit.)
   </script>
 </body>
 </html>
