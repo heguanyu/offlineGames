@@ -184,9 +184,14 @@ function buildCodeInput() {
 function fillCode(code) { for (let i = 0; i < 9; i++) boxes[i].value = code[i] || ''; }
 function clearCode() { fillCode(''); }
 
-// ---- in-app QR scan (only where BarcodeDetector exists; iOS uses native camera) ----
-let scanStream = null, scanTimer = null;
-const canScan = 'BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+// ---- in-app QR scan ----
+// Decodes the host's QR straight from the camera so no external scanner is needed. Uses the native
+// BarcodeDetector where present (Android/desktop Chrome); falls back to the vendored jsQR decoder
+// (jsqr.js → window.jsQR) on browsers without it — notably iOS Safari. Needs HTTPS + a user gesture
+// (the button) for camera access; works best opened in a Safari tab rather than a standalone PWA.
+let scanStream = null, scanRAF = null, scanCanvas = null;
+const canScan = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) &&
+  (('BarcodeDetector' in window) || typeof window.jsQR === 'function');
 if (canScan) {
   $('btn-scan').hidden = false;
   $('btn-scan').addEventListener('click', startScan);
@@ -196,17 +201,34 @@ async function startScan() {
   showView('scan'); $('scan-status').textContent = '正在打开摄像头…';
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    const v = $('scan-video'); v.srcObject = scanStream; await v.play();
-    $('scan-status').textContent = '对准二维码…';
-    const det = new BarcodeDetector({ formats: ['qr_code'] });
-    scanTimer = setInterval(async () => {
-      try { const codes = await det.detect(v); if (codes.length) { const code = extractCode(codes[0].rawValue); if (code) { stopScan(); doJoin(code); } } } catch {}
-    }, 300);
+    const v = $('scan-video'); v.srcObject = scanStream; v.setAttribute('playsinline', ''); await v.play();
+    $('scan-status').textContent = '将二维码对准取景框…';
+    const detector = ('BarcodeDetector' in window) ? new BarcodeDetector({ formats: ['qr_code'] }) : null;
+    if (!detector) scanCanvas = document.createElement('canvas');
+    const tick = async () => {
+      if (!scanStream) return; // stopped
+      let raw = null;
+      try {
+        if (detector) { const codes = await detector.detect(v); if (codes.length) raw = codes[0].rawValue; }
+        else if (v.videoWidth) {
+          scanCanvas.width = v.videoWidth; scanCanvas.height = v.videoHeight;
+          const ctx = scanCanvas.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(v, 0, 0);
+          const img = ctx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+          const res = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+          if (res) raw = res.data;
+        }
+      } catch {}
+      if (raw) { const code = extractCode(raw); if (code) { stopScan(); doJoin(code); return; } }
+      scanRAF = requestAnimationFrame(tick);
+    };
+    scanRAF = requestAnimationFrame(tick);
   } catch { $('scan-status').textContent = '无法打开摄像头，请改用配对码'; }
 }
 function stopScan() {
-  clearInterval(scanTimer); scanTimer = null;
+  if (scanRAF) { cancelAnimationFrame(scanRAF); scanRAF = null; }
   if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
+  scanCanvas = null;
   if (!$('view-scan').hidden) showView('landing');
 }
 function doJoin(code) { if (link || joining) return; joining = true; if (sig.ws && sig.ws.readyState === WebSocket.OPEN) sig.join(code); else pendingJoin = code; }

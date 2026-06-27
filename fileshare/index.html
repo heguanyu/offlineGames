@@ -40,7 +40,7 @@
           <button id="btn-code" class="secondary" type="button">输入配对码加入</button>
           <button id="btn-scan" class="secondary" type="button" hidden>扫码加入</button>
         </div>
-        <p class="muted small">提示：iPad 可用「相机」直接扫描对方屏幕上的二维码加入；电脑没有摄像头，请用「输入配对码」。</p>
+        <p class="muted small">提示：有摄像头的设备（如 iPad）可点「扫码加入」直接扫描对方二维码；电脑没有摄像头，请用「输入配对码」。</p>
       </div>
     </section>
 
@@ -109,6 +109,8 @@
     </section>
   </main>
 
+  <!-- QR decoder for the in-app scanner (fallback where BarcodeDetector is absent, e.g. iOS Safari) -->
+  <script src="./jsqr.js"></script>
   <script type="module" src="./main.js"></script>
 </body>
 </html>

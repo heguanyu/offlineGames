@@ -210,14 +210,16 @@ function penalty(m, size) {
 function applyFormat(m, fn, size, mask) {
   const bits = formatBits(mask);
   const get = (i) => (bits >> i) & 1;
-  // copy 1 (around top-left finder)
-  for (let i = 0; i <= 5; i++) m[8][i] = get(i);
-  m[8][7] = get(6); m[8][8] = get(7); m[7][8] = get(8);
-  for (let i = 9; i < 15; i++) m[14 - i][8] = get(i);
-  // copy 2 (split across the other two finders)
-  for (let i = 0; i < 8; i++) m[size - 1 - i][8] = get(i);
-  for (let i = 8; i < 15; i++) m[8][size - 15 + i] = get(i);
-  m[size - 8][8] = 1; // dark module (already set, keep explicit)
+  // copy 1: a vertical strip right of the top-left finder (col 8) wrapping into a horizontal strip
+  // below it (row 8). (m is [row][col].)
+  for (let i = 0; i <= 5; i++) m[i][8] = get(i);             // col 8, rows 0-5
+  m[7][8] = get(6); m[8][8] = get(7); m[8][7] = get(8);      // col8 r7 · col8 r8 · row8 c7
+  for (let i = 9; i < 15; i++) m[8][14 - i] = get(i);        // row 8, cols 5-0
+  // copy 2: a horizontal strip right of the top-right finder (row 8, bits 0-7) + a vertical strip
+  // below the bottom-left finder (col 8, bits 8-14). The dark module sits just above the latter.
+  for (let i = 0; i < 8; i++) m[8][size - 1 - i] = get(i);   // row 8, cols size-1..size-8
+  for (let i = 8; i < 15; i++) m[size - 15 + i][8] = get(i); // col 8, rows size-7..size-1
+  m[size - 8][8] = 1; // dark module — fixed at (row 4·version+9, col 8)
 }
 
 function qrMatrix(text) {
