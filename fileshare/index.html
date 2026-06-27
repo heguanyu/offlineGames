@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>文件共享助手</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<script src="../app-nav.js"></script>
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<link rel="icon" href="../icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1a1a2e">
+<link rel="stylesheet" href="./fileshare.css">
+</head>
+<body>
+  <header id="bar">
+    <a class="back" href="../" onclick="event.preventDefault(); location.replace('../')" aria-label="返回">‹ 返回</a>
+    <h1>文件共享助手</h1>
+    <span id="conn" class="conn connecting" title="连接中…"></span>
+  </header>
+
+  <main>
+    <!-- offline notice: this feature needs the signaling server -->
+    <section id="view-offline" class="view" hidden>
+      <div class="card center">
+        <div class="big-emoji">📡</div>
+        <p class="lead">文件共享需要联网</p>
+        <p class="muted">两台设备通过服务器配对后，文件将<strong>点对点直接传输</strong>（端到端加密，不经过服务器）。请连网后重试。</p>
+      </div>
+    </section>
+
+    <!-- choose host vs join -->
+    <section id="view-landing" class="view" hidden>
+      <div class="card center">
+        <div class="big-emoji">📤📥</div>
+        <p class="lead">在两台设备上打开本页面，配对后即可互传文件</p>
+        <div class="choices">
+          <button id="btn-host" class="primary" type="button">发送 / 接收 · 创建共享</button>
+          <button id="btn-code" class="secondary" type="button">输入配对码加入</button>
+          <button id="btn-scan" class="secondary" type="button" hidden>扫码加入</button>
+        </div>
+        <p class="muted small">提示：iPad 可用「相机」直接扫描对方屏幕上的二维码加入；电脑没有摄像头，请用「输入配对码」。</p>
+      </div>
+    </section>
+
+    <!-- host: show QR + code, wait for peer -->
+    <section id="view-host" class="view" hidden>
+      <div class="card center">
+        <p class="lead">让对方扫码，或输入下方配对码</p>
+        <canvas id="qr" class="qr"></canvas>
+        <div id="code-display" class="code-display" aria-label="配对码"></div>
+        <p id="host-status" class="muted">等待对方加入…</p>
+        <button id="host-cancel" class="secondary" type="button">取消</button>
+      </div>
+    </section>
+
+    <!-- guest: type the 9-char code (3×3 boxes) -->
+    <section id="view-code" class="view" hidden>
+      <div class="card center">
+        <p class="lead">输入对方的 9 位配对码</p>
+        <div id="code-input" class="code-input"></div>
+        <p id="code-error" class="error" hidden></p>
+        <div class="choices row">
+          <button id="code-back" class="secondary" type="button">返回</button>
+          <button id="code-join" class="primary" type="button">加入</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- in-app QR scan (only where supported) -->
+    <section id="view-scan" class="view" hidden>
+      <div class="card center">
+        <p class="lead">将对方屏幕上的二维码对准取景框</p>
+        <video id="scan-video" class="scan-video" playsinline muted></video>
+        <p id="scan-status" class="muted">正在打开摄像头…</p>
+        <button id="scan-cancel" class="secondary" type="button">取消</button>
+      </div>
+    </section>
+
+    <!-- connected: symmetric transfer UI -->
+    <section id="view-transfer" class="view" hidden>
+      <div class="card">
+        <div class="connected-row"><span class="dot ok"></span><span id="link-status">已连接，可互传文件</span></div>
+
+        <div id="dropzone" class="dropzone">
+          <p class="muted">把文件拖到这里，或</p>
+          <div class="choices row wrap">
+            <button id="pick-files" class="primary" type="button">选择文件</button>
+            <button id="pick-media" class="secondary" type="button">选择照片 / 视频</button>
+          </div>
+          <input id="file-input" type="file" multiple hidden>
+          <input id="media-input" type="file" accept="image/*,video/*" multiple hidden>
+        </div>
+
+        <div class="lists">
+          <div class="list-col">
+            <h2>发送</h2>
+            <ul id="out-list" class="xfer-list"><li class="empty muted">暂无</li></ul>
+          </div>
+          <div class="list-col">
+            <h2>接收</h2>
+            <ul id="in-list" class="xfer-list"><li class="empty muted">暂无</li></ul>
+          </div>
+        </div>
+
+        <button id="disconnect" class="secondary" type="button">断开</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

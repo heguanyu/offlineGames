@@ -27,6 +27,7 @@ import { BOT_NAMES } from '../games/mahjong-common/bot-names.js';
 import db from './db.js';
 import { startWeather, getWeatherJson } from './weather.js';
 import { handleEmuSave } from './emu-saves.js';
+import { handleFs, fsOnClose, startFsSweep } from './fileshare.js';
 
 // The games the lobby can host. Each table hosts ONE game; the lobby is split per game (the hub's
 // online cards deep-link a game). Every game shares the same lobby + reconnect + { type:'game' }
@@ -260,6 +261,10 @@ function forfeitSeat(t, seat) {
 const inRange = (ti, si) => ti >= 0 && ti < TABLES && si >= 0 && si < tables[ti].seats.length;
 
 function handle(client, msg) {
+  // 文件共享助手: WebRTC pairing/signaling (fs-create/join/signal/leave). Routed early — it's a
+  // self-contained sidecar (server/fileshare.js) that shares nothing with the lobby/table state.
+  if (typeof msg.type === 'string' && msg.type.startsWith('fs-')) { handleFs(client, msg, client.ip); return; }
+
   // in-game moves route straight to the authoritative table (no lobby broadcast)
   if (msg.type === 'action') {
     const at = seatOf(client.uid);
@@ -423,9 +428,12 @@ const wss = new WebSocketServer({
   verifyClient: ({ origin }, cb) => cb(!origin || ALLOWED.includes(origin) || localhostOrigin(origin), 403, 'origin not allowed'),
 });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   const id = nextId++;
-  const client = { ws, id, uid: null, name: '', spectate: null, game: TABLE_GAMES[0] };
+  // Remote ip for the file-share join rate-limit. Behind Azure's proxy the real client is in
+  // x-forwarded-for; fall back to the socket address for local/dev.
+  const ip = (req && (String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress)) || 'unknown';
+  const client = { ws, id, uid: null, name: '', spectate: null, game: TABLE_GAMES[0], ip };
   clients.set(id, client);
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
@@ -436,6 +444,7 @@ wss.on('connection', (ws) => {
   });
   ws.on('close', () => {
     clients.delete(id);
+    fsOnClose(client); // tear down any file-share room this socket was pairing in
     if (client.uid && uidWs.get(client.uid) === ws) uidWs.delete(client.uid);
     const at = seatOf(client.uid);
     // free the seat only at a waiting table; a seat in a live game is HELD for reconnection
@@ -476,6 +485,10 @@ const readySweep = setInterval(() => {
   if (changed || counting) broadcastLobby();
 }, 1000);
 wss.on('close', () => clearInterval(readySweep));
+
+// File-share rooms: expire unclaimed pairing codes (TTL) + prune rate-limit buckets.
+const fsSweep = startFsSweep();
+wss.on('close', () => clearInterval(fsSweep));
 
 // Flush the latest 锅 standings synchronously on a graceful shutdown (Azure sends SIGTERM on a
 // restart/redeploy) so the resumed game starts from the most recent round.
