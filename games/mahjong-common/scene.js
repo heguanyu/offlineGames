@@ -237,19 +237,20 @@ export class MahjongScene {
     this.raycaster = new THREE.Raycaster();
     this.clock = new THREE.Clock();
     this.rotated = false; // true when the page is force-rotated 90° (portrait iPad)
+    this._running = false; // on-demand render loop (battery): runs only while something animates
     this._resize();
-    new ResizeObserver(() => this._resize()).observe(canvas.parentElement);
-    this._loop();
+    new ResizeObserver(() => { this._resize(); this._kick(); }).observe(canvas.parentElement);
+    this._kick();
   }
 
   // The page may be CSS-rotated 90° to force landscape on a portrait device; the
   // canvas still renders landscape, but pointer events arrive in viewport space,
   // so pick() must un-rotate them. (worldToScreen needs no change — the HUD is in
   // the same rotated frame as the canvas.)
-  setRotated(r) { this.rotated = !!r; }
+  setRotated(r) { this.rotated = !!r; this._kick(); }
   // TEMP (palette tweaking): live-set the tile-back color from a #rrggbb string.
-  setBackColor(hex) { this.back.color.set(hex); }
-  resize() { this._resize(); }
+  setBackColor(hex) { this.back.color.set(hex); this._kick(); }
+  resize() { this._resize(); this._kick(); }
 
   _lights() {
     this.scene.add(new THREE.HemisphereLight(0xbfe6d8, 0x223026, 1.2)); // ambient fill (+20%)
@@ -288,7 +289,7 @@ export class MahjongScene {
   // o: { show, secs, frac (1→0), low }
   setTurnTimer(o) {
     if (!this.timerMesh) return;
-    if (!o || !o.show) { this.timerMesh.visible = false; return; }
+    if (!o || !o.show) { if (this.timerMesh.visible) { this.timerMesh.visible = false; this._kick(); } return; }
     const x = this._tt.ctx, S = 256, R = 92;
     // colour sweeps green→yellow→red with progress (shared with the DOM ring); shake the final seconds.
     const col = ringColor(o.frac);
@@ -302,6 +303,7 @@ export class MahjongScene {
     x.fillText(String(o.secs), cx, cy + 6);
     this._tt.tex.needsUpdate = true;
     this.timerMesh.visible = true;
+    this._kick(); // repaint the updated countdown texture (driven by main's timer ticks → ~few fps)
   }
   // A single glowing quarter-ring laid on the felt's drawn circle, centered at the table
   // origin. It rotates (in-plane) to face whichever seat's turn it is and pulses; hidden
@@ -324,6 +326,7 @@ export class MahjongScene {
   _setTurnRing(p) {
     this._turnRingActive = p;
     if (this.turnRing) this.turnRing.visible = p >= 0;
+    this._kick();
   }
   // Green-baize felt. The COLOR is a single non-tiling canvas (green + soft macro blotches + fine
   // Gaussian grain) so there's NO visible repeat across the table; the weave detail comes from a CC0
@@ -553,6 +556,7 @@ export class MahjongScene {
     for (const [k, rec] of this.tiles) {
       if (!seen.has(k)) { this.tilesGroup.remove(rec.mesh); this.tiles.delete(k); }
     }
+    this._kick(); // re-targeted tiles / selection / turn-ring → wake the render loop
   }
 
   // ---- initial deal animation ----------------------------------------------
@@ -584,6 +588,7 @@ export class MahjongScene {
     this.deal.reserve = this._buildDealReserve(this.deal.total); // the wall tiles dealt out
     this._clearKongBounds(); // wipe the previous hand's 杠 boxes/labels NOW, not after the deal finishes
     this._dealFrame(); // initial frame: full wall, empty hands; clears the old hand
+    this._kick();      // the deal flourish drives the loop until _finishDeal hands off to sync()
   }
 
   // The human's served tiles in canonical (buildOrder) order: wilds left, rest
@@ -672,11 +677,11 @@ export class MahjongScene {
   // Mark a bot's just-claimed meld so the next render lifts it up facing the camera
   // for `ms` before it settles into the flat meld row. Call right after the claim is
   // applied (before the sync that first renders the new meld).
-  beginClaimDemo(player, ms = CLAIM_DEMO_MS) { this.claimDemo = { player, t0: performance.now(), ms }; }
+  beginClaimDemo(player, ms = CLAIM_DEMO_MS) { this.claimDemo = { player, t0: performance.now(), ms }; this._kick(); }
   // Mark a bot's discard (discardLog index `idx`) to fly from its seat up to the
   // center halt, hold, then drop into the pool. Call right after game.discard, before
   // the sync that first places the new pool tile.
-  beginDiscardDemo(player, idx, ms = CLAIM_DEMO_MS) { this.discardDemo = { player, idx, t0: performance.now(), ms }; }
+  beginDiscardDemo(player, idx, ms = CLAIM_DEMO_MS) { this.discardDemo = { player, idx, t0: performance.now(), ms }; this._kick(); }
 
   _meldsFlat(game, seen) {
     // Each seat's exposed melds, laid flat and face-up in a row BESIDE that
@@ -828,8 +833,8 @@ export class MahjongScene {
   // Slide-up-to-play: lift the human hand tile at rendered index `pick` so it tracks the
   // finger. `px` is the upward drag distance in screen px; the tick loop maps it to a world
   // rise (≈ the same on-screen lift) and overrides that tile's y each frame until cleared.
-  setDragLift(pick, px) { this._dragPick = pick; this._dragPx = Math.max(0, px); }
-  clearDragLift() { this._dragPick = null; this._dragPx = 0; } // release → tile lerps back to its slot
+  setDragLift(pick, px) { this._dragPick = pick; this._dragPx = Math.max(0, px); this._kick(); }
+  clearDragLift() { this._dragPick = null; this._dragPx = 0; this._kick(); } // release → tile lerps back to its slot
 
   // The face-down deck wall: a 2-layer ring of backs around the pool that depletes
   // as the live wall is drawn down. Sets this.deckPos = the current draw point (in
@@ -1045,51 +1050,67 @@ export class MahjongScene {
     return true;
   }
 
-  _loop() {
-    const tick = () => {
-      const dt = Math.min(this.clock.getDelta(), 0.05);
-      const a = 1 - Math.exp(-13 * dt);
-      if (this.deal) this._dealTick(); // advance the initial-deal flourish
-      for (const rec of this.tiles.values()) {
-        const m = rec.mesh;
-        const ts = rec.ts ?? 1;
-        if (rec.drawSeq && this._animateDraw(rec, m)) continue; // reveal in progress
-        if (rec.claimSeq) { if (this._animateDemoSeq(rec.claimSeq, rec, m)) continue; delete rec.claimSeq; } // 吃/碰/杠 demo
-        if (rec.discardSeq) { if (this._animateDemoSeq(rec.discardSeq, rec, m)) continue; delete rec.discardSeq; } // discard fly
-        m.scale.setScalar(m.scale.x + (ts - m.scale.x) * a); // grow in + match target scale
-        m.position.lerp(rec.tp, a);
-        m.rotation.x += (rec.trx - m.rotation.x) * a;
-        m.rotation.y += (rec.try_ - m.rotation.y) * a;
-        m.rotation.z += ((rec.trz || 0) - m.rotation.z) * a;
+  // On-demand render loop. _kick() starts it; each frame renders only while SOMETHING is animating
+  // (the deal flourish, a draw/claim/discard sequence, a tile not yet settled at its target, a drag,
+  // or the turn-ring still rotating) and stops itself once the table settles — so an idle hand draws
+  // zero frames and the GPU sleeps. Every state entry point (sync/turn-ring/deal/demos/drag/timer/
+  // resize) calls _kick() to wake it. Cosmetic pulses (selection glow, turn-ring breathing) freeze
+  // when idle — a deliberate trade for not pinning the GPU at 60 fps.
+  _kick() { if (!this._running) { this._running = true; this.clock.getDelta(); requestAnimationFrame(() => this._tick()); } }
+  _tick() {
+    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const a = 1 - Math.exp(-13 * dt);
+    let active = false;
+    if (this.deal) { this._dealTick(); active = true; } // advance the initial-deal flourish
+    for (const rec of this.tiles.values()) {
+      const m = rec.mesh;
+      const ts = rec.ts ?? 1;
+      if (rec.drawSeq && this._animateDraw(rec, m)) { active = true; continue; } // reveal in progress
+      if (rec.claimSeq) { if (this._animateDemoSeq(rec.claimSeq, rec, m)) { active = true; continue; } delete rec.claimSeq; } // 吃/碰/杠 demo
+      if (rec.discardSeq) { if (this._animateDemoSeq(rec.discardSeq, rec, m)) { active = true; continue; } delete rec.discardSeq; } // discard fly
+      // settled? snap exactly + skip so sub-epsilon drift can't keep the loop alive forever.
+      const trz = rec.trz || 0;
+      if (Math.abs(m.scale.x - ts) < 1e-3 && m.position.distanceToSquared(rec.tp) < 1e-6 &&
+          Math.abs(m.rotation.x - rec.trx) < 1e-4 && Math.abs(m.rotation.y - rec.try_) < 1e-4 && Math.abs(m.rotation.z - trz) < 1e-4) {
+        m.scale.setScalar(ts); m.position.copy(rec.tp); m.rotation.set(rec.trx, rec.try_, trz);
+        continue;
       }
-      // slide-up gesture: the dragged hand tile snaps to follow the finger (overrides the
-      // lerp so it tracks 1:1), lifting world +y by the on-screen drag distance.
-      if (this._dragPick != null && this._dragPx > 0) {
-        const lift = (this._dragPx / this.handTilePixelHeight()) * TH;
-        for (const [k, rec] of this.tiles) {
-          if (k[0] === 'h' && rec.mesh.userData.pick === this._dragPick) { rec.mesh.position.y = rec.tp.y + lift; break; }
-        }
+      m.scale.setScalar(m.scale.x + (ts - m.scale.x) * a); // grow in + match target scale
+      m.position.lerp(rec.tp, a);
+      m.rotation.x += (rec.trx - m.rotation.x) * a;
+      m.rotation.y += (rec.try_ - m.rotation.y) * a;
+      m.rotation.z += (trz - m.rotation.z) * a;
+      active = true;
+    }
+    // slide-up gesture: the dragged hand tile snaps to follow the finger (overrides the
+    // lerp so it tracks 1:1), lifting world +y by the on-screen drag distance.
+    if (this._dragPick != null && this._dragPx > 0) {
+      const lift = (this._dragPx / this.handTilePixelHeight()) * TH;
+      for (const [k, rec] of this.tiles) {
+        if (k[0] === 'h' && rec.mesh.userData.pick === this._dragPick) { rec.mesh.position.y = rec.tp.y + lift; break; }
       }
-      // selection outline rides the selected tile's (animated) transform
-      const selRec = this.selKey && this.tiles.get(this.selKey);
-      this.outline.visible = !!selRec;
-      if (selRec) {
-        this.outline.position.copy(selRec.mesh.position);
-        this.outline.quaternion.copy(selRec.mesh.quaternion);
-        this.outline.scale.copy(selRec.mesh.scale);
-        this.outlineHalo.material.opacity = 0.34 + 0.16 * Math.sin(performance.now() / 360); // gentle glow
-      }
-      // the turn-ring rotates (shortest path) to the active seat and pulses
-      if (this._turnRingActive >= 0 && this.turnRing) {
-        const target = this._turnSpin[this._turnRingActive];
-        let d = target - this.turnRing.rotation.z;
-        d = Math.atan2(Math.sin(d), Math.cos(d)); // shortest signed delta
-        this.turnRing.rotation.z += d * a;
-        this.turnRing.material.opacity = 0.55 + 0.35 * Math.sin(performance.now() / 320);
-      }
-      this.renderer.render(this.scene, this.camera);
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+      active = true;
+    }
+    // selection outline rides the selected tile's (animated) transform
+    const selRec = this.selKey && this.tiles.get(this.selKey);
+    this.outline.visible = !!selRec;
+    if (selRec) {
+      this.outline.position.copy(selRec.mesh.position);
+      this.outline.quaternion.copy(selRec.mesh.quaternion);
+      this.outline.scale.copy(selRec.mesh.scale);
+      this.outlineHalo.material.opacity = 0.34 + 0.16 * Math.sin(performance.now() / 360); // gentle glow (frozen when idle)
+    }
+    // the turn-ring rotates (shortest path) to the active seat and pulses
+    if (this._turnRingActive >= 0 && this.turnRing) {
+      const target = this._turnSpin[this._turnRingActive];
+      let d = target - this.turnRing.rotation.z;
+      d = Math.atan2(Math.sin(d), Math.cos(d)); // shortest signed delta
+      if (Math.abs(d) > 1e-4) { this.turnRing.rotation.z += d * a; active = true; }
+      else this.turnRing.rotation.z = target;
+      this.turnRing.material.opacity = 0.55 + 0.35 * Math.sin(performance.now() / 320);
+    }
+    this.renderer.render(this.scene, this.camera);
+    if (active) requestAnimationFrame(() => this._tick());
+    else this._running = false; // settled — stop drawing until the next _kick()
   }
 }

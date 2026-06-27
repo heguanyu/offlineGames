@@ -192,13 +192,14 @@ export class DouScene {
     this._fx = [];               // active visual effects (plane fly-by, bomb burst) updated each frame
     this._shake = null;          // { until, mag } camera shake
     this._camPos = this.camBase.clone(); // base camera position (shake offsets from here)
+    this._running = false;       // on-demand render loop: runs only while something animates (battery)
     this._resize();
-    new ResizeObserver(() => this._resize()).observe(canvas.parentElement);
-    this._loop();
+    new ResizeObserver(() => { this._resize(); this._kick(); }).observe(canvas.parentElement);
+    this._kick();                // initial paint; the loop self-stops once everything settles
     this._warmFaces();
   }
 
-  setRotated(r) { this.rotated = !!r; }
+  setRotated(r) { this.rotated = !!r; this._kick(); }
 
   // Pre-rasterise + GPU-upload every card face up front so the first deal doesn't lazily generate ~17
   // face canvases on a slow CPU. Spread over ticks to keep startup responsive.
@@ -215,7 +216,7 @@ export class DouScene {
     tick();
   }
   _uploadTex(t) { try { this.renderer.initTexture(t); } catch {} } // initTexture absent in old three → canvas still pre-drawn
-  resize() { this._resize(); }
+  resize() { this._resize(); this._kick(); }
 
   // A CENTERED (x=0) key light + ambient fill. Centered means it's symmetric left↔right, so the hand
   // row has no left-to-right brightness gradient (the old side light did), while still catching the
@@ -364,6 +365,7 @@ export class DouScene {
       // selection glow (warm). Default keeps the face's self-lit grey so the contrast brightening stays.
       if (r.mesh.material[0] && r.mesh.material[0].emissiveMap) r.mesh.material[0].emissive.setHex(d.sel ? 0x6a5616 : d.hint ? 0x2a5d3a : 0x3a3a3a);
     }
+    this._kick(); // re-targeted cards / turn-ring → wake the render loop to animate them in
   }
 
   // Screen position of a world point, for HTML overlays (badges/bubbles).
@@ -404,13 +406,13 @@ export class DouScene {
       m.position.set((i - 1) * 1.9, 0.08, 0.35);            // a row UNDER the title, with a gap to the bottom border
       g.add(m);
     });
-    this.scene.add(g); this._reveal = g;
+    this.scene.add(g); this._reveal = g; this._kick();
   }
   hideBottomReveal() {
     if (!this._reveal) return;
     // dispose only the panel's unique canvas texture/geometry; card faces use the shared cache.
     if (this._revealPanel) { this._revealPanel.geometry.dispose(); this._revealPanel.material.map.dispose(); this._revealPanel.material.dispose(); }
-    this.scene.remove(this._reveal); this._reveal = null; this._revealPanel = null;
+    this.scene.remove(this._reveal); this._reveal = null; this._revealPanel = null; this._kick();
   }
 
   // Hit-test the human hand; returns a card id or null.
@@ -438,12 +440,18 @@ export class DouScene {
     this.camera.lookAt(this.camLook);
     this.camera.updateProjectionMatrix();
   }
-  _loop() {
-    requestAnimationFrame(() => this._loop());
+  // On-demand render loop. _kick() starts it; the loop renders each frame while ANYTHING is still
+  // animating, then stops itself once the table has settled — so an idle game (waiting for a turn, bots
+  // thinking) draws zero frames and lets the GPU sleep. Every state change (sync/select/deal/fx/shake/
+  // turn-ring/drag/resize) calls _kick() to wake it. Cosmetic pulses (turn-ring/outline glow) freeze
+  // when idle, which is the deliberate trade for not pinning the GPU at 60 fps.
+  _kick() { if (!this._running) { this._running = true; this.clock.getDelta(); requestAnimationFrame(() => this._anim()); } }
+  _anim() {
     const dt = Math.min(0.05, this.clock.getDelta());
     const a = 1 - Math.pow(0.0015, dt); // smooth critically-ish damped lerp
     const now = performance.now();
     const dealing = this._deal && this._deal.active;
+    let active = false; // does anything still need another frame?
     for (const r of this.cards.values()) {
       if (!r.target) continue;
       // during the deal, a card waits in the deck (served-soon on top) until its turn — lying FLAT and
@@ -452,27 +460,40 @@ export class DouScene {
         const s = Math.min((this._deal.idx.get(r.key) || 0), 40) * 0.005;
         r.mesh.position.set(this._deal.deck.x, this._deal.deck.y + s, this._deal.deck.z);
         r.mesh.quaternion.copy(this._deal.quat);
+        active = true;
+        continue;
+      }
+      const sv = r.target.scale;
+      // settled? snap exactly + skip lerp so sub-epsilon drift can't keep the loop alive forever.
+      if (r.mesh.position.distanceToSquared(r.target.pos) < 1e-6 &&
+          Math.abs(Math.abs(r.mesh.quaternion.dot(r.target.quat)) - 1) < 1e-6 &&
+          Math.abs(r.mesh.scale.x - sv) < 1e-3) {
+        r.mesh.position.copy(r.target.pos); r.mesh.quaternion.copy(r.target.quat); r.mesh.scale.setScalar(sv);
         continue;
       }
       r.mesh.position.lerp(r.target.pos, a);
       r.mesh.quaternion.slerp(r.target.quat, a);
-      const s = r.target.scale; r.mesh.scale.lerp(new THREE.Vector3(s, s, s), a);
+      r.mesh.scale.lerp(new THREE.Vector3(sv, sv, sv), a);
+      active = true;
     }
     if (this._turnRingActive >= 0 && this.turnRing) {        // on-turn ring rotates (shortest path) to the active seat + pulses
       const target = this._turnSpin[this._turnRingActive];
       let d = target - this.turnRing.rotation.z;
       d = Math.atan2(Math.sin(d), Math.cos(d));              // shortest signed delta
-      this.turnRing.rotation.z += d * a;
+      if (Math.abs(d) > 1e-4) { this.turnRing.rotation.z += d * a; active = true; }
+      else this.turnRing.rotation.z = target;
       this.turnRing.material.opacity = 0.55 + 0.35 * Math.sin(now / 320);
     }
-    if (this._fx.length) this._fx = this._fx.filter((fx) => fx(now, dt));   // run active effects
+    if (this._fx.length) { this._fx = this._fx.filter((fx) => fx(now, dt)); if (this._fx.length) active = true; } // run active effects
     // camera shake (bomb): jitter the camera off its base, decaying to zero
     if (this._shake) {
       const left = this._shake.until - now;
       if (left <= 0) { this._shake = null; this.camera.position.copy(this._camPos); }
-      else { const m = this._shake.mag * (left / this._shake.dur); this.camera.position.set(this._camPos.x + (Math.random() * 2 - 1) * m, this._camPos.y + (Math.random() * 2 - 1) * m, this._camPos.z + (Math.random() * 2 - 1) * m); }
+      else { const m = this._shake.mag * (left / this._shake.dur); this.camera.position.set(this._camPos.x + (Math.random() * 2 - 1) * m, this._camPos.y + (Math.random() * 2 - 1) * m, this._camPos.z + (Math.random() * 2 - 1) * m); active = true; }
     }
     this.renderer.render(this.scene, this.camera);
+    if (active) requestAnimationFrame(() => this._anim());
+    else this._running = false; // settled — stop drawing until the next _kick()
   }
 
   // ---- combo effects ------------------------------------------------------
@@ -491,6 +512,7 @@ export class DouScene {
       sp.material.opacity = Math.sin(t * Math.PI);
       return true;
     });
+    this._kick();
   }
   // An orange burst at table centre + a camera shake when a 炸弹 / 王炸 is played.
   bombFx() {
@@ -509,6 +531,7 @@ export class DouScene {
       const s = 2 + t * 9; sp.scale.set(s, s, 1); sp.material.opacity = 1 - t;
       return true;
     });
+    this._kick();
   }
 
   // Deal animation: every card starts stacked at a centre "deck" and is served one at a time,
@@ -523,6 +546,7 @@ export class DouScene {
     order.forEach((k, i) => { serveAt.set(k, t0 + i * SERVE); idx.set(k, order.length - i); }); // served-soon = on top
     const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)); // flat, face-DOWN (back up)
     this._deal = { active: true, serveAt, idx, deck: new THREE.Vector3(0, 0.07, -0.4), quat };
-    return new Promise((res) => setTimeout(() => { if (this._deal) this._deal.active = false; res(); }, order.length * SERVE + FLIGHT + 120));
+    this._kick();
+    return new Promise((res) => setTimeout(() => { if (this._deal) this._deal.active = false; this._kick(); res(); }, order.length * SERVE + FLIGHT + 120));
   }
 }

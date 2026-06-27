@@ -183,15 +183,16 @@ export class GuandanScene {
     this._fx = [];
     this._shake = null;
     this._camPos = this.camBase.clone();
+    this._running = false;       // on-demand render loop (battery): runs only while something animates
     this._resize();
-    new ResizeObserver(() => this._resize()).observe(canvas.parentElement);
-    this._loop();
+    new ResizeObserver(() => { this._resize(); this._kick(); }).observe(canvas.parentElement);
+    this._kick();
     this._warmFaces();
   }
 
-  setRotated(r) { this.rotated = !!r; }
+  setRotated(r) { this.rotated = !!r; this._kick(); }
   setLevel(l) { this.level = l; }
-  resize() { this._resize(); }
+  resize() { this._resize(); this._kick(); }
 
   // Pre-rasterise + GPU-upload every card face up front, so the first deal doesn't hitch lazily
   // generating ~27 face canvases on a slow CPU (the 1–2s "card image loading" stall). Spread over
@@ -357,6 +358,7 @@ export class GuandanScene {
         r.mesh.material[0].emissive.setHex(d.sel ? 0x6a5616 : d.hint ? 0x2a5d3a : d.wild ? 0x4a2168 : 0x3a3a3a);
       }
     }
+    this._kick(); // re-targeted cards / turn-ring → wake the render loop
   }
 
   worldToScreen(v) {
@@ -389,38 +391,54 @@ export class GuandanScene {
     this.camera.lookAt(this.camLook);
     this.camera.updateProjectionMatrix();
   }
-  _loop() {
-    requestAnimationFrame(() => this._loop());
+  // On-demand render loop — see DouScene._anim: renders only while something animates, stops when the
+  // table settles (idle game → 0 frames). _kick() (called from every mutator) wakes it. Cosmetic pulses
+  // freeze when idle.
+  _kick() { if (!this._running) { this._running = true; this.clock.getDelta(); requestAnimationFrame(() => this._anim()); } }
+  _anim() {
     const dt = Math.min(0.05, this.clock.getDelta());
     const a = 1 - Math.pow(0.0015, dt);
     const now = performance.now();
     const dealing = this._deal && this._deal.active;
+    let active = false;
     for (const r of this.cards.values()) {
       if (!r.target) continue;
       if (dealing && r.key && this._deal.serveAt.has(r.key) && now < this._deal.serveAt.get(r.key)) {
         const s = Math.min((this._deal.idx.get(r.key) || 0), 60) * 0.004;
         r.mesh.position.set(this._deal.deck.x, this._deal.deck.y + s, this._deal.deck.z);
         r.mesh.quaternion.copy(this._deal.quat);
+        active = true;
+        continue;
+      }
+      const sv = r.target.scale;
+      if (r.mesh.position.distanceToSquared(r.target.pos) < 1e-6 &&
+          Math.abs(Math.abs(r.mesh.quaternion.dot(r.target.quat)) - 1) < 1e-6 &&
+          Math.abs(r.mesh.scale.x - sv) < 1e-3) {
+        r.mesh.position.copy(r.target.pos); r.mesh.quaternion.copy(r.target.quat); r.mesh.scale.setScalar(sv);
         continue;
       }
       r.mesh.position.lerp(r.target.pos, a);
       r.mesh.quaternion.slerp(r.target.quat, a);
-      const s = r.target.scale; r.mesh.scale.lerp(new THREE.Vector3(s, s, s), a);
+      r.mesh.scale.lerp(new THREE.Vector3(sv, sv, sv), a);
+      active = true;
     }
     if (this._turnRingActive >= 0 && this.turnRing) {
       const target = this._turnSpin[this._turnRingActive];
       let d = target - this.turnRing.rotation.z;
       d = Math.atan2(Math.sin(d), Math.cos(d));
-      this.turnRing.rotation.z += d * a;
+      if (Math.abs(d) > 1e-4) { this.turnRing.rotation.z += d * a; active = true; }
+      else this.turnRing.rotation.z = target;
       this.turnRing.material.opacity = 0.55 + 0.35 * Math.sin(now / 320);
     }
-    if (this._fx.length) this._fx = this._fx.filter((fx) => fx(now, dt));
+    if (this._fx.length) { this._fx = this._fx.filter((fx) => fx(now, dt)); if (this._fx.length) active = true; }
     if (this._shake) {
       const left = this._shake.until - now;
       if (left <= 0) { this._shake = null; this.camera.position.copy(this._camPos); }
-      else { const m = this._shake.mag * (left / this._shake.dur); this.camera.position.set(this._camPos.x + (Math.random() * 2 - 1) * m, this._camPos.y + (Math.random() * 2 - 1) * m, this._camPos.z + (Math.random() * 2 - 1) * m); }
+      else { const m = this._shake.mag * (left / this._shake.dur); this.camera.position.set(this._camPos.x + (Math.random() * 2 - 1) * m, this._camPos.y + (Math.random() * 2 - 1) * m, this._camPos.z + (Math.random() * 2 - 1) * m); active = true; }
     }
     this.renderer.render(this.scene, this.camera);
+    if (active) requestAnimationFrame(() => this._anim());
+    else this._running = false;
   }
 
   // ---- combo effects ------------------------------------------------------
@@ -439,6 +457,7 @@ export class GuandanScene {
       sp.material.opacity = Math.sin(t * Math.PI);
       return true;
     });
+    this._kick();
   }
   // An orange burst + camera shake when a 炸弹 / 天王炸 is played.
   bombFx() {
@@ -457,6 +476,7 @@ export class GuandanScene {
       const s = 2 + t * 9; sp.scale.set(s, s, 1); sp.material.opacity = 1 - t;
       return true;
     });
+    this._kick();
   }
 
   // Deal animation: every card starts stacked at a centre "deck" and is served one at a time,
@@ -474,6 +494,7 @@ export class GuandanScene {
     order.forEach((k, i) => { serveAt.set(k, t0 + i * SERVE); idx.set(k, order.length - i); });
     const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
     this._deal = { active: true, serveAt, idx, deck: new THREE.Vector3(0, 0.07, 0), quat };
-    return new Promise((res) => setTimeout(() => { if (this._deal) this._deal.active = false; res(); }, order.length * SERVE + FLIGHT + 120));
+    this._kick();
+    return new Promise((res) => setTimeout(() => { if (this._deal) this._deal.active = false; this._kick(); res(); }, order.length * SERVE + FLIGHT + 120));
   }
 }

@@ -109,7 +109,7 @@ function boot() {
   window.addEventListener('resize', positionOverlays);
   window.addEventListener('resize', () => drawTurnTimer());
   updateScoreboard(null);
-  pollPad();
+  startPadPolling();
   if (ONLINE) startOnline();
 }
 
@@ -502,10 +502,21 @@ function focusCursor(hand) {
 
 // ---- input: gamepad (Xbox) -------------------------------------------------
 let padPrev = {};
+// Gamepad polling runs ONLY while a controller is connected (battery: a touch-only iPad never wakes the
+// CPU 60×/s for a pad that isn't there). gamepadconnected starts the loop; the loop stops itself once no
+// pad remains. Kick once at load in case a pad is already present (e.g. page reload with pad attached).
+let padLoopOn = false;
+function startPadPolling() {
+  if (padLoopOn) return;
+  padLoopOn = true;
+  pollPad();
+}
+addEventListener('gamepadconnected', startPadPolling);
 function pollPad() {
-  requestAnimationFrame(pollPad);
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  const gp = [...pads].find((p) => p); if (!gp) return;
+  const gp = [...pads].find((p) => p);
+  if (!gp) { padLoopOn = false; return; } // no pad → stop polling until the next gamepadconnected
+  requestAnimationFrame(pollPad);
   const g = state.backend && state.backend.getState();
   const press = (i) => gp.buttons[i] && gp.buttons[i].pressed;
   const edge = (i) => { const now = press(i); const was = padPrev[i]; padPrev[i] = now; return now && !was; };

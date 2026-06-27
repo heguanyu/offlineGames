@@ -93,7 +93,7 @@ function boot() {
   $('scene').addEventListener('pointerdown', onPointerDown);
   window.addEventListener('keydown', onKey);
   window.addEventListener('resize', positionOverlays);
-  pollPad();
+  startPadPolling();
 }
 function markDiff(btn) { for (const b of document.querySelectorAll('.diff-btn')) b.classList.toggle('sel', b === btn); }
 
@@ -441,10 +441,20 @@ function focusCursor(hand) { state.hint = new Set(hand[state.cursor] ? [hand[sta
 
 // ---- input: gamepad (Xbox) -------------------------------------------------
 let padPrev = {};
+// Poll the gamepad ONLY while one is connected (battery: a touch iPad never wakes the CPU for an absent
+// pad). gamepadconnected starts the loop; it self-stops when no pad remains. See doudizhu/main.js.
+let padLoopOn = false;
+function startPadPolling() {
+  if (padLoopOn) return;
+  padLoopOn = true;
+  pollPad();
+}
+addEventListener('gamepadconnected', startPadPolling);
 function pollPad() {
-  requestAnimationFrame(pollPad);
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  const gp = [...pads].find((p) => p); if (!gp) return;
+  const gp = [...pads].find((p) => p);
+  if (!gp) { padLoopOn = false; return; } // no pad → stop until the next gamepadconnected
+  requestAnimationFrame(pollPad);
   const g = state.backend && state.backend.getState() && state.backend.getState().round;
   const press = (i) => gp.buttons[i] && gp.buttons[i].pressed;
   const edge = (i) => { const now = press(i); const was = padPrev[i]; padPrev[i] = now; return now && !was; };
