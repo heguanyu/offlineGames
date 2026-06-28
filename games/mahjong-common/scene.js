@@ -9,6 +9,7 @@
 import * as THREE from './lib/three.module.min.js';
 import { suitOf, rankOf, shuffle } from './engine-core.js';
 import { ringColor } from './timer-ring.js';
+import { is3DLite, apply3DProfile } from '../../shared/power-mode.js';
 
 const TW = 1.0, TH = 1.35, TD = 0.62; // tile width / height / depth
 const FELT = 16;
@@ -170,9 +171,10 @@ function drawFace(cv, kind, wild) {
 export class MahjongScene {
   constructor(canvas) {
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
-    this.renderer.shadowMap.enabled = true;
+    // 省电模式: 均衡 tier drops antialias/shadows/Retina super-sampling (see shared/power-mode.js).
+    const lite = is3DLite();
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !lite });
+    apply3DProfile(this.renderer);
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;

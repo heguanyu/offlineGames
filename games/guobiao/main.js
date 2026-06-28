@@ -8,6 +8,7 @@ import { LEVELS, LEVEL_NAMES } from './ai.js';
 import { createBackend } from './backend.js';
 import { MahjongScene } from '../mahjong-common/scene.js';
 import { MahjongScene2D } from '../mahjong-common/scene2d.js';
+import { useFlatRenderer, applyFlatScale, mountPowerControl } from '../../shared/power-mode.js';
 import { Sound } from '../mahjong-common/sound.js';
 import { buildOrder } from '../mahjong-common/handorder.js';
 import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape, renderSeatHands } from '../mahjong-common/ui-util.js';
@@ -52,7 +53,7 @@ const FLAT = (() => {
   const q = new URLSearchParams(location.search);
   if (q.get('flat')) return true;
   if (q.get('d3')) return false;
-  return Math.min(screen.width, screen.height) < 600 || /iPhone|iPod/.test(navigator.userAgent);
+  return useFlatRenderer(); // 省电模式: 省电→2D, 流畅/均衡→3D, unset→phones 2D (shared/power-mode.js)
 })();
 if (FLAT) {
   document.body.classList.add('flat');
@@ -60,6 +61,7 @@ if (FLAT) {
   const hdr = document.querySelector('header');
   const ss = document.getElementById('score-stack'), ri = document.getElementById('round-info');
   if (ss && hdr) hdr.insertBefore(ss, ri ? ri.nextSibling : hdr.firstChild);
+  applyFlatScale(document.getElementById('table')); // 省电 (2D) on a tablet: scale the flat board to fill the screen
 }
 const Renderer = FLAT ? MahjongScene2D : MahjongScene;
 
@@ -691,6 +693,7 @@ class GuobiaoGame extends MahjongGame {
     $('menu-rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
     $('rules-close').addEventListener('click', () => $('rules-overlay').classList.add('hidden'));
     $('menu-btn').addEventListener('click', () => this.openMenu());
+    mountPowerControl($('menu-hub-btn').parentNode, $('menu-hub-btn')); // 省电模式 picker, above 返回
     const sb = $('sound-btn'); const upd = () => { sb.textContent = sound.muted ? '🔇' : '🔊'; };
     sb.addEventListener('click', () => { sound.resume(); sound.toggleMuted(); upd(); }); upd();
     const fastChk = $('fast-mode-chk');

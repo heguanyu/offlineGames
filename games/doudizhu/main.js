@@ -6,6 +6,7 @@ import { legalMoves, classify, beats, rankLabel, COMBO } from './engine.js';
 import { chooseMove } from './ai.js';
 import { DouScene } from './scene.js';
 import { DouScene2D } from './scene2d.js';
+import { useFlatRenderer, applyFlatScale, mountPowerControl } from '../../shared/power-mode.js';
 import { SmartSelection } from './select.js';
 import { sfx, speak, setMuted, isMuted, resume } from './sound.js';
 import { serverUrl } from '../mahjong-common-online/server-url.js';
@@ -21,12 +22,13 @@ const VIEWER = QS.has('viewer');
 const LOBBY_URL = '../mahjong-common-online/?game=doudizhu';
 // FAST is a hidden test override (?fast=1) — there's no user-facing 快速 mode.
 const FAST = new URLSearchParams(location.search).has('fast');
-// Phones use the flat 2D DOM board (rectangle table); desktops use the 3D scene. ?flat=1 / ?d3=1 override.
+// Renderer choice: the flat 2D DOM board vs the 3D scene. Driven by 省电模式 (shared/power-mode.js):
+// 省电→2D, 流畅/均衡→3D, unset→phones 2D / tablets+desktop 3D. ?flat=1 / ?d3=1 override (tests).
 const FLAT = (() => {
   const p = new URLSearchParams(location.search);
   if (p.has('d3')) return false;
   if (p.has('flat')) return true;
-  return Math.min(screen.width, screen.height) < 600 || /iPhone|iPod/.test(navigator.userAgent);
+  return useFlatRenderer();
 })();
 document.body.classList.toggle('flat', FLAT);
 const LS = {
@@ -87,6 +89,8 @@ function boot() {
   state.scene = new (FLAT ? DouScene2D : DouScene)($('scene'));
   // mobile (flat) mode is always landscape — rotate the page when the phone is held portrait
   if (FLAT) forceLandscape((portrait) => { state.scene.setRotated(portrait); state.scene.resize(); if (state.backend) render(); });
+  // 省电 (2D) on a tablet: scale the phone-sized flat board up to fill the bigger screen.
+  if (FLAT) applyFlatScale($('table'));
   state.level = LS.level;
   setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊';
 
@@ -99,6 +103,7 @@ function boot() {
   $('result-home').addEventListener('click', returnHome);
   $('mute-btn').addEventListener('click', () => { LS.mute = !isMuted(); setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊'; });
   $('menu-btn').addEventListener('click', () => { $('menu-overlay').hidden = false; });
+  mountPowerControl($('menu-home').parentNode, $('menu-home')); // 省电模式 picker, above 返回大厅
   $('menu-continue').addEventListener('click', () => { $('menu-overlay').hidden = true; });
   $('menu-restart').addEventListener('click', () => { LS.scores = [0, 0, 0]; updateScoreboard(null); $('menu-overlay').hidden = true; $('result-overlay').hidden = true; newGame(); });
   $('menu-home').addEventListener('click', returnHome);

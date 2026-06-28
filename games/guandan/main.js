@@ -6,16 +6,18 @@ import { legalMoves, classify, rankLabel, isWild, teamOf, partnerOf, isBombType,
 import { chooseMove, orderedHints, cleanestBeat } from './ai.js';
 import { GuandanScene } from './scene.js';
 import { GuandanScene2D } from './scene2d.js';
+import { useFlatRenderer, applyFlatScale, mountPowerControl } from '../../shared/power-mode.js';
 import { SmartSelection } from './select.js';
 import { sfx, speak, setMuted, isMuted, resume } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const FAST = new URLSearchParams(location.search).has('fast');
+// Renderer choice driven by 省电模式 (shared/power-mode.js); ?flat=1 / ?d3=1 override (tests).
 const FLAT = (() => {
   const p = new URLSearchParams(location.search);
   if (p.has('d3')) return false;
   if (p.has('flat')) return true;
-  return Math.min(screen.width, screen.height) < 600 || /iPhone|iPod/.test(navigator.userAgent);
+  return useFlatRenderer();
 })();
 document.body.classList.toggle('flat', FLAT);
 
@@ -72,6 +74,7 @@ function forceLandscape(apply) {
 function boot() {
   state.scene = new (FLAT ? GuandanScene2D : GuandanScene)($('scene'));
   if (FLAT) forceLandscape((portrait) => { state.scene.setRotated(portrait); state.scene.resize(); if (state.backend) render(); });
+  if (FLAT) applyFlatScale($('table')); // 省电 (2D) on a tablet: scale the flat board to fill the screen
   state.level = LS.level;
   setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊';
 
@@ -86,6 +89,7 @@ function boot() {
   $('result-home').addEventListener('click', () => { location.replace('../../index.html'); });
   $('mute-btn').addEventListener('click', () => { LS.mute = !isMuted(); setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊'; });
   $('menu-btn').addEventListener('click', () => { $('menu-overlay').hidden = false; });
+  mountPowerControl($('menu-home').parentNode, $('menu-home')); // 省电模式 picker, above 返回大厅
   $('menu-continue').addEventListener('click', () => { $('menu-overlay').hidden = true; });
   $('menu-restart').addEventListener('click', () => { LS.progress = null; $('menu-overlay').hidden = true; $('result-overlay').hidden = true; newMatch(false); });
   $('menu-home').addEventListener('click', () => { location.replace('../../index.html'); });

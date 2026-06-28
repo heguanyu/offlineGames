@@ -7,6 +7,7 @@
 // selection lifts, hand reflow, and cards sliding to the centre come for free.
 import * as THREE from '../poker-common/lib/three.module.min.js';
 import { rankLabel } from './engine.js';
+import { is3DLite, apply3DProfile } from '../../shared/power-mode.js';
 
 const CW = 1.0, CH = 1.45, CD = 0.014;  // card width / height / depth (very thin cards)
 const FELT = 15;
@@ -162,9 +163,11 @@ function roundedCardGeo() {
 export class DouScene {
   constructor(canvas) {
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
-    this.renderer.shadowMap.enabled = true;             // a centered key light + soft shadows (like the mahjong table)
+    // 省电模式: the 均衡 (balanced) tier drops antialias/shadows/Retina super-sampling for ~½–¾ the
+    // per-frame GPU fill; 流畅 keeps the full look. antialias must be set at construction.
+    const lite = is3DLite();
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !lite });
+    apply3DProfile(this.renderer); // pixelRatio + shadowMap.enabled per tier
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;

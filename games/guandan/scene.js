@@ -8,6 +8,7 @@
 // Turn order 0→1→2→3 clockwise. The ♥-level wildcards glow purple so you can spot 逢人配 at a glance.
 import * as THREE from '../poker-common/lib/three.module.min.js';
 import { rankLabel, isWild } from './engine.js';
+import { is3DLite, apply3DProfile } from '../../shared/power-mode.js';
 
 const CW = 1.0, CH = 1.45, CD = 0.014;
 const FELT = 16;
@@ -154,9 +155,10 @@ function roundedCardGeo() {
 export class GuandanScene {
   constructor(canvas) {
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
-    this.renderer.shadowMap.enabled = true;
+    // 省电模式: 均衡 tier drops antialias/shadows/Retina super-sampling (see shared/power-mode.js).
+    const lite = is3DLite();
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !lite });
+    apply3DProfile(this.renderer);
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
