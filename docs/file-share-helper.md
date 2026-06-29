@@ -63,7 +63,13 @@ New page (a Tools-section entry, sits at repo root next to `voicepick/` and `tou
   Back button uses `onclick="event.preventDefault(); location.replace('../')"` like other tools.
 - `fileshare/fileshare.css` — styles (dark theme matching the hub).
 - `fileshare/main.js` — orchestrator: host vs guest mode (by `#r=` hash), UI wiring, picker buttons,
-  received-files list + download, status.
+  received-files list + download, status. The receive panel is multi-select: each finished file gets a
+  checkbox; "保存到相册 / 分享" hands the selected files to the native share sheet where
+  `navigator.canShare({files})` is supported (iOS → "存储 N 张图像" into Photos, or 存储到文件 — files
+  stay separate), and "打包 .zip" bundles them into one archive for desktop (one download; Photos isn't
+  a desktop concept). A single selected file always saves as-is. Per-file one-tap "保存" links remain.
+- `fileshare/zip.js` — minimal store-only (no-compression) ZIP writer, zero deps, for the desktop
+  batch download. Builds the archive in memory from the received Blobs; per-file size is uint32 (< 4 GB).
 - `fileshare/signaling.js` — thin WS client: `serverUrl()` from
   `../games/mahjong-common-online/server-url.js`; create/join/signal/leave; reconnect-tolerant.
 - `fileshare/rtc.js` — `RTCPeerConnection` + DataChannel; chunked file send with backpressure
@@ -75,7 +81,8 @@ New page (a Tools-section entry, sits at repo root next to `voicepick/` and `tou
 Server (signaling only — no file bytes touch it):
 
 - `server/fileshare.js` — `fsRooms` Map, `handleFs(client, msg, send)` for
-  `fs-create | fs-join | fs-signal | fs-leave`, `fsOnClose(client)`, and a TTL/rate-limit sweep.
+  `fs-create | fs-join | fs-signal | fs-resume | fs-repair | fs-leave`, `fsOnClose(client)` (grace,
+  not teardown), and a TTL / disconnect-grace / rate-limit sweep.
 - `server/index.js` — wire it: in `handle()` route `msg.type` starting with `fs-` to `handleFs`
   before the lobby switch (mirrors how `action` is handled early); call `fsOnClose` in `ws.on('close')`.
   No change to lobby/table/score plumbing.
@@ -84,18 +91,29 @@ Hub + caching:
 
 - `index.html` — add a 文件共享助手 card to the 工具 (Tools) section, with `data-i18n` keys and
   zh/en strings in the `I18N` dict.
-- `sw.js` — **bump `CACHE` patch version**; add the new `fileshare/*` files to `ASSETS` (qr.js too),
-  or offline load breaks. (server-url.js is already cached.)
+- `sw.js` — **bump `CACHE` patch version**; add the new `fileshare/*` files to `ASSETS` (qr.js +
+  zip.js too), or offline load breaks. (server-url.js is already cached.)
 
 ## Signaling protocol (new `fs-*` message types, isolated from the lobby)
 
 Client→server:
-- `{type:'fs-create'}` → server makes a room, replies `{type:'fs-created', room}`.
+- `{type:'fs-create'}` → server makes a room, replies `{type:'fs-created', room, token}`.
 - `{type:'fs-join', room}` → server validates (exists / not expired / not full / rate-ok); on success
-  locks the room and sends both peers `{type:'fs-peer', role:'host'|'guest', polite}`; else
-  `{type:'fs-error', code:'gone'|'full'|'rate'}`.
-- `{type:'fs-signal', room, data}` → relayed verbatim to the *other* peer as `{type:'fs-signal', data}`.
-- `{type:'fs-leave', room}` → teardown; peer gets `{type:'fs-peer-gone'}`.
+  locks the room and sends both peers `{type:'fs-peer', role:'host'|'guest', polite, room, token}`;
+  else `{type:'fs-error', code:'gone'|'full'|'rate'}`.
+- `{type:'fs-signal', data}` → relayed verbatim to the *other* peer as `{type:'fs-signal', data}`.
+- `{type:'fs-resume', room, role, token}` → re-attach after a socket reconnect (screen lock / brief
+  background); valid token → both peers re-paired with a fresh `fs-peer`; bad/expired → `fs-peer-gone`.
+- `{type:'fs-repair'}` → both sockets up but the P2P link died → server re-issues `fs-peer` to both.
+- `{type:'fs-leave'}` → explicit teardown; peer gets `{type:'fs-peer-gone'}`.
+
+**Connection lifetime ≠ socket lifetime.** A signaling-socket drop is benign — iOS freezes the page
+(and its WebSocket) on screen-lock or while a download save-sheet is up. So a dropped socket does NOT
+end the session: `fsOnClose` keeps the room for `DISCONNECT_GRACE_MS` (120s) and tells the surviving
+peer `{type:'fs-peer-stale'}` ("重连中…"). The dropped side reconnects → `fs-resume` (proven by its
+per-slot `token`) → both rebuild the WebRTC link. Only an explicit `fs-leave` or a grace timeout ends
+the session with `fs-peer-gone`. The client treats every `fs-peer` as "(re)build a fresh PeerLink
+now", preserving the transfer list across a recovery.
 
 Server rules: **room id = 9-char case-insensitive alphanumeric** (A–Z 0–9, ≈ 46 bits), normalized to
 uppercase server-side; displayed grouped **3-3-3 joined by `-`** (e.g. `AB3-7KP-9QZ`), input ignores

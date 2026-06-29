@@ -5,6 +5,7 @@
 import { Signaling } from './signaling.js';
 import { PeerLink } from './rtc.js';
 import { drawQR } from './qr.js';
+import { makeZip } from './zip.js';
 
 const $ = (id) => document.getElementById(id);
 const VIEWS = ['offline', 'landing', 'host', 'code', 'scan', 'transfer'];
@@ -12,13 +13,15 @@ function showView(name) { for (const v of VIEWS) $('view-' + v).hidden = v !== n
 
 // Don't let app-nav.js's background SW-update reload the page while a share session is live — that
 // would drop the pairing / interrupt a transfer (this page has none of the generic "busy" markers).
-window.appBusy = () => !!link;
+window.appBusy = () => !!(link || session);
 
 const sig = new Signaling();
 let link = null;          // PeerLink once paired
 let joining = false;      // a join is in flight (blocks duplicate submits until peer/error)
 let myRoom = null;        // code we're hosting
 let pendingJoin = null;   // code to auto-join once the socket opens
+let session = null;       // { room, role, token } — the live pairing; survives signaling reconnects
+let lastRepair = 0;       // debounce fs-repair so a flapping RTC link can't spam the server
 
 // ---- helpers --------------------------------------------------------------
 const onlyCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 9);
@@ -36,14 +39,22 @@ function fmtBytes(n) {
 
 // ---- connection status ----------------------------------------------------
 function setConn(s) { const el = $('conn'); el.className = 'conn ' + s; el.title = { on: '已连接', off: '未连接', connecting: '连接中…' }[s]; }
-sig.addEventListener('open', () => { setConn('on'); if (pendingJoin) { sig.join(pendingJoin); pendingJoin = null; } });
+sig.addEventListener('open', () => {
+  setConn('on');
+  // The socket (re)connected. If we're mid-session, re-attach to our room so a screen-lock /
+  // background drop doesn't end the share — the server rebuilds the link if both peers are back.
+  if (session) sig.resume(session.room, session.role, session.token);
+  else if (pendingJoin) { sig.join(pendingJoin); pendingJoin = null; }
+});
 sig.addEventListener('close', () => setConn('off'));
 
 // ---- pairing: signaling events -------------------------------------------
 sig.addEventListener('fs-created', (e) => { myRoom = e.detail.room; showHost(myRoom); });
-sig.addEventListener('fs-peer', (e) => startLink(e.detail.polite));
+sig.addEventListener('fs-peer', (e) => establishLink(e.detail));
 sig.addEventListener('fs-error', (e) => onPairError(e.detail.code));
 sig.addEventListener('fs-peer-gone', () => onPeerGone());
+// The peer's socket dropped (lock/background) but the session lives — wait for it to come back.
+sig.addEventListener('fs-peer-stale', () => { if (link) { $('link-status').textContent = '对方暂时离开，等待重连…'; setPickersEnabled(false); } });
 
 function showHost(code) {
   drawQR($('qr'), location.origin + location.pathname + '#r=' + code, { scale: 6, dark: '#0e1630', light: '#ffffff' });
@@ -62,41 +73,73 @@ function onPairError(code) {
   else { showView('landing'); }
 }
 
+// The session truly ended (explicit leave or the grace window expired). Tear down for real.
 function onPeerGone() {
+  session = null;
   if (link) { link.close(); link = null; }
   showView('landing');
 }
 
+// If our P2P link drops while signaling is still up (NAT rebind, etc.), the host asks the server to
+// re-issue the pairing so both sides rebuild. A signaling-socket drop instead recovers via fs-resume
+// on reconnect, so we only act while the socket is open. Debounced against a flapping link.
+function maybeRecover() {
+  if (!session) return;
+  if (!(sig.ws && sig.ws.readyState === WebSocket.OPEN)) return; // socket down → fs-resume will rebuild
+  if (session.role !== 'host') return; // only the impolite peer re-offers (avoids dueling rebuilds)
+  const now = Date.now();
+  if (now - lastRepair < 4000) return;
+  lastRepair = now;
+  sig.repair();
+}
+
 // ---- the WebRTC link + transfer UI ---------------------------------------
-function startLink(polite) {
-  if (link) return; // ignore a duplicate fs-peer (already linked)
+// Build (or REBUILD) the peer link. Called on the initial pairing and again on every resume/repair —
+// the server re-sends fs-peer to mean "establish RTC now", so we always replace any prior transport
+// with a fresh RTCPeerConnection. The transfer history is preserved across a rebuild (recovery), and
+// only reset when a brand-new session starts.
+function establishLink({ polite, room, role, token }) {
   joining = false;
-  link = new PeerLink(sig, { polite });
-  resetLists();
+  if (room) session = { room, role, token };
+  const fresh = !link;
+  if (link) { link.close(); link = null; } // drop the dead transport before building the new one
+  const l = link = new PeerLink(sig, { polite });
+  if (fresh) resetLists();
   $('link-status').textContent = '正在建立直连…';
   setPickersEnabled(false);
   showView('transfer');
 
-  link.addEventListener('open', () => { $('link-status').textContent = '已连接，可互传文件'; setPickersEnabled(true); });
-  link.addEventListener('peerstate', (e) => { if (e.detail === 'failed') $('link-status').textContent = '直连失败（网络受限）'; });
-  link.addEventListener('channelclose', () => onPeerGone());
+  // Each handler ignores events from a superseded link (l !== link) so a rebuild's teardown of the old
+  // PeerLink can't fire channelclose and bounce us to the landing view.
+  l.addEventListener('open', () => { if (link === l) { $('link-status').textContent = '已连接，可互传文件'; setPickersEnabled(true); } });
+  l.addEventListener('peerstate', (e) => {
+    if (link !== l) return;
+    if (e.detail === 'disconnected') { $('link-status').textContent = '连接中断，重连中…'; setPickersEnabled(false); } // ICE may self-heal — wait
+    else if (e.detail === 'failed') { $('link-status').textContent = '连接中断，重连中…'; setPickersEnabled(false); maybeRecover(); } // terminal → rebuild
+  });
+  l.addEventListener('channelclose', () => { if (link === l) { $('link-status').textContent = '连接中断，重连中…'; setPickersEnabled(false); maybeRecover(); } });
 
   // outgoing
-  link.addEventListener('queued', (e) => addItem('out', e.detail.id, e.detail.name, e.detail.size));
-  link.addEventListener('sent', (e) => completeItem('out', e.detail.id));
-  link.addEventListener('sendfail', (e) => failItem('out', e.detail.id));
+  l.addEventListener('queued', (e) => addItem('out', e.detail.id, e.detail.name, e.detail.size));
+  l.addEventListener('sent', (e) => completeItem('out', e.detail.id));
+  l.addEventListener('sendfail', (e) => failItem('out', e.detail.id));
   // incoming
-  link.addEventListener('incoming', (e) => addItem('in', e.detail.id, e.detail.name, e.detail.size));
-  link.addEventListener('received', (e) => receiveItem(e.detail));
+  l.addEventListener('incoming', (e) => addItem('in', e.detail.id, e.detail.name, e.detail.size));
+  l.addEventListener('received', (e) => receiveItem(e.detail));
   // both directions report progress
-  link.addEventListener('progress', (e) => updateProgress(e.detail.dir, e.detail.id, e.detail.done, e.detail.total));
+  l.addEventListener('progress', (e) => updateProgress(e.detail.dir, e.detail.id, e.detail.done, e.detail.total));
 }
 
 function setPickersEnabled(on) { for (const id of ['pick-files', 'pick-media']) $(id).disabled = !on; $('dropzone').classList.toggle('disabled', !on); }
 
 // ---- transfer list rendering ---------------------------------------------
 const itemEls = { out: new Map(), in: new Map() };
-function resetLists() { for (const dir of ['out', 'in']) { itemEls[dir].clear(); $(dir + '-list').innerHTML = '<li class="empty muted">暂无</li>'; } }
+const received = new Map(); // id → { name, blob } for every fully-received file (the batch-save pool)
+function resetLists() {
+  for (const dir of ['out', 'in']) { itemEls[dir].clear(); $(dir + '-list').innerHTML = '<li class="empty muted">暂无</li>'; }
+  received.clear();
+  refreshInActions();
+}
 function addItem(dir, id, name, size) {
   const list = $(dir + '-list');
   const empty = list.querySelector('.empty'); if (empty) empty.remove();
@@ -116,10 +159,81 @@ function failItem(dir, id) { const li = itemEls[dir].get(id); if (li) li.querySe
 function receiveItem({ id, name, blob }) {
   const li = itemEls.in.get(id); if (!li) return;
   li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已接收';
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.className = 'dl'; a.href = url; a.download = name; a.textContent = '保存到文件';
+  received.set(id, { name, blob });
+
+  // checkbox + filename in one tappable row → drives the multi-select batch download
+  const fname = li.querySelector('.fname');
+  const head = document.createElement('label'); head.className = 'recv-head';
+  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'pick'; cb.checked = true;
+  cb.addEventListener('change', refreshInActions);
+  li.insertBefore(head, fname); head.appendChild(cb); head.appendChild(fname);
+
+  // keep a per-file one-tap save too (single download within the click gesture — iOS-safe)
+  const a = document.createElement('a'); a.className = 'dl'; a.href = URL.createObjectURL(blob); a.download = name; a.textContent = '保存';
   li.appendChild(a);
+  refreshInActions();
 }
+
+// ---- received-files panel: select-all → save to Photos/Files (mobile) or .zip (desktop) ----
+// iOS can't put a .zip into the Photo Library, but the native share sheet accepts MANY files at once
+// and offers "存储 N 张图像" (→ Photos) for images and "存储到文件" for the rest — i.e. the files arrive
+// separately, in one tap. So we prefer Web Share where it can share files (mobile), and fall back to a
+// single .zip on desktop, where Photos doesn't exist and one download beats N.
+const canShareFiles = (() => {
+  try { return !!(navigator.canShare && navigator.canShare({ files: [new File([new Blob([1])], 'p.bin')] })); }
+  catch { return false; }
+})();
+if (canShareFiles) $('share-selected').hidden = false;
+
+function refreshInActions() {
+  const actions = $('in-actions');
+  if (!received.size) { actions.hidden = true; return; }
+  actions.hidden = false;
+  const picks = [...received.keys()].map((id) => itemEls.in.get(id)?.querySelector('.pick')).filter(Boolean);
+  const checked = picks.filter((c) => c.checked).length;
+  const all = $('sel-all'); all.checked = checked === picks.length; all.indeterminate = checked > 0 && checked < picks.length;
+  const n = checked > 1 ? ` (${checked})` : '';
+  const zip = $('save-selected'); zip.disabled = checked === 0; zip.textContent = (checked > 1 ? '打包 .zip' : '下载') + n;
+  const share = $('share-selected'); share.disabled = checked === 0; share.textContent = '保存到相册 / 分享' + n;
+}
+function selectedFiles() {
+  const out = [];
+  for (const [id, f] of received) { const cb = itemEls.in.get(id)?.querySelector('.pick'); if (cb && cb.checked) out.push(f); }
+  return out;
+}
+function triggerDownload(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+function zipName() {
+  const d = new Date(); const p = (n) => String(n).padStart(2, '0');
+  return `文件共享_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.zip`;
+}
+$('sel-all').addEventListener('change', (e) => {
+  for (const id of received.keys()) { const cb = itemEls.in.get(id)?.querySelector('.pick'); if (cb) cb.checked = e.target.checked; }
+  refreshInActions();
+});
+// Mobile: hand the selected files to the OS share sheet — keep them as distinct files (→ Photos/Files).
+// Build the File[] synchronously so navigator.share() still runs inside the click gesture.
+$('share-selected').addEventListener('click', async () => {
+  const picks = selectedFiles();
+  if (!picks.length) return;
+  const files = picks.map((f) => new File([f.blob], f.name, { type: f.blob.type || 'application/octet-stream' }));
+  try { await navigator.share({ files }); }
+  catch (e) { if (e && e.name !== 'AbortError') triggerDownload(picks.length === 1 ? picks[0].blob : await makeZip(picks), picks.length === 1 ? picks[0].name : zipName()); }
+});
+// Desktop: a single file saves as-is; multiple bundle into one .zip.
+$('save-selected').addEventListener('click', async () => {
+  const picks = selectedFiles();
+  if (!picks.length) return;
+  if (picks.length === 1) { triggerDownload(picks[0].blob, picks[0].name); return; }
+  const btn = $('save-selected'); const label = btn.textContent;
+  btn.disabled = true; btn.textContent = '打包中…';
+  try { triggerDownload(await makeZip(picks), zipName()); }
+  finally { btn.textContent = label; refreshInActions(); }
+});
 
 // ---- file picking / drag-drop --------------------------------------------
 function sendFiles(files) { if (!link) return; for (const f of files) link.send(f); }
@@ -132,12 +246,12 @@ const dz = $('dropzone');
 ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'dragleave' && dz.contains(e.relatedTarget)) return; dz.classList.remove('drag'); }));
 dz.addEventListener('drop', (e) => { if (e.dataTransfer && e.dataTransfer.files.length) sendFiles(e.dataTransfer.files); });
 
-$('disconnect').addEventListener('click', () => { sig.leave(); if (link) { link.close(); link = null; } showView('landing'); });
+$('disconnect').addEventListener('click', () => { sig.leave(); session = null; if (link) { link.close(); link = null; } showView('landing'); });
 
 // ---- landing buttons ------------------------------------------------------
 $('btn-host').addEventListener('click', () => { if (sig.ws && sig.ws.readyState === WebSocket.OPEN) sig.create(); });
 $('btn-code').addEventListener('click', () => { $('code-error').hidden = true; clearCode(); showView('code'); setTimeout(() => boxes[0] && boxes[0].focus(), 50); });
-$('host-cancel').addEventListener('click', () => { sig.leave(); myRoom = null; showView('landing'); });
+$('host-cancel').addEventListener('click', () => { sig.leave(); myRoom = null; session = null; showView('landing'); });
 $('code-back').addEventListener('click', () => showView('landing'));
 $('code-join').addEventListener('click', submitCode);
 

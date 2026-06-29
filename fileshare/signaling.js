@@ -39,6 +39,10 @@ export class Signaling extends EventTarget {
   create() { this.send({ type: 'fs-create' }); }
   join(room) { this.send({ type: 'fs-join', room }); }
   signal(data) { this.send({ type: 'fs-signal', data }); }
+  // re-attach to an existing room after the socket reconnected (screen lock / brief background)
+  resume(room, role, token) { this.send({ type: 'fs-resume', room, role, token }); }
+  // both sockets up but the P2P link died — ask the server to re-issue the pairing
+  repair() { this.send({ type: 'fs-repair' }); }
   leave() { this.send({ type: 'fs-leave' }); }
 
   close() { this.closed = true; clearTimeout(this.retry); try { this.ws && this.ws.close(); } catch {} }

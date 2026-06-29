@@ -101,6 +101,13 @@
           <div class="list-col">
             <h2>接收</h2>
             <ul id="in-list" class="xfer-list"><li class="empty muted">暂无</li></ul>
+            <div id="in-actions" class="in-actions" hidden>
+              <label class="sel-all"><input type="checkbox" id="sel-all" checked> 全选</label>
+              <!-- mobile: native share sheet → "存储 N 张图像" to Photos, or "存储到文件" -->
+              <button id="share-selected" class="primary" type="button" hidden>保存到相册 / 分享</button>
+              <!-- desktop: one .zip (Photos isn't a thing on PC) -->
+              <button id="save-selected" class="primary" type="button">打包 .zip</button>
+            </div>
           </div>
         </div>
 

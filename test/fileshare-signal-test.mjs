@@ -3,7 +3,7 @@
 // locks at 2 peers (3rd rejected) → signal relays only to the peer → close notifies + frees → bad /
 // missing codes error → join rate-limit. No real server/socket needed.
 // Usage: node test/fileshare-signal-test.mjs
-import { handleFs, fsOnClose, normalizeCode, _fsRooms } from '../server/fileshare.js';
+import { handleFs, fsOnClose, fsSweepOnce, normalizeCode, _fsRooms } from '../server/fileshare.js';
 
 let failed = 0;
 const ok = (cond, msg) => { if (!cond) { console.log('  FAIL:', msg); failed++; } };
@@ -36,10 +36,38 @@ const gBefore = host.ws.sent.length;
 handleFs(guest, { type: 'fs-signal', data: { candidate: 'x' } }, 'ipG');
 ok(last(host).type === 'fs-signal' && last(host).data.candidate === 'x', 'guest signal relayed to host');
 
-// ---- peer leaves → survivor notified + room freed --------------------------
+// ---- socket drop is NOT a leave: room is kept for a grace window -----------
+// A dropped socket (screen lock / background) must not end the session — the peer is told 'stale'
+// and the room survives so the dropped side can resume.
 fsOnClose(host);
-ok(last(guest).type === 'fs-peer-gone', 'guest told peer-gone on host close');
-ok(!_fsRooms.has(code), 'room removed after a peer left');
+ok(last(guest).type === 'fs-peer-stale', 'guest told peer-stale (not gone) on host socket drop');
+ok(_fsRooms.has(code), 'room kept alive after a socket drop (resume window)');
+
+// ---- resume: the dropped peer re-attaches with its token → both re-paired --
+const newHost = mkClient();
+handleFs(newHost, { type: 'fs-resume', room: code, role: 'host', token: created.token }, 'ipH');
+ok(last(newHost).type === 'fs-peer' && last(newHost).polite === false, 'resumed host re-paired (fs-peer)');
+ok(last(guest).type === 'fs-peer', 'guest re-paired when peer resumed');
+// a resume with the wrong token is refused as a dead session
+const impostor = mkClient();
+handleFs(impostor, { type: 'fs-resume', room: code, role: 'guest', token: 'WRONGTOKENWRONGTOKEN0000' }, 'ipI');
+ok(last(impostor).type === 'fs-peer-gone', 'resume with a bad token → peer-gone (refused)');
+
+// ---- grace expiry: a drop that never resumes ends the session --------------
+fsOnClose(guest);
+ok(last(newHost).type === 'fs-peer-stale', 'host told peer-stale on guest drop');
+fsSweepOnce(Date.now() + 10 * 60_000); // jump past the grace deadline
+ok(last(newHost).type === 'fs-peer-gone', 'survivor told peer-gone after the grace window expires');
+ok(!_fsRooms.has(code), 'room removed once the grace window expires');
+
+// ---- explicit leave → survivor notified immediately + room freed -----------
+const h2 = mkClient(), g2 = mkClient();
+handleFs(h2, { type: 'fs-create' }, 'ipH2');
+const code2 = last(h2).room;
+handleFs(g2, { type: 'fs-join', room: code2 }, 'ipG2');
+handleFs(h2, { type: 'fs-leave' }, 'ipH2');
+ok(last(g2).type === 'fs-peer-gone', 'guest told peer-gone immediately on explicit leave');
+ok(!_fsRooms.has(code2), 'room removed on explicit leave');
 
 // ---- error cases -----------------------------------------------------------
 const lonely = mkClient();

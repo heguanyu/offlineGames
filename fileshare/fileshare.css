@@ -105,4 +105,16 @@ button.secondary:active { background: #0f3460; }
 }
 .xfer-list a.dl:active { background: #0f3460; }
 
+/* received item: checkbox + filename on one tappable row */
+.recv-head { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.recv-head .fname { flex: 1; }
+.xfer-list .pick { width: 17px; height: 17px; flex: none; accent-color: #4a78d6; }
+
+/* receive panel toolbar: select-all + save actions (share sheet / .zip) */
+.in-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.in-actions .sel-all { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #b9b9d6; cursor: pointer; }
+.in-actions .sel-all input { width: 16px; height: 16px; accent-color: #4a78d6; }
+.in-actions button { flex: 1; min-width: 96px; padding: 9px 12px; font-size: 0.85rem; }
+.in-actions button:disabled { opacity: 0.5; }
+
 @media (max-width: 460px) { .lists { flex-direction: column; gap: 14px; } }
