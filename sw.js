@@ -1,13 +1,14 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.6.6';
+const CACHE = 'offline-games-0.6.7';
 
 const ASSETS = [
   './',
   './index.html',
   './sw.js', // cached so the hub can read the version offline
   './app-nav.js', // history-replace navigation (kills iOS edge-swipe back/forward) — on every page
+  './storage-check.html', // debug tool: inspect emulator IndexedDB + export/import saves across origins
   './manifest.webmanifest',
   './icons/icon-180.png',
   './icons/icon-512.png',
