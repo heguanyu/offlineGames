@@ -60,6 +60,11 @@
     <input id="token" type="password" placeholder="Admin token" autocomplete="off">
     <button id="connect">Connect</button>
   </div>
+  <div class="field" id="pk-row" hidden>
+    <button id="pk-login">🔑 Sign in with passkey</button>
+    <button id="pk-enroll" class="small">➕ Enroll passkey (token above, once)</button>
+    <button id="pk-forget" class="small" hidden>Sign out</button>
+  </div>
   <p id="status"></p>
   <div id="list"></div>
 
@@ -82,6 +87,8 @@
 
   let token = sessionStorage.getItem('emu-admin-token') || '';
   if (token) $('token').value = token;
+  // A passkey login mints this longer-lived session token so the raw admin token isn't needed again.
+  let session = localStorage.getItem('emu-admin-session') || '';
 
   function fmtBytes(b) {
     if (!b) return '0';
@@ -96,12 +103,92 @@
     return u8;
   }
 
+  function authHeaders() {
+    const h = {};
+    if (session) h['x-admin-session'] = session;
+    if (token) h['x-admin-token'] = token;
+    return h;
+  }
   async function api(qs) {
-    const res = await fetch(ADMIN() + qs, { headers: { 'x-admin-token': token } });
-    if (res.status === 401) throw new Error('Wrong admin token.');
+    const res = await fetch(ADMIN() + qs, { headers: authHeaders() });
+    if (res.status === 401) { if (session) { session = ''; localStorage.removeItem('emu-admin-session'); } throw new Error('Not authorized — enter the token or sign in with a passkey.'); }
     if (res.status === 503) throw new Error('Server has no ADMIN_TOKEN configured yet.');
     if (!res.ok) throw new Error('Server error ' + res.status);
     return res;
+  }
+
+  // ---- WebAuthn (passkey) ----
+  const onAzure = location.hostname.endsWith('azurewebsites.net');
+  function bufToB64url(buf) {
+    const u = new Uint8Array(buf); let s = '';
+    for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64urlToBuf(str) {
+    let s = String(str).replace(/-/g, '+').replace(/_/g, '/');
+    s += '='.repeat((4 - s.length % 4) % 4);
+    const bin = atob(s); const u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u.buffer;
+  }
+  async function pkApi(sub, method, body) {
+    const res = await fetch(ADMIN() + '/passkey/' + sub, {
+      method, headers: { ...authHeaders(), ...(body ? { 'content-type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('server ' + res.status));
+    return data;
+  }
+  async function enrollPasskey() {
+    if (!onAzure) { setStatus('Passkeys only work on the Azure URL (open this page there to enroll).', 'warn'); return; }
+    token = $('token').value.trim();
+    if (!token) { setStatus('Enter the admin token first to enroll a passkey.', 'warn'); return; }
+    sessionStorage.setItem('emu-admin-token', token);
+    setStatus('Creating passkey…');
+    try {
+      const opts = await pkApi('reg-options', 'POST');
+      opts.challenge = b64urlToBuf(opts.challenge);
+      opts.user.id = b64urlToBuf(opts.user.id);
+      opts.excludeCredentials = (opts.excludeCredentials || []).map((c) => ({ ...c, id: b64urlToBuf(c.id) }));
+      const cred = await navigator.credentials.create({ publicKey: opts });
+      const r = cred.response;
+      const out = await pkApi('reg-verify', 'POST', {
+        id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+        response: { clientDataJSON: bufToB64url(r.clientDataJSON), attestationObject: bufToB64url(r.attestationObject), transports: r.getTransports ? r.getTransports() : undefined },
+        clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+        authenticatorAttachment: cred.authenticatorAttachment || undefined,
+      });
+      setStatus('Passkey enrolled (' + out.count + ' total). Next time just tap “Sign in with passkey”.', 'ok');
+      refreshPkRow();
+    } catch (e) { setStatus('Enroll failed: ' + (e.message || e), 'bad'); }
+  }
+  async function loginPasskey() {
+    if (!onAzure) { setStatus('Passkeys only work on the Azure URL (open this page there to sign in).', 'warn'); return; }
+    setStatus('Waiting for passkey…');
+    try {
+      const opts = await pkApi('auth-options', 'POST');
+      opts.challenge = b64urlToBuf(opts.challenge);
+      opts.allowCredentials = (opts.allowCredentials || []).map((c) => ({ ...c, id: b64urlToBuf(c.id) }));
+      const cred = await navigator.credentials.get({ publicKey: opts });
+      const r = cred.response;
+      const out = await pkApi('auth-verify', 'POST', {
+        id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+        response: { clientDataJSON: bufToB64url(r.clientDataJSON), authenticatorData: bufToB64url(r.authenticatorData), signature: bufToB64url(r.signature), userHandle: r.userHandle ? bufToB64url(r.userHandle) : undefined },
+        clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+        authenticatorAttachment: cred.authenticatorAttachment || undefined,
+      });
+      session = out.session; localStorage.setItem('emu-admin-session', session);
+      setStatus('Signed in with passkey.', 'ok');
+      refreshPkRow();
+      connect();
+    } catch (e) { setStatus('Passkey sign-in failed: ' + (e.message || e), 'bad'); }
+  }
+  function refreshPkRow() {
+    const row = $('pk-row');
+    if (!window.PublicKeyCredential || !onAzure) { row.hidden = true; return; }
+    row.hidden = false;
+    $('pk-forget').hidden = !session;
   }
 
   // --- IndexedDB write (recover into THIS browser), mirroring the emulator pages' layout ---
@@ -218,8 +305,8 @@
 
   async function connect() {
     token = $('token').value.trim();
-    if (!token) { setStatus('Enter the admin token.', 'warn'); return; }
-    sessionStorage.setItem('emu-admin-token', token);
+    if (token) sessionStorage.setItem('emu-admin-token', token);
+    if (!token && !session) { setStatus('Enter the admin token, or sign in with a passkey.', 'warn'); return; }
     setStatus('Loading…');
     const list = $('list'); list.textContent = '';
     let data;
@@ -245,7 +332,13 @@
 
   $('connect').onclick = connect;
   $('token').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
-  if (token) connect();
+  $('pk-login').onclick = loginPasskey;
+  $('pk-enroll').onclick = enrollPasskey;
+  $('pk-forget').onclick = () => { session = ''; localStorage.removeItem('emu-admin-session'); refreshPkRow(); setStatus('Signed out of the passkey session.', 'warn'); };
+
+  refreshPkRow();
+  if (session) connect();        // resume an existing passkey session
+  else if (token) connect();     // or a remembered token
 </script>
 </body>
 </html>

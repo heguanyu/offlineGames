@@ -56,7 +56,7 @@ jobs:
             --exclude='/server/node_modules/' --exclude='/server/data/' \
             --exclude='/roms/' --exclude='/_deploy/' \
             ./ ./_deploy/
-          echo '{"name":"mahjong-online-deploy","private":true,"type":"module","engines":{"node":">=20"},"scripts":{"start":"node server/index.js"},"dependencies":{"ws":"^8.18.0","better-sqlite3":"^11.10.0"}}' > _deploy/package.json
+          echo '{"name":"mahjong-online-deploy","private":true,"type":"module","engines":{"node":">=20"},"scripts":{"start":"node server/index.js"},"dependencies":{"ws":"^8.18.0","better-sqlite3":"^11.10.0","@simplewebauthn/server":"^13.1.1"}}' > _deploy/package.json
 
       - name: Install production dependencies
         working-directory: _deploy

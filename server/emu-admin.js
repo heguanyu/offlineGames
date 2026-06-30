@@ -12,23 +12,12 @@
 //   GET /api/emu-admin?uid=U&key=K     → raw blob bytes (the save bundle, 404 if absent)
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { BASE, UID_RE, dirFor, fileFor } from './emu-saves.js';
+import { adminAuthed } from './admin-auth.js';
 
 function sendJson(res, code, obj, cors) {
   res.writeHead(code, { ...cors, 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(obj));
-}
-
-// Constant-time compare that also resists length leaks. Returns false unless ADMIN_TOKEN is set
-// AND equals the supplied token — so a missing/empty env can never authorize.
-function tokenOk(supplied) {
-  const want = process.env.ADMIN_TOKEN || '';
-  if (!want) return false;
-  const a = Buffer.from(String(supplied || ''));
-  const b = Buffer.from(want);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
 }
 
 // Summarise one uid's directory: blob count, total bytes, newest mtime.
@@ -45,8 +34,8 @@ function summariseUid(uid) {
 }
 
 export function handleEmuAdmin(req, res, cors) {
-  if (req.method === 'OPTIONS') { // preflight: the viewer sends the x-admin-token header
-    res.writeHead(204, { ...cors, 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'x-admin-token, content-type', 'Access-Control-Max-Age': '600' });
+  if (req.method === 'OPTIONS') { // preflight: the viewer sends the x-admin-token / x-admin-session header
+    res.writeHead(204, { ...cors, 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'x-admin-token, x-admin-session, content-type', 'Access-Control-Max-Age': '600' });
     res.end();
     return;
   }
@@ -55,8 +44,7 @@ export function handleEmuAdmin(req, res, cors) {
   if (!process.env.ADMIN_TOKEN) { sendJson(res, 503, { error: 'admin disabled: ADMIN_TOKEN not set' }, cors); return; }
 
   const url = new URL(req.url, 'http://x');
-  const supplied = req.headers['x-admin-token'] || url.searchParams.get('token');
-  if (!tokenOk(supplied)) { sendJson(res, 401, { error: 'bad or missing admin token' }, cors); return; }
+  if (!adminAuthed(req, url)) { sendJson(res, 401, { error: 'bad or missing admin token / session' }, cors); return; }
 
   const uid = url.searchParams.get('uid');
   const key = url.searchParams.get('key');

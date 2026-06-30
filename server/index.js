@@ -28,6 +28,7 @@ import db from './db.js';
 import { startWeather, getWeatherJson } from './weather.js';
 import { handleEmuSave } from './emu-saves.js';
 import { handleEmuAdmin } from './emu-admin.js';
+import { handlePasskey } from './admin-auth.js';
 import { handleFs, fsOnClose, startFsSweep } from './fileshare.js';
 
 // The games the lobby can host. Each table hosts ONE game; the lobby is split per game (the hub's
@@ -408,14 +409,20 @@ const server = http.createServer((req, res) => {
     handleEmuSave(req, res, cors);
     return;
   }
-  // Admin view/recovery over the save store (enumerate every uid, download any blob). Gated by
-  // ADMIN_TOKEN inside the handler; CORS-enabled so the recovery page works from the Pages mirror too.
-  if (req.url.split('?')[0] === '/api/emu-admin') {
-    const origin = req.headers.origin;
-    const cors = {};
-    if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
-    handleEmuAdmin(req, res, cors);
-    return;
+  // Admin view/recovery over the save store (enumerate every uid, download any blob) + passkey auth.
+  // Gated by ADMIN_TOKEN / passkey session inside the handlers; CORS-enabled so the recovery page
+  // works from the Pages mirror too (passkey itself is domain-bound to the Azure origin).
+  {
+    const p = req.url.split('?')[0];
+    if (p === '/api/emu-admin' || p.startsWith('/api/emu-admin/')) {
+      const origin = req.headers.origin;
+      const cors = {};
+      if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
+      const PK = '/api/emu-admin/passkey/';
+      if (p.startsWith(PK)) { handlePasskey(req, res, cors, p.slice(PK.length)); return; }
+      handleEmuAdmin(req, res, cors);
+      return;
+    }
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
   // Server-polled weather for the tourguide dial. CORS-enabled (no isolate()) so the GitHub Pages

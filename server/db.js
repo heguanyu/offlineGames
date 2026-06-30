@@ -51,6 +51,9 @@ try {
     backend: 'sqlite',
     saveWeather(json) { qSetMeta.run({ k: 'weather', v: JSON.stringify(json) }); },
     loadWeather() { const r = qGetMeta.get('weather'); return r ? JSON.parse(r.value) : null; },
+    // Generic durable key/value (used by the admin passkey store). Values are opaque strings.
+    getMeta(key) { const r = qGetMeta.get(key); return r ? r.value : null; },
+    setMeta(key, value) { qSetMeta.run({ k: key, v: value }); },
     // Per-game leaderboards share the players table via a composite "game|uid" key. loadScoreBook
     // returns a nested book { game: { uid: {name,total,pots} } }; legacy bare-uid rows (pre per-game,
     // all 天津) read as the 'tianjin' board.
@@ -109,6 +112,8 @@ if (!impl) {
     backend: 'json',
     saveWeather(json) { state.weather = json; flush(); },
     loadWeather() { return state.weather || null; },
+    getMeta(key) { return (state.meta && state.meta[key]) ?? null; },
+    setMeta(key, value) { (state.meta || (state.meta = {}))[key] = value; flush(); },
     loadScoreBook() {
       const o = {};
       for (const [k, rec] of Object.entries(state.scoreBook)) {
