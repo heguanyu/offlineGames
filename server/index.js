@@ -27,6 +27,7 @@ import { BOT_NAMES } from '../games/mahjong-common/bot-names.js';
 import db from './db.js';
 import { startWeather, getWeatherJson } from './weather.js';
 import { handleEmuSave } from './emu-saves.js';
+import { handleEmuAdmin } from './emu-admin.js';
 import { handleFs, fsOnClose, startFsSweep } from './fileshare.js';
 
 // The games the lobby can host. Each table hosts ONE game; the lobby is split per game (the hub's
@@ -405,6 +406,15 @@ const server = http.createServer((req, res) => {
     const cors = {};
     if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
     handleEmuSave(req, res, cors);
+    return;
+  }
+  // Admin view/recovery over the save store (enumerate every uid, download any blob). Gated by
+  // ADMIN_TOKEN inside the handler; CORS-enabled so the recovery page works from the Pages mirror too.
+  if (req.url.split('?')[0] === '/api/emu-admin') {
+    const origin = req.headers.origin;
+    const cors = {};
+    if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
+    handleEmuAdmin(req, res, cors);
     return;
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
