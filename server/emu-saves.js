@@ -14,15 +14,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DB_FILE } from './db.js';
 
-const BASE = path.join(path.dirname(DB_FILE), 'emu');
+// BASE + the path helpers are shared with the admin/recovery handler (server/emu-admin.js).
+export const BASE = path.join(path.dirname(DB_FILE), 'emu');
 const MAX_BLOB = 24 * 1024 * 1024; // 24 MB per game bundle — NDS quick-states are multi-MB each
-const UID_RE = /^[A-Za-z0-9._-]{1,64}$/; // crypto.randomUUID() or the 'u-…' fallback; never a path
+export const UID_RE = /^[A-Za-z0-9._-]{1,64}$/; // crypto.randomUUID() or the 'u-…' fallback; never a path
 
 // encodeURIComponent collapses a key (incl. '/') into ONE filesystem-safe ASCII segment, so a key
 // like "nds/Pokémon Black" can't escape the uid's directory. uid is separately validated above.
-const safe = (s) => encodeURIComponent(String(s));
-const dirFor = (uid) => path.join(BASE, uid);
-const fileFor = (uid, key) => path.join(dirFor(uid), safe(key) + '.blob');
+export const safe = (s) => encodeURIComponent(String(s));
+export const dirFor = (uid) => path.join(BASE, uid);
+export const fileFor = (uid, key) => path.join(dirFor(uid), safe(key) + '.blob');
 
 function sendJson(res, code, obj, cors) {
   res.writeHead(code, { ...cors, 'content-type': 'application/json; charset=utf-8' });

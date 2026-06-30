@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Cloud Save Recovery</title>
+<meta name="theme-color" content="#1a1a2e">
+<!-- Operator view over the SERVER's emulator cloud-save store (/api/emu-admin). Lets you enumerate
+     every uid on the server and recover a bundle whose uid was lost (e.g. the browser container that
+     held the uid was deleted). Needs the ADMIN_TOKEN configured on the server. The backend host is
+     resolved via apiBase() — never hardcoded here (see games/mahjong-common-online/server-url.js). -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #1a1a2e; color: #eaeaea;
+    font-family: -apple-system, "Segoe UI", sans-serif; -webkit-tap-highlight-color: transparent;
+    padding: max(16px, env(safe-area-inset-top)) 16px 40px; line-height: 1.45;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  a.back { color: #8a8aa3; text-decoration: none; font-size: 0.9rem; }
+  h1 { font-size: 1.4rem; margin: 10px 0 4px; }
+  .sub { font-size: 0.85rem; color: #8a8aa3; margin-bottom: 12px; }
+  input[type=password], input[type=text] {
+    background: #0e1730; border: 1px solid #2c3a63; border-radius: 10px; color: #eaeaea;
+    font-size: 1rem; padding: 11px 12px; width: 100%;
+  }
+  .field { display: flex; gap: 10px; margin: 10px 0; }
+  button {
+    background: #0f3460; border: 1px solid #2c3a63; border-radius: 10px;
+    color: #eaeaea; font-size: 0.9rem; padding: 11px 16px; cursor: pointer; white-space: nowrap;
+  }
+  button:active { background: #14457f; }
+  button.small { padding: 7px 12px; font-size: 0.82rem; }
+  button.go { background: #14532d; border-color: #1f6b3b; }
+  #status { font-size: 0.9rem; color: #e9c46a; min-height: 1.3em; margin: 8px 0; }
+  .ok { color: #2a9d8f; } .bad { color: #e94560; } .warn { color: #e9c46a; }
+  .uid {
+    background: #16213e; border: 1px solid #2c3a63; border-radius: 12px; padding: 12px 14px; margin: 10px 0;
+  }
+  .uid > .head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; cursor: pointer; }
+  .uid .id { font-size: 0.78rem; color: #cfcfe0; word-break: break-all; }
+  .uid .meta { color: #8a8aa3; font-size: 0.8rem; white-space: nowrap; }
+  .item { border-top: 1px solid #2c3a63; padding: 10px 0 4px; margin-top: 8px; }
+  .item .row1 { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .item .game { font-weight: 600; }
+  .item .sys { color: #8a8aa3; font-size: 0.78rem; }
+  .item .det { color: #8a8aa3; font-size: 0.8rem; margin: 4px 0 8px; }
+  .item .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .note { font-size: 0.82rem; color: #8a8aa3; margin-top: 14px; }
+  code { background: #0e1730; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="./" onclick="event.preventDefault(); location.replace('./')">&larr; back</a>
+  <h1>Cloud Save Recovery</h1>
+  <p class="sub">Browse every save bundle on the server and recover one whose Backup ID was lost.</p>
+
+  <div class="field">
+    <input id="token" type="password" placeholder="Admin token" autocomplete="off">
+    <button id="connect">Connect</button>
+  </div>
+  <p id="status"></p>
+  <div id="list"></div>
+
+  <p class="note">
+    Needs <code>ADMIN_TOKEN</code> set on the server (Azure → Configuration). “Import to this device”
+    writes the saves into this browser’s emulator storage — re-add the matching ROM file, then open the
+    game to load it. Bundles hold saves only, never ROMs.
+  </p>
+</div>
+
+<script type="module">
+  import { apiBase } from './games/mahjong-common-online/server-url.js';
+
+  const SYSTEMS = { gba: 'gba-library', nds: 'nds-library' };
+  const ALL_STORES = ['roms', 'states', 'settings', 'saves'];
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $('status');
+  const setStatus = (m, cls) => { statusEl.textContent = m; statusEl.className = cls || ''; };
+  const ADMIN = () => apiBase() + '/api/emu-admin';
+
+  let token = sessionStorage.getItem('emu-admin-token') || '';
+  if (token) $('token').value = token;
+
+  function fmtBytes(b) {
+    if (!b) return '0';
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+    if (b >= 1024) return Math.round(b / 1024) + ' KB';
+    return b + ' B';
+  }
+  const fmtDate = (ms) => ms ? new Date(ms).toLocaleString() : '—';
+  function b64ToU8(b64) {
+    const s = atob(b64); const u8 = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
+    return u8;
+  }
+
+  async function api(qs) {
+    const res = await fetch(ADMIN() + qs, { headers: { 'x-admin-token': token } });
+    if (res.status === 401) throw new Error('Wrong admin token.');
+    if (res.status === 503) throw new Error('Server has no ADMIN_TOKEN configured yet.');
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    return res;
+  }
+
+  // --- IndexedDB write (recover into THIS browser), mirroring the emulator pages' layout ---
+  function openForWrite(name) {
+    return new Promise((resolve, reject) => {
+      const probe = indexedDB.open(name);
+      probe.onsuccess = () => {
+        const db = probe.result;
+        const missing = ALL_STORES.some((s) => !db.objectStoreNames.contains(s));
+        const ver = db.version; db.close();
+        if (!missing) { const r = indexedDB.open(name); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); return; }
+        const up = indexedDB.open(name, ver + 1);
+        up.onupgradeneeded = () => {
+          const d = up.result;
+          if (!d.objectStoreNames.contains('roms')) d.createObjectStore('roms', { keyPath: 'name' });
+          if (!d.objectStoreNames.contains('states')) d.createObjectStore('states', { keyPath: 'key' });
+          if (!d.objectStoreNames.contains('settings')) d.createObjectStore('settings', { keyPath: 'key' });
+          if (!d.objectStoreNames.contains('saves')) d.createObjectStore('saves', { keyPath: 'key' });
+        };
+        up.onsuccess = () => resolve(up.result);
+        up.onerror = () => reject(up.error);
+      };
+      probe.onerror = () => reject(probe.error);
+    });
+  }
+
+  // key is "<system>/<game>"; the blob is the save-sync payload {battery, states[]}.
+  function parseKey(key) {
+    const i = key.indexOf('/');
+    return i < 0 ? { system: '?', game: key } : { system: key.slice(0, i), game: key.slice(i + 1) };
+  }
+
+  async function importBundle(system, game, payload) {
+    const dbName = SYSTEMS[system];
+    if (!dbName) throw new Error('Unknown system "' + system + '" — can only import gba/nds here.');
+    const db = await openForWrite(dbName);
+    let n = 0;
+    await new Promise((resolve, reject) => {
+      const t = db.transaction(['saves', 'states'], 'readwrite');
+      if (payload.battery) { t.objectStore('saves').put({ key: game, game, data: b64ToU8(payload.battery) }); n++; }
+      for (const s of (payload.states || [])) {
+        const slot = String(s.slot || 1);
+        t.objectStore('states').put({ key: game + '|' + slot, slot, game, variant: s.variant ?? null, data: b64ToU8(s.data) });
+        n++;
+      }
+      t.oncomplete = resolve; t.onerror = () => reject(t.error);
+    });
+    db.close();
+    return n;
+  }
+
+  async function fetchBlob(uid, key) {
+    const res = await api('?uid=' + encodeURIComponent(uid) + '&key=' + encodeURIComponent(key));
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(await res.arrayBuffer())));
+  }
+
+  function describe(payload) {
+    const states = (payload.states || []).length;
+    return (payload.battery ? 'battery save' : 'no battery save')
+      + (states ? ', ' + states + ' quick state(s)' : '')
+      + (payload.ts ? ' · saved ' + fmtDate(payload.ts) : '');
+  }
+
+  async function loadItems(uid, container) {
+    container.textContent = 'Loading…';
+    let data;
+    try { data = await (await api('?uid=' + encodeURIComponent(uid))).json(); }
+    catch (e) { container.textContent = ''; setStatus(e.message, 'bad'); return; }
+    container.textContent = '';
+    if (!data.items.length) { container.textContent = '(empty)'; return; }
+    for (const it of data.items) {
+      const { system, game } = parseKey(it.key);
+      const el = document.createElement('div'); el.className = 'item';
+      el.innerHTML = '<div class="row1"><span class="game"></span><span class="sys"></span></div>'
+        + '<div class="det">' + fmtBytes(it.size) + ' · uploaded ' + fmtDate(it.mtime) + '</div>'
+        + '<div class="btns"></div>';
+      el.querySelector('.game').textContent = game;
+      el.querySelector('.sys').textContent = system.toUpperCase();
+      const btns = el.querySelector('.btns');
+
+      const previewBtn = document.createElement('button'); previewBtn.className = 'small'; previewBtn.textContent = 'Preview';
+      const dlBtn = document.createElement('button'); dlBtn.className = 'small'; dlBtn.textContent = '⬇︎ Download';
+      const impBtn = document.createElement('button'); impBtn.className = 'small go'; impBtn.textContent = '⤓ Import to this device';
+      btns.append(previewBtn, dlBtn, impBtn);
+
+      previewBtn.onclick = async () => {
+        previewBtn.disabled = true;
+        try { const p = await fetchBlob(uid, it.key); el.querySelector('.det').textContent = describe(p); }
+        catch (e) { setStatus(e.message, 'bad'); } finally { previewBtn.disabled = false; }
+      };
+      dlBtn.onclick = async () => {
+        dlBtn.disabled = true; setStatus('Downloading ' + game + '…');
+        try {
+          const p = await fetchBlob(uid, it.key);
+          const blob = new Blob([JSON.stringify({ v: 1, systems: { [system]: [{ game, battery: p.battery, states: p.states || [] }] } })], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = system + '-' + game + '-save.json';
+          document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+          setStatus('Downloaded ' + game + '. Import it via Debug Tools → 存档检查 on any device.', 'ok');
+        } catch (e) { setStatus(e.message, 'bad'); } finally { dlBtn.disabled = false; }
+      };
+      impBtn.onclick = async () => {
+        if (!confirm('Import "' + game + '" (' + system.toUpperCase() + ') into THIS browser, overwriting any local save for it?')) return;
+        impBtn.disabled = true; setStatus('Importing ' + game + '…');
+        try {
+          const p = await fetchBlob(uid, it.key);
+          const n = await importBundle(system, game, p);
+          setStatus('Imported ' + n + ' item(s) for ' + game + '. Re-add the ROM, then open the game to load it.', 'ok');
+        } catch (e) { setStatus(e.message, 'bad'); } finally { impBtn.disabled = false; }
+      };
+      container.appendChild(el);
+    }
+  }
+
+  async function connect() {
+    token = $('token').value.trim();
+    if (!token) { setStatus('Enter the admin token.', 'warn'); return; }
+    sessionStorage.setItem('emu-admin-token', token);
+    setStatus('Loading…');
+    const list = $('list'); list.textContent = '';
+    let data;
+    try { data = await (await api('')).json(); }
+    catch (e) { setStatus(e.message, 'bad'); return; }
+    if (!data.uids.length) { setStatus('No save bundles on the server.', 'warn'); return; }
+    setStatus('Found ' + data.uids.length + ' Backup ID(s) on the server.', 'ok');
+    for (const u of data.uids) {
+      const card = document.createElement('div'); card.className = 'uid';
+      card.innerHTML = '<div class="head"><span class="id"></span>'
+        + '<span class="meta">' + u.items + ' game(s) · ' + fmtBytes(u.bytes) + '<br>' + fmtDate(u.mtime) + '</span></div>'
+        + '<div class="items" hidden></div>';
+      card.querySelector('.id').textContent = u.uid;
+      const items = card.querySelector('.items');
+      let loaded = false;
+      card.querySelector('.head').onclick = async () => {
+        items.hidden = !items.hidden;
+        if (!items.hidden && !loaded) { loaded = true; await loadItems(u.uid, items); }
+      };
+      list.appendChild(card);
+    }
+  }
+
+  $('connect').onclick = connect;
+  $('token').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
+  if (token) connect();
+</script>
+</body>
+</html>
