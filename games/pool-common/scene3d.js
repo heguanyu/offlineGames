@@ -5,6 +5,7 @@
 // On-demand render loop (the doudizhu _kick pattern): idle table = zero frames.
 import * as THREE from '../poker-common/lib/three.module.min.js';
 import { is3DLite, apply3DProfile } from '../../shared/power-mode.js';
+import { railPlans } from './geometry.js';
 
 const RAIL_W = 0.055, RAIL_H = 0.040;     // cushion body width/height above the felt
 const FRAME_W = 0.11;                     // outer wood frame width
@@ -144,17 +145,17 @@ export class PoolScene3D {
     felt.rotation.x = -Math.PI / 2; felt.receiveShadow = !lite;
     this.scene.add(felt);
 
-    // cushion bodies — one box per physics segment, so what you see IS what bounces
+    // cushion bodies — six prisms whose END FACES are cut along the physics jaw lines, so
+    // pocket mouths look like a real table (angled rail ends, no free-standing jaw blocks)
     const cushMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(spec.feltColor).multiplyScalar(0.75), roughness: 0.9 });
-    for (const s of spec.cushions) {
-      const len = Math.hypot(s.bx - s.ax, s.by - s.ay);
-      const m = new THREE.Mesh(new THREE.BoxGeometry(len + RAIL_W * 0.4, RAIL_H, RAIL_W), cushMat);
-      const mx = (s.ax + s.bx) / 2, my = (s.ay + s.by) / 2;
-      const ang = Math.atan2(s.by - s.ay, s.bx - s.ax);
-      // shift the body along the segment's OUTWARD normal so its inner face sits on the
-      // segment (the physics nose line) — rails outward, jaws away from their pocket
-      m.position.set(mx + s.nx * RAIL_W / 2, RAIL_H / 2, my + s.ny * RAIL_W / 2);
-      m.rotation.y = -ang;
+    for (const poly of railPlans(spec, RAIL_W)) {
+      const sh = new THREE.Shape();
+      sh.moveTo(poly[0][0], poly[0][1]);
+      for (let i = 1; i < poly.length; i++) sh.lineTo(poly[i][0], poly[i][1]);
+      sh.closePath();
+      const m = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: RAIL_H, bevelEnabled: false }), cushMat);
+      m.rotation.x = Math.PI / 2;                          // shape plane (x, physY) → world (x, ·, z)
+      m.position.y = RAIL_H;
       m.castShadow = m.receiveShadow = !lite;
       this.scene.add(m);
     }

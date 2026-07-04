@@ -76,6 +76,25 @@ export function buildTable(cfg) {
   return { ...cfg, hx, hy, pockets, cushions };
 }
 
+// Plan-view outlines of the six cushion bodies for the RENDERERS, width `w` behind the nose
+// line. Each rail is ONE polygon whose end edges are cut along the pocket-jaw angles (the same
+// lines physics bounces off), so the pocket mouths read like a real table — angled rail ends,
+// not separate blocks. Points wind inner-edge-first: [noseA, noseB, outerB, outerA].
+export function railPlans(spec, w) {
+  const { hx, hy, cornerGap: cg, sideGap: sg } = spec;
+  const out = [];
+  for (const s of [-1, 1]) {                       // long rails (y = ±hy), split by the side pocket
+    const y = hy * s, yo = (hy + w) * s;
+    out.push([[-hx + cg, y], [-sg, y], [-sg - 0.3 * w, yo], [-hx + cg - w, yo]]);
+    out.push([[sg, y], [hx - cg, y], [hx - cg + w, yo], [sg + 0.3 * w, yo]]);
+  }
+  for (const s of [-1, 1]) {                       // short rails (x = ±hx)
+    const x = hx * s, xo = (hx + w) * s;
+    out.push([[x, -hy + cg], [x, hy - cg], [xo, hy - cg + w], [xo, -hy + cg - w]]);
+  }
+  return out;
+}
+
 // ---- shared vector helpers (used by physics + AI + renderers) ---------------
 export const vlen = (x, y) => Math.hypot(x, y);
 export const norm = (x, y) => { const l = Math.hypot(x, y) || 1; return { x: x / l, y: y / l }; };

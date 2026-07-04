@@ -1,3 +1,5 @@
+import { railPlans } from './geometry.js';
+
 // Flat 2D billiards renderer (phones / 省电 eco tier) — one <canvas> 2D context, no WebGL,
 // repaint-on-demand only. Same public interface as PoolScene3D so main/app code doesn't care.
 // The whole frame is drawn in PHYSICS coordinates (meters, origin at table center) under a
@@ -118,13 +120,13 @@ export class PoolScene2D {
       else { c.beginPath(); c.arc(s.baulkX, 0, s.dR, Math.PI / 2, Math.PI * 1.5); c.closePath(); c.fill(); }
     }
 
-    // cushions (the physics segments, drawn as fat dark-felt lines)
-    c.strokeStyle = this._shade(s.feltColor, 0.72);
-    c.lineWidth = RW * 1.6; c.lineCap = 'butt';
-    for (const seg of s.cushions) {
-      // offset the stroke along the segment's outward normal so its inner edge hugs the nose line
-      const ox = seg.nx * RW * 0.8, oy = seg.ny * RW * 0.8;
-      c.beginPath(); c.moveTo(seg.ax + ox, seg.ay + oy); c.lineTo(seg.bx + ox, seg.by + oy); c.stroke();
+    // cushions — six rail bodies with jaw-angled ends (same outlines as the 3D prisms)
+    c.fillStyle = this._shade(s.feltColor, 0.72);
+    for (const poly of railPlans(s, RW)) {
+      c.beginPath();
+      c.moveTo(poly[0][0], poly[0][1]);
+      for (let i = 1; i < poly.length; i++) c.lineTo(poly[i][0], poly[i][1]);
+      c.closePath(); c.fill();
     }
 
     // pockets
