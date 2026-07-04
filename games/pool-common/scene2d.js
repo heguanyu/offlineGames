@@ -122,12 +122,8 @@ export class PoolScene2D {
     c.strokeStyle = this._shade(s.feltColor, 0.72);
     c.lineWidth = RW * 1.6; c.lineCap = 'butt';
     for (const seg of s.cushions) {
-      // offset the stroke outward so its inner edge hugs the nose line
-      const dx = seg.bx - seg.ax, dy = seg.by - seg.ay, l = Math.hypot(dx, dy) || 1;
-      let nx = -dy / l, ny = dx / l;
-      const mx = (seg.ax + seg.bx) / 2, my = (seg.ay + seg.by) / 2;
-      if (mx * nx + my * ny < 0) { nx = -nx; ny = -ny; }
-      const ox = nx * RW * 0.8, oy = ny * RW * 0.8;
+      // offset the stroke along the segment's outward normal so its inner edge hugs the nose line
+      const ox = seg.nx * RW * 0.8, oy = seg.ny * RW * 0.8;
       c.beginPath(); c.moveTo(seg.ax + ox, seg.ay + oy); c.lineTo(seg.bx + ox, seg.by + oy); c.stroke();
     }
 

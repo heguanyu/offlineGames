@@ -30,8 +30,24 @@ export function buildTable(cfg) {
     { id: 5, x: 0, y: +hy + so, r: sideR, corner: false },
   ];
 
+  // Each segment carries its OUTWARD normal (nx, ny) — the side the visual cushion body sits
+  // on. Rails: away from the table center. Jaws: away from their pocket, so the body flares
+  // the throat open instead of blocking the mouth. (Physics ignores this — it reflects off
+  // the closest-point normal — it's for the renderers.)
   const cushions = [];
-  const seg = (ax, ay, bx, by) => cushions.push({ ax, ay, bx, by });
+  const seg = (ax, ay, bx, by, jaw = false) => {
+    const dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy) || 1;
+    let nx = -dy / l, ny = dx / l;
+    const mx = (ax + bx) / 2, my = (ay + by) / 2;
+    let rx = mx, ry = my;                // rails: side test vs the table center (0,0)
+    if (jaw) {                           // jaws: side test vs their (nearest) pocket center
+      let best = null, bd = Infinity;
+      for (const p of pockets) { const d = Math.hypot(mx - p.x, my - p.y); if (d < bd) { bd = d; best = p; } }
+      rx = mx - best.x; ry = my - best.y;
+    }
+    if (rx * nx + ry * ny < 0) { nx = -nx; ny = -ny; }
+    cushions.push({ ax, ay, bx, by, nx, ny });
+  };
   const cg = cornerGap, sg = sideGap;
   const jl = cornerGap * 0.9;            // jaw length
   const jd = jl * Math.SQRT1_2;          // 45° jaw component
@@ -42,19 +58,19 @@ export function buildTable(cfg) {
     seg(-hx + cg, y, -sg, y);            // baulk-side half
     seg(+sg, y, +hx - cg, y);            // top-side half
     // corner jaws (45° outward, away from the field)
-    seg(-hx + cg, y, -hx + cg - jd, y + jd * s);
-    seg(+hx - cg, y, +hx - cg + jd, y + jd * s);
+    seg(-hx + cg, y, -hx + cg - jd, y + jd * s, true);
+    seg(+hx - cg, y, +hx - cg + jd, y + jd * s, true);
     // side-pocket jaws (steep, slightly flared so the mouth funnels in)
     const sj = sideGap * 0.85;
-    seg(-sg, y, -sg - sj * 0.3, y + sj * s);
-    seg(+sg, y, +sg + sj * 0.3, y + sj * s);
+    seg(-sg, y, -sg - sj * 0.3, y + sj * s, true);
+    seg(+sg, y, +sg + sj * 0.3, y + sj * s, true);
   }
   // Short rails (left x=−hx, right x=+hx) — no side pockets.
   for (const s of [-1, +1]) {
     const x = hx * s;
     seg(x, -hy + cg, x, +hy - cg);
-    seg(x, -hy + cg, x + jd * s, -hy + cg - jd);
-    seg(x, +hy - cg, x + jd * s, +hy - cg + jd);
+    seg(x, -hy + cg, x + jd * s, -hy + cg - jd, true);
+    seg(x, +hy - cg, x + jd * s, +hy - cg + jd, true);
   }
 
   return { ...cfg, hx, hy, pockets, cushions };

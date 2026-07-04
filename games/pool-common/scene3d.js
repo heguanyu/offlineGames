@@ -151,10 +151,9 @@ export class PoolScene3D {
       const m = new THREE.Mesh(new THREE.BoxGeometry(len + RAIL_W * 0.4, RAIL_H, RAIL_W), cushMat);
       const mx = (s.ax + s.bx) / 2, my = (s.ay + s.by) / 2;
       const ang = Math.atan2(s.by - s.ay, s.bx - s.ax);
-      // shift the body OUTWARD so its inner face sits on the segment (the physics nose line)
-      const nx = -Math.sin(ang), ny = Math.cos(ang);
-      const out = (Math.sign(mx * nx + my * ny) || 1);      // normal pointing away from center
-      m.position.set(mx + nx * out * RAIL_W / 2, RAIL_H / 2, my + ny * out * RAIL_W / 2);
+      // shift the body along the segment's OUTWARD normal so its inner face sits on the
+      // segment (the physics nose line) — rails outward, jaws away from their pocket
+      m.position.set(mx + s.nx * RAIL_W / 2, RAIL_H / 2, my + s.ny * RAIL_W / 2);
       m.rotation.y = -ang;
       m.castShadow = m.receiveShadow = !lite;
       this.scene.add(m);
@@ -238,7 +237,7 @@ export class PoolScene3D {
     const shaft = new THREE.Mesh(
       new THREE.CylinderGeometry(0.0055, 0.0145, LEN, 14),
       new THREE.MeshStandardMaterial({ map: cueTexture(), roughness: 0.45 }));
-    shaft.rotation.z = Math.PI / 2;                          // cylinder v runs tip→butt → lie along −X
+    shaft.rotation.z = -Math.PI / 2;                         // thin top (+Y tip) → +X: tip at the group origin, butt trailing −X
     shaft.position.x = -LEN / 2;
     const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(0.0053, 0.0055, 0.014, 12),
       new THREE.MeshStandardMaterial({ color: 0xf2ede2, roughness: 0.5 }));
