@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>斯诺克</title>
+<link rel="apple-touch-icon" href="../../icons/icon-180.png">
+<script src="../../app-nav.js"></script>
+<link rel="icon" href="../../icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#101418">
+<link rel="stylesheet" href="../pool-common/pool.css">
+</head>
+<body>
+  <header id="nav">
+    <div id="round-info"></div>
+    <span class="spacer"></span>
+    <button id="mute-btn" type="button">🔊</button>
+    <button id="menu-btn" type="button">≡</button>
+  </header>
+
+  <div id="table">
+    <canvas id="scene"></canvas>
+    <div id="scores"></div>
+    <div id="toast"></div>
+
+    <div id="controls" hidden>
+      <div id="power-wrap"><input id="power" type="range" min="0" max="100" value="50" aria-label="力度"></div>
+      <button id="shoot-btn" type="button">击球</button>
+      <div id="fine">
+        <button id="fine-left" type="button" aria-label="微调左">⟲</button>
+        <button id="fine-right" type="button" aria-label="微调右">⟳</button>
+      </div>
+    </div>
+    <button id="place-done" type="button" hidden>放好了 ✓</button>
+  </div>
+
+  <!-- start: difficulty pick -->
+  <div id="start-overlay" class="overlay">
+    <div class="panel">
+      <h1 id="start-title">斯诺克</h1>
+      <p class="sub" id="start-sub">15 红球 + 6 彩球 · 你 vs AI</p>
+      <div class="diff-row" id="diff-row">
+        <button class="diff-btn" data-level="0" type="button">新手</button>
+        <button class="diff-btn sel" data-level="1" type="button">普通</button>
+        <button class="diff-btn" data-level="2" type="button">高手</button>
+      </div>
+      <button class="act-btn" id="start-btn" type="button" style="width:100%">开始</button>
+    </div>
+  </div>
+
+  <!-- result -->
+  <div id="result-overlay" class="overlay" hidden>
+    <div class="panel">
+      <div id="result-title"></div>
+      <div id="result-detail"></div>
+      <div id="result-score"></div>
+      <button class="act-btn" id="next-btn" type="button" style="width:100%;margin-bottom:10px">再来一局</button>
+      <button class="act-btn ghost" id="result-home" type="button" style="width:100%">← 返回大厅</button>
+    </div>
+  </div>
+
+  <!-- menu -->
+  <div id="menu-overlay" class="overlay" hidden>
+    <div class="panel">
+      <h1>菜单</h1>
+      <button class="act-btn" id="menu-continue" type="button" style="width:100%;margin-bottom:10px">继续</button>
+      <button class="act-btn no" id="menu-restart" type="button" style="width:100%;margin-bottom:10px">重开（清零比分）</button>
+      <button class="act-btn ghost" id="menu-home" type="button" style="width:100%">← 返回大厅</button>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

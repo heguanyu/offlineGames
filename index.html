@@ -192,6 +192,7 @@
     <div class="tabs">
       <button class="tab-btn" type="button" data-tab="daily"><span class="tico">🧰</span><span data-i18n="nav-daily">日常工具</span></button>
       <button class="tab-btn" type="button" data-tab="card"><span class="tico">🀄</span><span data-i18n="nav-card">牌类游戏</span></button>
+      <button class="tab-btn" type="button" data-tab="pool"><span class="tico">🎱</span><span data-i18n="nav-pool">台球</span></button>
       <button class="tab-btn" type="button" data-tab="emulator"><span class="tico">🕹️</span><span data-i18n="nav-emulator">模拟器</span></button>
       <button class="tab-btn debug" type="button" data-tab="debug"><span class="tico">🐞</span><span data-i18n="nav-debug">调试工具</span></button>
     </div>
@@ -296,6 +297,20 @@
     </div>
   </section>
 
+  <!-- 台球 (Billiards) — 黑八 + 斯诺克, no sub-tabs -->
+  <section class="tab-panel" id="panel-pool">
+    <nav class="cards">
+      <a class="card" href="./games/pool8/">
+        <span class="emoji">🎱</span>
+        <span data-i18n="card-pool8">黑八台球</span>
+      </a>
+      <a class="card" href="./games/snooker/">
+        <span class="emoji">🔴</span>
+        <span data-i18n="card-snooker">斯诺克</span>
+      </a>
+    </nav>
+  </section>
+
   <!-- 模拟器 (Emulator) — no sub-tabs -->
   <section class="tab-panel" id="panel-emulator">
     <nav class="cards">
@@ -352,7 +367,8 @@
         'card-guobiao': '国标麻将', 'card-guobiao-free': '国标（无定番）',
         'card-guobiao-online': '国标麻将联机版', 'card-guobiao-free-online': '国标（无定番）联机版',
         'card-pad': '手柄测试', 'card-voicepick': '声音体检', 'card-tourguide': '出游助手', 'card-fileshare': '文件共享助手', 'card-storage': '存档检查', 'card-recovery': '云存档恢复',
-        'nav-daily': '日常工具', 'nav-card': '牌类游戏', 'nav-emulator': '模拟器', 'nav-debug': '调试工具',
+        'card-pool8': '黑八台球', 'card-snooker': '斯诺克',
+        'nav-daily': '日常工具', 'nav-card': '牌类游戏', 'nav-pool': '台球', 'nav-emulator': '模拟器', 'nav-debug': '调试工具',
         'sub-mahjong': '麻将', 'sub-poker': '扑克',
         online: '在线', offline: '离线 · 使用缓存运行', online_unavailable: '（离线无法使用）',
         btn_idle: '检查更新', btn_checking: '检查中…', btn_updating: '更新中…',
@@ -379,7 +395,8 @@
         'card-guobiao': 'Guobiao (MCR)', 'card-guobiao-free': 'Guobiao (no minimum)',
         'card-guobiao-online': 'Guobiao (MCR) · Online', 'card-guobiao-free-online': 'Guobiao (no min) · Online',
         'card-pad': 'Controller Test', 'card-voicepick': 'Voice Audit', 'card-tourguide': 'Tour Guide', 'card-fileshare': 'File Sharing', 'card-storage': 'Save Check', 'card-recovery': 'Cloud Recovery',
-        'nav-daily': 'Daily Tools', 'nav-card': 'Card Games', 'nav-emulator': 'Emulator', 'nav-debug': 'Debug Tools',
+        'card-pool8': '8-Ball Pool', 'card-snooker': 'Snooker',
+        'nav-daily': 'Daily Tools', 'nav-card': 'Card Games', 'nav-pool': 'Billiards', 'nav-emulator': 'Emulator', 'nav-debug': 'Debug Tools',
         'sub-mahjong': 'Mahjong', 'sub-poker': 'Poker',
         online: 'online', offline: 'offline — running from cache', online_unavailable: ' (unavailable offline)',
         btn_idle: 'Check for updates', btn_checking: 'Checking…', btn_updating: 'Updating…',

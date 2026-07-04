@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.6.10';
+const CACHE = 'offline-games-0.7.0';
 
 const ASSETS = [
   './',
@@ -159,6 +159,24 @@ const ASSETS = [
   './games/guandan/voice/packed/1.wav',
   './games/guandan/voice/packed/2.wav',
   './games/guandan/voice/packed/3.wav',
+  // 台球 (billiards) — 黑八 (pool8) + 斯诺克 (snooker) on the shared pool-common engine.
+  // The 3D scene reuses poker-common's three.js + felt/wood textures (cached above).
+  './games/pool-common/geometry.js',
+  './games/pool-common/physics.js',
+  './games/pool-common/ai.js',
+  './games/pool-common/sound.js',
+  './games/pool-common/app.js',
+  './games/pool-common/scene3d.js',
+  './games/pool-common/scene2d.js',
+  './games/pool-common/pool.css',
+  './games/pool8/',
+  './games/pool8/index.html',
+  './games/pool8/main.js',
+  './games/pool8/rules.js',
+  './games/snooker/',
+  './games/snooker/index.html',
+  './games/snooker/main.js',
+  './games/snooker/rules.js',
   './shared/emu-persistence.js',
   './shared/power-mode.js', // 省电模式 (3-tier power mode) — shared by the card games
   './shared/client-id.js', // one persistent per-browser uid (online seats + emulator cloud saves)
