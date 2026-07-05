@@ -7,6 +7,11 @@
 // are dedicated clips; singles/pairs/trips are 五 / 俩五 / 仨五. If the clips aren't bundled yet (or a
 // token has no clip — 不要 / 头游 …), speak() falls back to the device's SpeechSynthesis, so there's
 // always a voice.
+import { createAudioKeeper } from '../../shared/audio-revive.js';
+
+// The keeper revives a context iOS closed/wedged during a long background stay
+// (otherwise sound dies until a full page reload). Decoded clip buffers survive rebuilds.
+const keeper = createAudioKeeper();
 let ctx = null;
 let muted = false;
 const USE_CLIPS = true;
@@ -15,7 +20,7 @@ const seatPitch = [1.0, 1.14, 0.92, 1.06]; // fallback-TTS pitch per seat (clips
 export function setMuted(m) { muted = !!m; }
 export function isMuted() { return muted; }
 export function resume() {
-  try { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === 'suspended') ctx.resume(); } catch {}
+  ctx = keeper.ensure();
   primeVoices();
   if (!muted) preload();
 }
@@ -23,7 +28,8 @@ export function resume() {
 function blip(freq, dur, type = 'sine', gain = 0.18) {
   if (muted) return;
   try {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx = keeper.ensure();
+    if (!ctx) return;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type; o.frequency.value = freq;
     g.gain.setValueAtTime(gain, ctx.currentTime);

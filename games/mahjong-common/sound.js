@@ -7,6 +7,8 @@
 // 0..3 (东南西北): 东 young man, 南 young woman, 西 mature man, 北 mature woman. Tiles + 碰/吃/明杠/
 // 暗杠/金杠 + 胡啦(天津)/点炮·自摸(国标). Missing/unloaded clips fall back to SpeechSynthesis.
 // Qwen3-TTS clips live in the SHARED mahjong-common/voice (used by 天津 + 国标), per persona = WIND 0..3.
+import { createAudioKeeper } from '../../shared/audio-revive.js';
+
 const USE_CLIPS = true;
 const CLIP_BASE = new URL('./voice/', import.meta.url).href;
 function tileSlug(id) {
@@ -30,6 +32,15 @@ const CLIP_SLUGS = Object.keys(CLIP_TEXT);
 export class Sound {
   constructor() {
     this.ctx = null;
+    // Owns context lifetime incl. revival after iOS kills it in the background (the
+    // "no sound until restart" bug). Music nodes die with the old context — restart them.
+    this._keeper = createAudioKeeper({
+      onRebuild: () => {
+        clearTimeout(this._musicTimer);
+        this._musicOn = false; this._musicBus = null;
+        if (this._musicWanted && !this.muted) setTimeout(() => this.startMusic(), 60);
+      },
+    });
     this.muted = localStorage.getItem('mahjong-muted') === '1';
     // Wav call clips (碰/吃/杠) — only a fallback for browsers without SpeechSynthesis.
     this._voices = {};
@@ -144,14 +155,11 @@ export class Sound {
   sayTile(id, vi = 0) { this._playClip(tileSlug(id), vi); }   // speak a discarded tile by id
   call(slug, vi = 0) { this._playClip(slug, vi); }            // 碰/吃/明杠/暗杠/金杠/胡啦/点炮/自摸
 
-  // Lazily create / resume the context — must be kicked off from a user gesture
-  // (e.g. the 开始牌局 button) to satisfy browser autoplay policies.
+  // Lazily create / resume / revive the context — first call must come from a user gesture
+  // (e.g. the 开始牌局 button) to satisfy browser autoplay policies. The keeper transparently
+  // rebuilds a context that iOS closed or wedged during a long background stay.
   resume() {
-    if (!this.ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) try { this.ctx = new AC(); } catch {}
-    }
-    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    this.ctx = this._keeper.ensure();
     // iOS keeps SpeechSynthesis silent until a gesture-initiated speak() — prime it
     // once from this (gesture-driven) resume so later in-game calls are audible.
     if (!this._spoke && window.speechSynthesis) {

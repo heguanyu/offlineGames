@@ -5,6 +5,11 @@
 // speak() concatenates at runtime, so e.g. 仨五带俩九 plays five tiny clips back-to-back. If the clips
 // aren't loaded yet (or are missing), speak() falls back to the device's SpeechSynthesis so there's
 // always a voice. main.js passes token ARRAYS to speak().
+import { createAudioKeeper } from '../../shared/audio-revive.js';
+
+// The keeper revives a context iOS closed/wedged during a long background stay
+// (otherwise sound dies until a full page reload). Decoded clip buffers survive rebuilds.
+const keeper = createAudioKeeper();
 let ctx = null;
 let muted = false;
 // Qwen3-TTS clips (good Mandarin); SpeechSynthesis remains the fallback if any clip is missing.
@@ -14,7 +19,7 @@ const seatPitch = [1.0, 1.12, 0.92]; // MILD fallback TTS pitch per seat (extrem
 export function setMuted(m) { muted = !!m; }
 export function isMuted() { return muted; }
 export function resume() {
-  try { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === 'suspended') ctx.resume(); } catch {}
+  ctx = keeper.ensure();
   primeVoices();
   if (!muted) preload();
 }
@@ -22,7 +27,8 @@ export function resume() {
 function blip(freq, dur, type = 'sine', gain = 0.18) {
   if (muted) return;
   try {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx = keeper.ensure();
+    if (!ctx) return;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type; o.frequency.value = freq;
     g.gain.setValueAtTime(gain, ctx.currentTime);

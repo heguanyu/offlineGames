@@ -3,16 +3,16 @@
 // Volumes scale with impact speed; rapid collisions are rate-limited so a break doesn't stack
 // forty clicks into clipping.
 
-let ctx = null;
+import { createAudioKeeper } from '../../shared/audio-revive.js';
+
+// The keeper revives a context iOS closed/wedged during a long background stay
+// (otherwise sound dies until a full page reload).
+const keeper = createAudioKeeper();
 let muted = false;
 const KEY = 'pool-mute';
 try { muted = localStorage.getItem(KEY) === '1'; } catch {}
 
-function ac() {
-  if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); }
-  if (ctx && ctx.state === 'suspended') ctx.resume();
-  return ctx;
-}
+function ac() { return keeper.ensure(); }
 export function unlock() { ac(); }         // call on first user gesture (iOS)
 export function isMuted() { return muted; }
 export function setMuted(m) { muted = m; try { localStorage.setItem(KEY, m ? '1' : '0'); } catch {} }
