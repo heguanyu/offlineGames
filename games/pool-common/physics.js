@@ -16,10 +16,20 @@ const STOP_V = 0.035;         // below this speed a ball just stops (m/s)
 const E_BALL = 0.96;          // ball-ball restitution
 const E_RAIL = 0.72;          // cushion normal restitution
 const RAIL_T = 0.86;          // cushion tangential keep
+const MU_SLIDE = 2.0;         // sliding-friction decel (m/s²) while the contact point slips
 export const MAX_SPEED = 8;
 
+// ---- spin model -------------------------------------------------------------
+// Each ball carries (wx, wy): its top/back-spin expressed as the surface ROLL VELOCITY the
+// current angular velocity corresponds to (pure natural roll ⇔ w == v), plus `ez`: sidespin
+// (english). A struck ball SLIDES first — friction opposes the slip u = v − w, decelerating
+// v at μ·g while spinning w up at 2.5·μ·g (solid sphere, I = 2/5·m·r²) until w catches v and
+// it ROLLS. Collisions swap velocity along the normal but each ball KEEPS its spin, so a
+// rolling cue ball follows through after contact and backspin draws it back — 高杆/低杆/
+// 左右塞 all emerge from this, nothing is scripted.
+
 export function makeBall(id, x, y, visual) {
-  return { id, x, y, vx: 0, vy: 0, inPlay: true, ...visual };
+  return { id, x, y, vx: 0, vy: 0, wx: 0, wy: 0, ez: 0, inPlay: true, ...visual };
 }
 
 export class Simulation {
@@ -30,15 +40,20 @@ export class Simulation {
   }
   cue() { return this.balls.find((b) => b.id === 0); }
 
-  shoot(dir, speed) {
+  // `tip` = cue-tip offset in ball-radius fractions: y ∈ [−0.75, 0.75] top(+)/back(−) spin,
+  // x sidespin. Center hit (0,0) → the ball slides spinless, then picks up natural roll.
+  shoot(dir, speed, tip = { x: 0, y: 0 }) {
     const c = this.cue();
     const d = norm(dir.x, dir.y);
     const v = Math.min(speed, MAX_SPEED);
     c.vx = d.x * v; c.vy = d.y * v;
+    c.wx = d.x * v * tip.y * 1.4; c.wy = d.y * v * tip.y * 1.4;
+    c.ez = tip.x * v * 0.35;
     this.events = { firstHit: null, potted: [], cuePotted: false, railAfter: false };
   }
 
-  moving() { return this.balls.some((b) => b.inPlay && (b.vx || b.vy)); }
+  // Residual spin counts as motion: a stunned cue ball (v≈0) with backspin is about to draw.
+  moving() { return this.balls.some((b) => b.inPlay && (b.vx || b.vy || b.wx || b.wy)); }
 
   // Advance by real elapsed `dt` seconds. Returns true while anything still moves.
   step(dt) {
@@ -50,15 +65,30 @@ export class Simulation {
   _sub(h) {
     const { spec, balls, events: ev } = this;
     const r = spec.ballR;
-    // integrate + friction
+    // integrate + slide/roll friction
     for (const b of balls) {
       if (!b.inPlay) continue;
-      let v = Math.hypot(b.vx, b.vy);
-      if (!v) continue;
+      b.wx = b.wx || 0; b.wy = b.wy || 0;          // balls born without spin fields
+      const v = Math.hypot(b.vx, b.vy);
+      if (!v && !b.wx && !b.wy) continue;
       b.x += b.vx * h; b.y += b.vy * h;
-      const nv = Math.max(0, v - ROLL_DEC * h) * (1 - DRAG * h);
-      if (nv < STOP_V) { b.vx = b.vy = 0; continue; }
-      b.vx *= nv / v; b.vy *= nv / v;
+      let ux = b.vx - b.wx, uy = b.vy - b.wy;      // contact-point slip
+      const u = Math.hypot(ux, uy);
+      if (u > 0.02) {                              // SLIDING
+        ux /= u; uy /= u;
+        if (3.5 * MU_SLIDE * h >= u) {             // slip closes this substep → natural roll
+          b.vx -= ux * u * (2 / 7); b.vy -= uy * u * (2 / 7);
+          b.wx = b.vx; b.wy = b.vy;
+        } else {
+          b.vx -= ux * MU_SLIDE * h; b.vy -= uy * MU_SLIDE * h;
+          b.wx += ux * 2.5 * MU_SLIDE * h; b.wy += uy * 2.5 * MU_SLIDE * h;
+        }
+      } else {                                     // ROLLING (spin locked to velocity)
+        const nv = Math.max(0, v - ROLL_DEC * h) * (1 - DRAG * h);
+        if (nv < STOP_V) { b.vx = b.vy = b.wx = b.wy = 0; }
+        else { const k = v ? nv / v : 0; b.vx *= k; b.vy *= k; b.wx = b.vx; b.wy = b.vy; }
+      }
+      if (b.ez) { b.ez *= 1 - 0.35 * h; if (Math.abs(b.ez) < 0.02) b.ez = 0; }
     }
     // ball–ball collisions
     for (let i = 0; i < balls.length; i++) {
@@ -85,7 +115,7 @@ export class Simulation {
       if (!b.inPlay) continue;
       for (const p of spec.pockets) {
         if (Math.hypot(b.x - p.x, b.y - p.y) < p.r) {
-          b.inPlay = false; b.vx = b.vy = 0; b.pocket = p.id;
+          b.inPlay = false; b.vx = b.vy = b.wx = b.wy = 0; b.ez = 0; b.pocket = p.id;
           if (ev) { ev.potted.push(b.id); if (b.id === 0) ev.cuePotted = true; }
           if (this.hooks.onPot) this.hooks.onPot(b, p);
           break;
@@ -101,9 +131,15 @@ export class Simulation {
         b.x += nx * (r - d + 1e-5); b.y += ny * (r - d + 1e-5);
         const vn = b.vx * nx + b.vy * ny;
         if (vn >= 0) continue;
-        const tx = b.vx - vn * nx, ty = b.vy - vn * ny;
-        b.vx = tx * RAIL_T - vn * E_RAIL * nx;
-        b.vy = ty * RAIL_T - vn * E_RAIL * ny;
+        const tx = -ny, ty = nx;                        // cushion tangent
+        // english kicks the tangential rebound, then partially reverses off the rubber
+        const vt = (b.vx * tx + b.vy * ty) * RAIL_T + (b.ez || 0) * 0.55;
+        b.vx = tx * vt - nx * vn * E_RAIL;
+        b.vy = ty * vt - ny * vn * E_RAIL;
+        if (b.ez) b.ez *= -0.5;
+        // top/back spin: keep the tangential roll, flip + damp the normal component
+        const wn = (b.wx || 0) * nx + (b.wy || 0) * ny, wt = (b.wx || 0) * tx + (b.wy || 0) * ty;
+        b.wx = tx * wt - nx * wn * 0.35; b.wy = ty * wt - ny * wn * 0.35;
         if (ev && ev.firstHit !== null) ev.railAfter = true;
         if (this.hooks.onRail) this.hooks.onRail(-vn);
       }
@@ -112,7 +148,7 @@ export class Simulation {
       if (Math.abs(b.x) > spec.hx + r * 4 || Math.abs(b.y) > spec.hy + r * 4) {
         let best = spec.pockets[0], bd = Infinity;
         for (const p of spec.pockets) { const d = Math.hypot(b.x - p.x, b.y - p.y); if (d < bd) { bd = d; best = p; } }
-        b.inPlay = false; b.vx = b.vy = 0; b.pocket = best.id;
+        b.inPlay = false; b.vx = b.vy = b.wx = b.wy = 0; b.ez = 0; b.pocket = best.id;
         if (ev) { ev.potted.push(b.id); if (b.id === 0) ev.cuePotted = true; }
       }
     }

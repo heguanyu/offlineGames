@@ -278,7 +278,9 @@ export class PoolScene3D {
     return { x: p.x, y: p.z };
   }
 
-  syncBalls() {
+  // `dt` (optional, seconds since last sync): when given, balls visually rotate by their SPIN
+  // (b.wx/b.wy — so backspin shows) instead of by displacement.
+  syncBalls(dt) {
     const r = this.spec.ballR;
     for (const b of this.balls) {
       const rec = this.ballMeshes.get(b.id);
@@ -298,8 +300,9 @@ export class PoolScene3D {
         continue;
       }
       if (!rec.shown) { rec.shown = true; rec.mesh.visible = true; rec.mesh.position.y = r; rec.px = b.x; rec.py = b.y; }
-      const dx = b.x - rec.px, dy = b.y - rec.py;
+      let dx = b.x - rec.px, dy = b.y - rec.py;
       rec.mesh.position.set(b.x, r, b.y);
+      if (dt != null && (b.wx || b.wy)) { dx = b.wx * dt; dy = b.wy * dt; }  // true spin, incl. backspin
       const dist = Math.hypot(dx, dy);
       if (dist > 1e-6) {                                     // roll: axis = up × v
         const axis = new THREE.Vector3(dy / dist, 0, -dx / dist);

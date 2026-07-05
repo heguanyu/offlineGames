@@ -105,6 +105,42 @@ console.log('physics:');
   ok(pr.cueDir === null, 'full hit → no cue deflection line');
 }
 
+// ---- spin (slide/roll model) ---------------------------------------------------
+console.log('spin:');
+{ // follow: a long approach lets the cue ball reach natural roll → it carries through
+  const balls = [mkBall(0, -1.0, 0), mkBall(1, 0, 0)];
+  const sim = new Simulation(spec, balls, {});
+  sim.shoot({ x: 1, y: 0 }, 3);
+  settle(sim);
+  ok(balls[0].x > 0.08, `rolling cue ball follows through after a full hit (cue.x=${balls[0].x.toFixed(3)})`);
+}
+{ // draw: backspin (低杆) on a short full hit pulls the cue ball back behind the contact
+  const balls = [mkBall(0, -0.35, 0), mkBall(1, 0, 0)];
+  const sim = new Simulation(spec, balls, {});
+  sim.shoot({ x: 1, y: 0 }, 2.5, { x: 0, y: -0.7 });
+  settle(sim);
+  ok(balls[0].x < -0.12, `draw shot pulls the cue ball back (cue.x=${balls[0].x.toFixed(3)})`);
+  ok(balls[1].x > 0.1, 'object ball still driven forward');
+}
+{ // stun: same short full hit with a center strike stays near the contact point
+  const balls = [mkBall(0, -0.35, 0), mkBall(1, 0, 0)];
+  const sim = new Simulation(spec, balls, {});
+  sim.shoot({ x: 1, y: 0 }, 2.5);
+  settle(sim);
+  ok(Math.abs(balls[0].x + 2 * spec.ballR) < 0.09, `center-ball stun stops near contact (cue.x=${balls[0].x.toFixed(3)})`);
+}
+{ // english (侧塞) alters the cushion rebound angle vs a no-spin shot
+  const run = (tip) => {
+    const balls = [mkBall(0, 0, 0)];
+    const sim = new Simulation(spec, balls, {});
+    sim.shoot({ x: 1, y: 0 }, 3, tip);
+    settle(sim);
+    return balls[0].y;
+  };
+  const plain = run({ x: 0, y: 0 }), spun = run({ x: 0.7, y: 0 });
+  ok(Math.abs(spun - plain) > 0.05, `sidespin changes the rebound (Δy=${(spun - plain).toFixed(3)})`);
+}
+
 // ---- AI ------------------------------------------------------------------------
 console.log('ai:');
 { // hard AI pots a straight ball into the corner

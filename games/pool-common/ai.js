@@ -24,11 +24,12 @@ function gauss(rand) {
 const rot = (d, a) => ({ x: d.x * Math.cos(a) - d.y * Math.sin(a), y: d.x * Math.sin(a) + d.y * Math.cos(a) });
 
 // Speed to send the object ball ~`dPocket`+margin meters after a cut, from `dCue` away.
-// Derived from the physics constants (ROLL_DEC≈0.62 + drag): v ≈ √(2·0.7·dist).
+// Calibrated to the slide→roll physics: a spinless launch covers ≈ 0.55·v² meters (slide
+// phase burns ~23% vs pure rolling), so v ≈ √(1.85·dist).
 function shotSpeed(dCue, dPocket, cut) {
-  const vObj = Math.sqrt(2 * 0.7 * (dPocket + 0.35));
+  const vObj = Math.sqrt(1.85 * (dPocket + 0.35));
   const vAtContact = vObj / Math.max(0.3, cut);
-  const v = Math.sqrt(vAtContact * vAtContact + 2 * 0.7 * dCue);
+  const v = Math.sqrt(vAtContact * vAtContact + 1.85 * dCue);
   return Math.max(0.9, Math.min(6.5, v * 1.08));
 }
 

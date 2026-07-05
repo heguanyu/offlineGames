@@ -28,7 +28,7 @@ export async function startPool(rules) {
   const G = {
     balls: null, state: null, sim: null, scene: null,
     phase: 'start',              // start | place | aim | sim | ai | over
-    aimDir: { x: 1, y: 0 }, power: 0.5,
+    aimDir: { x: 1, y: 0 }, power: 0.5, tip: { x: 0, y: 0 },
     lastOn: null, breaker: 0, match: [0, 0],
   };
   const cue = () => G.balls.find((b) => b.id === 0);
@@ -108,7 +108,7 @@ export async function startPool(rules) {
   }
   function commitPlacement() {
     const c = cue();
-    c.x = G.placePos.x; c.y = G.placePos.y; c.vx = c.vy = 0; c.inPlay = true;
+    c.x = G.placePos.x; c.y = G.placePos.y; c.vx = c.vy = c.wx = c.wy = 0; c.ez = 0; c.inPlay = true;
     G.state.inHand = null;
     sfx.place();
     G.scene.setGhost(null); G.scene.setRegion(null); G.scene.syncBalls();
@@ -138,7 +138,7 @@ export async function startPool(rules) {
     G.scene.setAim({ from, dir: G.aimDir, power: G.power, predict: predictShot(spec, G.balls, from, G.aimDir) });
   }
 
-  function shoot(dir, powerFrac) {
+  function shoot(dir, powerFrac, tip = G.tip) {
     if (G.phase === 'sim') return;
     G.phase = 'sim';
     setControls(null);
@@ -150,7 +150,8 @@ export async function startPool(rules) {
     G.scene.setAim(null);
     G.scene.strike(aim, () => {
       sfx.cue(speed);
-      G.sim.shoot(dir, speed);
+      G.sim.shoot(dir, speed, tip);
+      setTip(0, 0);                            // 杆法 resets to center after every shot
       runSim();
     });
   }
@@ -162,7 +163,7 @@ export async function startPool(rules) {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       const moving = G.sim.step(dt);
-      G.scene.syncBalls();
+      G.scene.syncBalls(dt);
       if (moving && now - t0 < 30000) requestAnimationFrame(tick);
       else settle();
     };
@@ -190,7 +191,7 @@ export async function startPool(rules) {
       const off = spec.ballR * 1.05 * Math.ceil(k / 2) * (k % 2 ? 1 : -1);
       x = Math.max(-spec.hx + spec.ballR, Math.min(spec.hx - spec.ballR, base.x + off));
     }
-    b.x = x; b.y = y; b.vx = b.vy = 0; b.inPlay = true; b.pocket = undefined;
+    b.x = x; b.y = y; b.vx = b.vy = b.wx = b.wy = 0; b.ez = 0; b.inPlay = true; b.pocket = undefined;
   }
 
   function endGame(over) {
@@ -216,7 +217,7 @@ export async function startPool(rules) {
       const on = rules.ballOn(G.state, G.balls);
       const p = planPlacement(spec, G.balls, on.ids, level, G.state.inHand);
       const c = cue();
-      c.x = p.x; c.y = p.y; c.vx = c.vy = 0; c.inPlay = true;
+      c.x = p.x; c.y = p.y; c.vx = c.vy = c.wx = c.wy = 0; c.ez = 0; c.inPlay = true;
       G.state.inHand = null;
       sfx.place();
       G.scene.syncBalls();
@@ -239,7 +240,7 @@ export async function startPool(rules) {
     G.scene.setAim({ from, dir: plan.dir, power: powerFrac, predict: predictShot(spec, G.balls, from, plan.dir) });
     await delay(750);
     if (G.phase !== 'ai') return;
-    shoot(plan.dir, powerFrac);
+    shoot(plan.dir, powerFrac, { x: 0, y: 0 });   // AI plays center-ball
   }
 
   // ---- pointer input -----------------------------------------------------------
@@ -285,6 +286,25 @@ export async function startPool(rules) {
     btn.addEventListener('pointerdown', start);
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) btn.addEventListener(ev, stop);
   }
+
+  // 杆法 widget: drag the dot on the little cue ball — y = 高杆/低杆 (follow/draw), x = 侧塞
+  const spinEl = $('spin-ctl'), spinDot = $('spin-dot');
+  function setTip(x, y) {
+    const m = Math.hypot(x, y), MAXR = 0.75;
+    if (m > MAXR) { x *= MAXR / m; y *= MAXR / m; }
+    G.tip = { x, y };
+    spinDot.style.left = 50 + x * 46 + '%';
+    spinDot.style.top = 50 - y * 46 + '%';
+  }
+  let spinDrag = false;
+  const spinMove = (e) => {
+    const r = spinEl.getBoundingClientRect();
+    setTip((e.clientX - r.left - r.width / 2) / (r.width / 2), -(e.clientY - r.top - r.height / 2) / (r.height / 2));
+  };
+  spinEl.addEventListener('pointerdown', (e) => { e.preventDefault(); spinDrag = true; spinEl.setPointerCapture(e.pointerId); spinMove(e); });
+  spinEl.addEventListener('pointermove', (e) => { if (spinDrag) spinMove(e); });
+  for (const ev of ['pointerup', 'pointercancel']) spinEl.addEventListener(ev, () => { spinDrag = false; });
+  spinEl.addEventListener('dblclick', () => setTip(0, 0));
 
   $('power').addEventListener('input', (e) => { G.power = +e.target.value / 100; showAim(); });
   $('shoot-btn').addEventListener('click', () => {
