@@ -28,7 +28,7 @@ export async function startPool(rules) {
   const G = {
     balls: null, state: null, sim: null, scene: null,
     phase: 'start',              // start | place | aim | sim | ai | over
-    aimDir: { x: 1, y: 0 }, power: 0.5, tip: { x: 0, y: 0 },
+    aimDir: { x: 1, y: 0 }, power: 0, tip: { x: 0, y: 0 },
     lastOn: null, breaker: 0, match: [0, 0],
   };
   const cue = () => G.balls.find((b) => b.id === 0);
@@ -115,9 +115,12 @@ export async function startPool(rules) {
     startAim();
   }
 
+  let hinted = false;
   function startAim() {
     G.phase = 'aim';
+    G.power = 0;
     setControls('aim');
+    if (!hinted) { hinted = true; toast('拉杆击球：按住拖动，越拉越远力度越大，松手击球（拖回白球取消）', 3600); }
     // default: point at the nearest legal target
     const on = rules.ballOn(G.state, G.balls);
     const c = cue();
@@ -243,26 +246,50 @@ export async function startPool(rules) {
     shoot(plan.dir, powerFrac, { x: 0, y: 0 });   // AI plays center-ball
   }
 
-  // ---- pointer input -----------------------------------------------------------
+  // ---- pointer input: slingshot cue -----------------------------------------------
+  // Touch/press anywhere and DRAG: the cue pulls back opposite the shot; drag distance =
+  // power; release fires. Dragging back inside the cancel zone (≈3 ball radii around the
+  // cue ball) zeroes the power so releasing there aborts. Pulling roughly straight back
+  // along the current aim keeps the fine-tuned direction (small snap cone), so the ⟲⟳
+  // buttons still matter; pulling clearly sideways re-aims freely.
   const canvas = $('scene');
-  let dragging = false;
+  const PULL = spec.L * 0.33;                                // world meters of drag for 100% power
+  let dragging = false, sling = null;
   canvas.addEventListener('pointerdown', (e) => {
     unlock();
     if (G.phase !== 'aim' && G.phase !== 'place') return;
     dragging = true;
+    if (G.phase === 'aim') sling = { free: false };
     canvas.setPointerCapture(e.pointerId);
     onDrag(e);
   });
   canvas.addEventListener('pointermove', (e) => { if (dragging) onDrag(e); });
-  canvas.addEventListener('pointerup', () => { dragging = false; });
+  for (const ev of ['pointerup', 'pointercancel']) canvas.addEventListener(ev, () => {
+    dragging = false;
+    if (G.phase !== 'aim' || !sling) return;
+    sling = null;
+    const p = G.power;
+    G.power = 0;
+    if (p > 0.02) shoot(G.aimDir, p);
+    else showAim();                                          // released in the cancel zone
+  });
   function onDrag(e) {
     const w = G.scene.worldFromEvent(e.clientX, e.clientY);
     if (!w) return;
     if (G.phase === 'place') { tryPlace(w); return; }
+    if (!sling) return;
     const c = cue();
-    const dx = w.x - c.x, dy = w.y - c.y;
-    if (Math.hypot(dx, dy) < spec.ballR * 1.5) return;       // too close — direction unstable
-    G.aimDir = norm(dx, dy);
+    const fx = w.x - c.x, fy = w.y - c.y;
+    const d = Math.hypot(fx, fy);
+    const dead = spec.ballR * 3;
+    if (d <= dead) { G.power = 0; showAim(); return; }       // inside the cancel zone
+    let dir = { x: -fx / d, y: -fy / d };                    // shoot OPPOSITE the pull
+    if (!sling.free) {
+      if (dir.x * G.aimDir.x + dir.y * G.aimDir.y > Math.cos(0.14)) dir = G.aimDir;
+      else sling.free = true;                                // left the snap cone → free aim
+    }
+    G.aimDir = dir;
+    G.power = Math.min(1, (d - dead) / PULL);
     showAim();
   }
 
@@ -306,12 +333,6 @@ export async function startPool(rules) {
   for (const ev of ['pointerup', 'pointercancel']) spinEl.addEventListener(ev, () => { spinDrag = false; });
   spinEl.addEventListener('dblclick', () => setTip(0, 0));
 
-  $('power').addEventListener('input', (e) => { G.power = +e.target.value / 100; showAim(); });
-  $('shoot-btn').addEventListener('click', () => {
-    unlock();
-    if (G.phase !== 'aim') return;
-    shoot(G.aimDir, Math.max(0.04, G.power));
-  });
   $('place-done').addEventListener('click', () => { if (G.phase === 'place') commitPlacement(); });
 
   // ---- gamepad (Xbox) — LS aim/move, D-pad fine, RB/LB power, A shoot/confirm ----
@@ -329,9 +350,9 @@ export async function startPool(rules) {
       if (ax) rotateAim(ax * Math.abs(ax) * 0.045);
       if (edge(14)) rotateAim(-0.0035);
       if (edge(15)) rotateAim(0.0035);
-      if (edge(4)) { G.power = Math.max(0, G.power - 0.07); $('power').value = G.power * 100; showAim(); }
-      if (edge(5)) { G.power = Math.min(1, G.power + 0.07); $('power').value = G.power * 100; showAim(); }
-      if (edge(0)) { unlock(); shoot(G.aimDir, Math.max(0.04, G.power)); }
+      if (edge(4)) { G.power = Math.max(0, G.power - 0.07); showAim(); }
+      if (edge(5)) { G.power = Math.min(1, G.power + 0.07); showAim(); }
+      if (edge(0)) { unlock(); shoot(G.aimDir, G.power > 0.05 ? G.power : 0.6); }
     } else if (G.phase === 'place') {
       if (ax || ay) tryPlace({ x: G.placePos.x + ax * 0.012, y: G.placePos.y + ay * 0.012 });
       if (edge(0)) commitPlacement();

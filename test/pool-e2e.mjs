@@ -8,11 +8,13 @@ const server = await startServer(PORT);
 const browser = await launchBrowser();
 
 let failed = 0;
+// `drag` = the slingshot stroke: press at from, pull to to (opposite the shot), release.
 const CASES = [
-  { name: 'pool8-3d', url: `/games/pool8/?d3`, vp: { width: 1180, height: 820 } },
-  { name: 'pool8-flat', url: `/games/pool8/?flat`, vp: { width: 844, height: 390 } },
-  { name: 'snooker-3d', url: `/games/snooker/?d3`, vp: { width: 1180, height: 820 } },
-  { name: 'snooker-flat', url: `/games/snooker/?flat`, vp: { width: 390, height: 844 } }, // portrait phone → rotated table
+  { name: 'pool8-3d', url: `/games/pool8/?d3`, vp: { width: 1180, height: 820 }, drag: { from: [350, 390], to: [40, 390] } },
+  { name: 'pool8-flat', url: `/games/pool8/?flat`, vp: { width: 844, height: 390 }, drag: { from: [350, 195], to: [60, 195] } },
+  { name: 'snooker-3d', url: `/games/snooker/?d3`, vp: { width: 1180, height: 820 }, drag: { from: [400, 410], to: [50, 405] } },
+  // portrait phone → rotated table; the cue sits near the top, so pull upward to fire down-table
+  { name: 'snooker-flat', url: `/games/snooker/?flat`, vp: { width: 390, height: 844 }, drag: { from: [169, 260], to: [169, 40] } },
 ];
 
 for (const c of CASES) {
@@ -31,10 +33,17 @@ for (const c of CASES) {
     await page.waitForSelector('#place-done', { visible: true, timeout: 10000 });
     await page.click('#place-done');
     await page.waitForSelector('#controls', { visible: true, timeout: 10000 });
-    await page.evaluate(() => { const p = document.getElementById('power'); p.value = 85; p.dispatchEvent(new Event('input')); });
-    await new Promise((r) => setTimeout(r, 600));       // let the aim line render
-    await page.screenshot({ path: `test/${c.name}-aim.png` });
-    await page.click('#shoot-btn');
+    // slingshot: press, pull back in steps (screenshot mid-pull with the cue drawn), release
+    const { from, to } = c.drag;
+    await page.mouse.move(from[0], from[1]);
+    await page.mouse.down();
+    for (let i = 1; i <= 6; i++) {
+      await page.mouse.move(from[0] + (to[0] - from[0]) * i / 6, from[1] + (to[1] - from[1]) * i / 6);
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    await page.screenshot({ path: `test/${c.name}-aim.png` });   // fully pulled back, line showing
+    await page.mouse.up();                              // fire
     await new Promise((r) => setTimeout(r, 5000));      // break rolls out (incl. AI reply starting)
     await page.screenshot({ path: `test/${c.name}-after.png` });
 
