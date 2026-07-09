@@ -137,6 +137,14 @@ r = analyzeWin(benHun, [], { wilds: [M(8), M(9)], winningKind: P(9), tianOrDi: t
 eq(r.score, 16, '(天和4 + 本混龙4) × 本混(2) = 16');
 ok(r.fans.includes('天和') && r.fans.includes('本混龙'), '天和 + 本混龙 labelled');
 
+// The big one: 天和 + 捉五 + 本混龙 all stack — (天和4 + 捉五3 + 龙4) × 本混2 = 22.
+// (A fully NATURAL 本混龙 cannot exist: 本混 means the dragon shares the wild's suit, so the
+// dragon's wild-kind tiles are always 混儿 — here the two M8s stand as the 8万/9万.)
+const tianMax = [M(1), M(2), M(3), M(4), M(5), M(6), M(7), M(8), M(8), P(1), P(2), P(3), P(9), P(9)];
+r = analyzeWin(tianMax, [], { wilds: [M(8), M(9)], winningKind: M(5), tianOrDi: true, dealerWin: true });
+eq(r.score, 22, '(天和4 + 捉五3 + 龙4) × 本混(2) = 22');
+ok(r.fans.includes('天和') && r.fans.includes('捉五') && r.fans.includes('本混龙'), '天和 + 捉五 + 本混龙 labelled');
+
 // A drawn 混儿 as the 5万 with 4万/6万 natural — NO standing 混儿 in the run — wins as
 // plain 捉五 = 3 (no 混吊 nor 双混吊: the only 混儿 is the drawn winning tile).
 const zw0 = [M(4), 27, M(6), P(1), P(2), P(3), 31, 31, 31, 32, 32, 32, S(9), S(9)];
