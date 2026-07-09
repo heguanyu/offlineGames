@@ -4,6 +4,7 @@
 // iOS they land in Files → Downloads.
 import { Signaling } from './signaling.js';
 import { PeerLink } from './rtc.js';
+import { RelayLink } from './relay.js';
 import { drawQR } from './qr.js';
 import { makeZip } from './zip.js';
 
@@ -20,8 +21,11 @@ let link = null;          // PeerLink once paired
 let joining = false;      // a join is in flight (blocks duplicate submits until peer/error)
 let myRoom = null;        // code we're hosting
 let pendingJoin = null;   // code to auto-join once the socket opens
-let session = null;       // { room, role, token } — the live pairing; survives signaling reconnects
+let session = null;       // { room, role, token, relay } — the live pairing; survives signaling reconnects
 let lastRepair = 0;       // debounce fs-repair so a flapping RTC link can't spam the server
+let rtcFails = 0;         // consecutive P2P attempts that never connected (this session)
+let lastTrouble = 0;      // debounce rtcTrouble ('failed' + 'channelclose' fire for one death)
+let linkWatch = 0;        // watchdog: P2P must open within this timer or it counts as a failure
 
 // ---- helpers --------------------------------------------------------------
 const onlyCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 9);
@@ -55,6 +59,8 @@ sig.addEventListener('fs-error', (e) => onPairError(e.detail.code));
 sig.addEventListener('fs-peer-gone', () => onPeerGone());
 // The peer's socket dropped (lock/background) but the session lives — wait for it to come back.
 sig.addEventListener('fs-peer-stale', () => { if (link) { $('link-status').textContent = '对方暂时离开，等待重连…'; setPickersEnabled(false); } });
+// The host gave up on P2P (rtcTrouble) and switched to the server relay — follow it.
+sig.addEventListener('fs-signal', (e) => { if (e.detail.data && e.detail.data.relayStart && session) switchToRelay(false); });
 
 function showHost(code) {
   drawQR($('qr'), location.origin + location.pathname + '#r=' + code, { scale: 6, dark: '#0e1630', light: '#ffffff' });
@@ -76,6 +82,8 @@ function onPairError(code) {
 // The session truly ended (explicit leave or the grace window expired). Tear down for real.
 function onPeerGone() {
   session = null;
+  rtcFails = 0;
+  clearTimeout(linkWatch);
   if (link) { link.close(); link = null; }
   showView('landing');
 }
@@ -100,25 +108,82 @@ function maybeRecover() {
 // only reset when a brand-new session starts.
 function establishLink({ polite, room, role, token }) {
   joining = false;
-  if (room) session = { room, role, token };
+  if (room) {
+    const keepRelay = !!(session && session.room === room && session.relay);
+    session = { room, role, token, relay: keepRelay };
+  }
+  // A session already downgraded to the server relay stays there (P2P provably doesn't work
+  // on this network) — rebuild the relay transport instead of trying RTC again.
+  if (session && session.relay) { switchToRelay(session.role === 'host'); return; }
   const fresh = !link;
   if (link) { link.close(); link = null; } // drop the dead transport before building the new one
   const l = link = new PeerLink(sig, { polite });
-  if (fresh) resetLists();
+  if (fresh) { resetLists(); rtcFails = 0; }
   $('link-status').textContent = '正在建立直连…';
   setPickersEnabled(false);
   showView('transfer');
 
+  // P2P must reach 'open' within the watchdog window, else it counts as a failed attempt —
+  // networks with client isolation never fire 'failed' quickly (ICE just times out slowly).
+  clearTimeout(linkWatch);
+  linkWatch = setTimeout(() => { if (link === l && !l._openFired) rtcTrouble(); }, 14000);
+
   // Each handler ignores events from a superseded link (l !== link) so a rebuild's teardown of the old
   // PeerLink can't fire channelclose and bounce us to the landing view.
-  l.addEventListener('open', () => { if (link === l) { $('link-status').textContent = '已连接，可互传文件'; setPickersEnabled(true); } });
+  l.addEventListener('open', () => {
+    if (link !== l) return;
+    clearTimeout(linkWatch);
+    rtcFails = 0;
+    $('link-status').textContent = '已连接，可互传文件（点对点直连）';
+    setPickersEnabled(true);
+  });
   l.addEventListener('peerstate', (e) => {
     if (link !== l) return;
     if (e.detail === 'disconnected') { $('link-status').textContent = '连接中断，重连中…'; setPickersEnabled(false); } // ICE may self-heal — wait
-    else if (e.detail === 'failed') { $('link-status').textContent = '连接中断，重连中…'; setPickersEnabled(false); maybeRecover(); } // terminal → rebuild
+    else if (e.detail === 'failed') rtcTrouble(); // terminal → rebuild or downgrade
   });
-  l.addEventListener('channelclose', () => { if (link === l) { $('link-status').textContent = '连接中断，重连中…'; setPickersEnabled(false); maybeRecover(); } });
+  l.addEventListener('channelclose', () => { if (link === l) rtcTrouble(); });
+  wireTransfer(l);
+}
 
+// A P2P attempt died (ICE failed / channel closed / never opened). Retry once via a server
+// re-pair; if that also can't connect, this network can't do P2P (AP isolation, symmetric NAT
+// with no reachable STUN…) — the host downgrades BOTH sides to the server relay.
+function rtcTrouble() {
+  if (!session || session.relay) return;
+  const now = Date.now();
+  if (now - lastTrouble < 3000) return;   // 'failed' + 'channelclose' fire for one death
+  lastTrouble = now;
+  rtcFails++;
+  $('link-status').textContent = '连接中断，重连中…';
+  setPickersEnabled(false);
+  if (rtcFails >= 2) {
+    if (session.role === 'host') switchToRelay(true);
+    // the guest waits: the host's own trouble path sends relayStart
+  } else {
+    maybeRecover();
+  }
+}
+
+// Swap the transport for the server relay (fs-signal carries the bytes; see relay.js).
+// `initiate` = we are the host deciding the downgrade → tell the guest to follow.
+function switchToRelay(initiate) {
+  if (!session) return;
+  session.relay = true;
+  clearTimeout(linkWatch);
+  if (initiate) sig.signal({ relayStart: 1 });
+  if (link instanceof RelayLink) return;      // already relaying — keep the live transport
+  if (link) { link.close(); link = null; }
+  const l = link = new RelayLink(sig);
+  $('link-status').textContent = '直连失败，切换服务器中转…';
+  setPickersEnabled(false);
+  showView('transfer');
+  l.addEventListener('open', () => { if (link === l) { $('link-status').textContent = '已连接 · 服务器中转（速度较慢）'; setPickersEnabled(true); } });
+  wireTransfer(l);
+}
+
+// Transfer events are identical for both transports.
+function wireTransfer(l) {
   // outgoing
   l.addEventListener('queued', (e) => addItem('out', e.detail.id, e.detail.name, e.detail.size));
   l.addEventListener('sent', (e) => completeItem('out', e.detail.id));

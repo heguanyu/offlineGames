@@ -278,6 +278,13 @@ export class PoolScene3D {
     return { x: p.x, y: p.z };
   }
 
+  // Inverse of worldFromEvent: table point → client px (used by the adaptive pull range).
+  screenFromWorld(x, y) {
+    const rect = this.canvas.getBoundingClientRect();
+    const v = new THREE.Vector3(x, this.spec.ballR, y).project(this.camera);
+    return { x: rect.left + (v.x + 1) / 2 * rect.width, y: rect.top + (1 - v.y) / 2 * rect.height };
+  }
+
   // `dt` (optional, seconds since last sync): when given, balls visually rotate by their SPIN
   // (b.wx/b.wy — so backspin shows) instead of by displacement.
   syncBalls(dt) {
@@ -374,13 +381,7 @@ export class PoolScene3D {
       if (k >= 1 && !fired) {
         fired = true;
         onImpact();
-        const f0 = now;                                      // brief follow-through, then hide
-        this._fx.push((n2) => {
-          const k2 = Math.min(1, (n2 - f0) / 240);
-          this.cue.position.y = this.spec.ballR * 1.15 + k2 * 0.05;
-          if (k2 >= 1) { this.cue.visible = false; this._cueAnim = null; return false; }
-          return true;
-        });
+        this.cue.visible = false; this._cueAnim = null;      // gone the moment the ball is struck
         return false;
       }
       return !fired;

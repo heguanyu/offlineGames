@@ -48,6 +48,13 @@ export class PoolScene2D {
     return this.rot ? { x: py, y: -px } : { x: px, y: py };
   }
 
+  // Inverse of worldFromEvent: table point → client px (used by the adaptive pull range).
+  screenFromWorld(x, y) {
+    const r = this.canvas.getBoundingClientRect();
+    const p = this.rot ? { x: -y, y: x } : { x, y };
+    return { x: r.left + this.cssW / 2 + p.x * this.scale, y: r.top + this.cssH / 2 + p.y * this.scale };
+  }
+
   reset(balls) {
     this.balls = balls;
     this._shown = new Map(balls.map((b) => [b.id, b.inPlay]));

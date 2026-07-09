@@ -254,18 +254,29 @@ export async function startPool(rules) {
   // buttons still matter; pulling clearly sideways re-aims freely.
   const canvas = $('scene');
   const PULL = spec.L * 0.33;                                // world meters of drag for 100% power
-  let dragging = false, sling = null;
+  const DEAD = spec.ballR * 3;                               // cancel zone around the cue ball
+  let dragging = false, sling = null, placeDrag = false;
   canvas.addEventListener('pointerdown', (e) => {
     unlock();
-    if (G.phase !== 'aim' && G.phase !== 'place') return;
+    if (G.phase === 'place') {
+      // placement moves ONLY by dragging the ball itself — a stray tap elsewhere (e.g. next
+      // to the 放好了 button) must never teleport it.
+      const w = G.scene.worldFromEvent(e.clientX, e.clientY);
+      if (!w || Math.hypot(w.x - G.placePos.x, w.y - G.placePos.y) > Math.max(spec.ballR * 7, 0.16)) return;
+      placeDrag = true; dragging = true;
+      canvas.setPointerCapture(e.pointerId);
+      onDrag(e);
+      return;
+    }
+    if (G.phase !== 'aim') return;
     dragging = true;
-    if (G.phase === 'aim') sling = { free: false };
+    sling = { free: false };
     canvas.setPointerCapture(e.pointerId);
     onDrag(e);
   });
   canvas.addEventListener('pointermove', (e) => { if (dragging) onDrag(e); });
   for (const ev of ['pointerup', 'pointercancel']) canvas.addEventListener(ev, () => {
-    dragging = false;
+    dragging = false; placeDrag = false;
     if (G.phase !== 'aim' || !sling) return;
     sling = null;
     const p = G.power;
@@ -274,23 +285,50 @@ export async function startPool(rules) {
     else showAim();                                          // released in the cancel zone
   });
   function onDrag(e) {
+    if (G.phase === 'place') {
+      if (!placeDrag) return;
+      // fingers hide the ball — nudge the drop point up-screen on touch so it stays visible
+      const off = e.pointerType === 'touch' ? 52 : 0;
+      const w = G.scene.worldFromEvent(e.clientX, e.clientY - off);
+      if (w) tryPlace(w);
+      return;
+    }
+    if (!sling) return;
     const w = G.scene.worldFromEvent(e.clientX, e.clientY);
     if (!w) return;
-    if (G.phase === 'place') { tryPlace(w); return; }
-    if (!sling) return;
     const c = cue();
     const fx = w.x - c.x, fy = w.y - c.y;
     const d = Math.hypot(fx, fy);
-    const dead = spec.ballR * 3;
-    if (d <= dead) { G.power = 0; showAim(); return; }       // inside the cancel zone
+    if (d <= DEAD) { G.power = 0; showAim(); return; }       // inside the cancel zone
     let dir = { x: -fx / d, y: -fy / d };                    // shoot OPPOSITE the pull
     if (!sling.free) {
       if (dir.x * G.aimDir.x + dir.y * G.aimDir.y > Math.cos(0.14)) dir = G.aimDir;
       else sling.free = true;                                // left the snap cone → free aim
     }
     G.aimDir = dir;
-    G.power = Math.min(1, (d - dead) / PULL);
+    G.power = Math.min(1, (d - DEAD) / pullRange(e, c));
     showAim();
+  }
+  // Effective pull range: normally PULL, but when the cue ball sits near a screen edge there
+  // may be too little room to drag that far — shrink the range to the space that exists, so
+  // 100% power is always reachable.
+  function pullRange(e, c) {
+    const bs = G.scene.screenFromWorld(c.x, c.y);
+    const rect = canvas.getBoundingClientRect();
+    const sdx = e.clientX - bs.x, sdy = e.clientY - bs.y;
+    const sl = Math.hypot(sdx, sdy);
+    if (sl < 1) return PULL;
+    const ux = sdx / sl, uy = sdy / sl;
+    let t = Infinity;                                        // px from the ball to the screen edge, along the pull
+    if (ux > 0) t = Math.min(t, (rect.right - 14 - bs.x) / ux);
+    else if (ux < 0) t = Math.min(t, (rect.left + 14 - bs.x) / ux);
+    if (uy > 0) t = Math.min(t, (rect.bottom - 14 - bs.y) / uy);
+    else if (uy < 0) t = Math.min(t, (rect.top + 14 - bs.y) / uy);
+    if (!isFinite(t) || t <= 0) return PULL;
+    const wB = G.scene.worldFromEvent(bs.x + ux * t, bs.y + uy * t);
+    if (!wB) return PULL;
+    const avail = Math.hypot(wB.x - c.x, wB.y - c.y) - DEAD;
+    return Math.max(0.2, Math.min(PULL, avail * 0.92));
   }
 
   // fine aim buttons (hold to repeat)

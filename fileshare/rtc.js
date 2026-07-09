@@ -11,7 +11,14 @@
 const CHUNK = 16 * 1024;          // 16 KB messages — safely under every browser's SCTP message cap
 const HIGH_WATER = 8 * 1024 * 1024; // pause sending when this much is buffered
 const LOW_WATER = 1 * 1024 * 1024;  // resume once it drains below this
-const ICE = [{ urls: 'stun:stun.l.google.com:19302' }]; // public STUN for cross-NAT; LAN uses host candidates
+// Public STUN from several independent providers — one being blocked/unreachable on a given
+// network (e.g. Google's) must not sink the whole handshake. LAN pairs still use host candidates.
+const ICE = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: 'stun:stun.miwifi.com:3478' },
+  { urls: 'stun:stun.qq.com:3478' },
+];
 
 let nextFileId = 1;
 

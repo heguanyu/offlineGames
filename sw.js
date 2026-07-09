@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.7.5';
+const CACHE = 'offline-games-0.7.6';
 
 const ASSETS = [
   './',
@@ -25,6 +25,7 @@ const ASSETS = [
   './fileshare/main.js',
   './fileshare/signaling.js',
   './fileshare/rtc.js',
+  './fileshare/relay.js', // server-relay fallback transport (when P2P can't punch through)
   './fileshare/qr.js',
   './fileshare/zip.js', // store-only ZIP writer for the batch (desktop) download
   './fileshare/jsqr.js', // QR decoder for the in-app camera scanner (BarcodeDetector fallback, e.g. iOS)

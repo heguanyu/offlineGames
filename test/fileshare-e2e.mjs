@@ -45,7 +45,7 @@ async function run() {
 
   // host creates a share → a 9-char code appears
   await host.evaluate(() => document.getElementById('btn-host').click());
-  await host.waitForFunction(() => { const t = document.getElementById('code-display').textContent.replace(/[^A-Z0-9]/g, ''); return t.length === 9; }, { timeout: 5000 });
+  await host.waitForFunction(() => { const t = document.getElementById('code-display').textContent.replace(/[^A-Z0-9]/g, ''); return t.length === 9; }, { timeout: 5000, polling: 250 });
   const code = await host.evaluate(() => document.getElementById('code-display').textContent.replace(/[^A-Z0-9]/g, ''));
   console.log('  host code:', code);
   // QR canvas actually rendered (non-blank)
@@ -67,17 +67,19 @@ async function run() {
   await guest.waitForSelector('#view-transfer:not([hidden])', { timeout: 10000 });
   console.log('  paired: both reached the transfer view');
 
-  // BEST-EFFORT: the actual peer-to-peer transfer needs the DataChannel to open, which requires real
-  // UDP connectivity between the two headless browser processes. Windows Firewall blocks that loopback
-  // UDP in this non-interactive sandbox, so the channel may never open here. The transfer PROTOCOL
-  // itself is covered deterministically by test/fileshare-transfer-test.mjs, so we don't hard-fail on
-  // the transport: if the channel opens we assert the file bytes; otherwise we note it and pass.
-  const opened = await host.waitForFunction(() => document.getElementById('link-status').textContent.includes('已连接'), { timeout: 25000 }).then(() => true).catch(() => false);
-  if (!opened) {
-    return done(0, '  NOTE: DataChannel did not open (loopback UDP blocked in sandbox) — transfer covered by fileshare-transfer-test.mjs\nFILESHARE E2E PASS (pairing/UI)');
-  }
-  await guest.waitForFunction(() => document.getElementById('link-status').textContent.includes('已连接'), { timeout: 10000 });
-  console.log('  both peers connected (DataChannel open) — transferring a file');
+  // The link MUST connect one way or the other: P2P when the sandbox allows loopback UDP, else
+  // the app downgrades to the server-relay transport (watchdog ≈14s × 2 attempts → relay), which
+  // only needs the already-working signaling socket. This exercises exactly the "stuck at
+  // 正在建立直连 + retry" bug: pairing fine, ICE impossible.
+  // NOTE: interval polling, not the default rAF — the host page is a hidden background tab in
+  // headless Chrome, where rAF never fires, so an rAF-polled predicate can miss a status that
+  // was set within the first second (this bit us: the link connected at ~1s and the wait still
+  // timed out at 45s).
+  const opened = await host.waitForFunction(() => document.getElementById('link-status').textContent.includes('已连接'), { timeout: 45000, polling: 500 }).then(() => true).catch(() => false);
+  if (!opened) return fail('link never connected — even the server-relay fallback failed');
+  await guest.waitForFunction(() => document.getElementById('link-status').textContent.includes('已连接'), { timeout: 15000, polling: 500 });
+  const mode = await host.evaluate(() => document.getElementById('link-status').textContent);
+  console.log(`  both peers connected (${mode.includes('中转') ? 'server relay' : 'P2P DataChannel'}) — transferring a file`);
 
   // host sends a file via the hidden file input (uploadFile triggers the real change handler)
   const tmp = path.join(os.tmpdir(), 'fs-e2e-sample.txt');
@@ -104,7 +106,7 @@ async function run() {
   const sentOk = await host.evaluate(() => [...document.querySelectorAll('#out-list .pct')].some((e) => e.textContent.includes('已发送')));
   if (!sentOk) return fail('sender never marked 已发送');
 
-  done(0, `transferred ${got.len} bytes peer-to-peer, bytes match\nFILESHARE E2E PASS`);
+  done(0, `transferred ${got.len} bytes, bytes match\nFILESHARE E2E PASS`);
 }
 
 run().catch((e) => fail(e && e.stack ? e.stack : String(e)));
