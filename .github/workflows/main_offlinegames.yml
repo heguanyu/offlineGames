@@ -9,7 +9,7 @@
 # on the persistent /home mount, set via SCORES_FILE). better-sqlite3 is compiled here on the Linux
 # runner so the native binary matches the Azure Linux host. Auth is OIDC (azure/login).
 #
-# GitHub Pages (deploy.yml) stays a fully working mirror and is unchanged; both deploy on every push.
+# This is the ONLY deployment: the GitHub Pages mirror (deploy.yml) was decommissioned 2026-07-09.
 name: Build and deploy Node.js app to Azure Web App - offlineGames
 
 on:

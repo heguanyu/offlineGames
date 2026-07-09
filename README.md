@@ -61,8 +61,8 @@ A set of offline-playable PWA games for iPad, with Xbox controller support.
 - GBA (mGBA) runs full speed single-threaded, so it uses the plain core.
 - **NDS uses the multi-threaded melonDS core** — single-threaded melonDS is
   too slow (lag, and no fast-forward headroom). Threads need SharedArrayBuffer,
-  which needs cross-origin isolation (COOP/COEP headers). GitHub Pages can't
-  set those, so `sw.js` injects them on every response, and the NDS page
+  which needs cross-origin isolation (COOP/COEP headers). Static hosts can't
+  always set those, so `sw.js` injects them on every response, and the NDS page
   registers the service worker + reloads once to pick them up. If isolation
   can't be achieved, EmulatorJS falls back to the single-threaded core
   automatically. All assets are same-origin, so COEP `require-corp` is
@@ -176,12 +176,13 @@ gamepads until first input, as a fingerprinting protection).
 
 ## Deploy + install on iPad
 
-Service workers require HTTPS, so host the folder anywhere static + HTTPS
-(GitHub Pages is the zero-cost option):
+Service workers require HTTPS. Production deploys to Azure App Service
+(`.github/workflows/main_offlinegames.yml` on every push to main — one Node
+process serves the static site + the WebSocket backend):
 
-1. Push this folder to a GitHub repo, enable Pages (Settings → Pages →
-   deploy from branch).
-2. On the iPad, open the Pages URL in Safari **once while online** — this
+1. Push to main; the workflow stages the site + server and deploys it to
+   `offlinegames.azurewebsites.net`.
+2. On the iPad, open the URL in Safari **once while online** — this
    lets the service worker download and cache everything.
 3. Share button → **Add to Home Screen**.
 4. Launch from the home-screen icon (important: home-screen PWAs are exempt
