@@ -176,12 +176,14 @@ gamepads until first input, as a fingerprinting protection).
 
 ## Deploy + install on iPad
 
-Service workers require HTTPS. Production deploys to Azure App Service
-(`.github/workflows/main_offlinegames.yml` on every push to main — one Node
-process serves the static site + the WebSocket backend):
+Service workers require HTTPS. Production deploys to Azure App Service from
+the local machine — one Node process serves the static site + the WebSocket
+backend (there is no CI/CD):
 
-1. Push to main; the workflow stages the site + server and deploys it to
-   `offlinegames.azurewebsites.net`.
+1. Bump the sw.js CACHE version, push to main, then run
+   `tools/deploy-azure.ps1` (needs `az login`) — it stages the site + server
+   and zip-deploys to `offlinegames.azurewebsites.net` with a server-side
+   dependency build.
 2. On the iPad, open the URL in Safari **once while online** — this
    lets the service worker download and cache everything.
 3. Share button → **Add to Home Screen**.
