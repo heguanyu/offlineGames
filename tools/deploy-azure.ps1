@@ -54,7 +54,22 @@ az webapp config appsettings set -g $RG -n $APP --settings SCM_DO_BUILD_DURING_D
 
 Write-Host '==> deploying (upload + remote npm install; a few minutes)'
 az webapp deploy -g $RG -n $APP --src-path $zip --type zip --timeout 1200 --output none
-if ($LASTEXITCODE) { throw 'az webapp deploy failed' }
+if ($LASTEXITCODE) {
+  # The SCM gateway can 504 while the server-side deployment keeps running (seen in practice:
+  # CLI gave up at ~4 min, deployment finished fine). Poll the deployment record to a terminal
+  # state before declaring failure. status: 1=in progress, 4=success, 3=failed.
+  Write-Host '    az returned an error - polling the server-side deployment status...'
+  $sub = az account show --query id -o tsv
+  $deployed = $false
+  for ($i = 0; $i -lt 60; $i++) {
+    Start-Sleep -Seconds 10
+    $st = az rest --method get --url "https://management.azure.com/subscriptions/$sub/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP/deployments?api-version=2023-12-01" --query 'value[0].properties.status' -o tsv 2>$null
+    Write-Host "    deployment status: $st"
+    if ($st -eq '4') { $deployed = $true; break }
+    if ($st -eq '3') { break }
+  }
+  if (-not $deployed) { throw 'az webapp deploy failed (deployment did not reach success)' }
+}
 
 Write-Host '==> verifying'
 $ok = $false
