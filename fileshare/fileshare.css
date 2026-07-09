@@ -53,7 +53,9 @@ button.secondary:active { background: #0f3460; }
 .choices.row button { flex: 1; }
 
 /* host QR + code */
-.qr { width: 240px; height: 240px; max-width: 80vw; image-rendering: pixelated; border-radius: 10px; background: #fff; padding: 0; }
+/* Rendered hi-res and smoothly downscaled — NO image-rendering:pixelated: a pixelated
+   non-integer downscale distorts module widths and defeats weaker QR detectors. */
+.qr { width: 240px; height: 240px; max-width: 80vw; border-radius: 10px; background: #fff; padding: 0; }
 .code-display {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 1.7rem; font-weight: 700; letter-spacing: 0.12em; color: #e9c46a;

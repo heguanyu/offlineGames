@@ -41,6 +41,25 @@ function fmtBytes(n) {
   return n.toFixed(n < 10 ? 1 : 0) + ' ' + u[i];
 }
 
+// ---- keep the screen awake while a share session is live -------------------
+// A sleeping device drops the WebSocket AND the DataChannel mid-transfer; the Screen Wake
+// Lock API prevents that (Safari 16.4+, Chromium incl. 华为浏览器). Best-effort — devices
+// without it just keep their normal sleep timers.
+let wakeLock = null;
+async function keepAwake(on) {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    if (on && !wakeLock && !document.hidden) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!on && wakeLock) {
+      const w = wakeLock; wakeLock = null; await w.release();
+    }
+  } catch { wakeLock = null; }   // denied (low battery etc.) — not fatal
+}
+// the OS auto-releases the lock whenever the page hides; re-grab it on return
+document.addEventListener('visibilitychange', () => { if (!document.hidden && session) keepAwake(true); });
+
 // ---- connection status ----------------------------------------------------
 function setConn(s) { const el = $('conn'); el.className = 'conn ' + s; el.title = { on: '已连接', off: '未连接', connecting: '连接中…' }[s]; }
 sig.addEventListener('open', () => {
@@ -63,7 +82,10 @@ sig.addEventListener('fs-peer-stale', () => { if (link) { $('link-status').textC
 sig.addEventListener('fs-signal', (e) => { if (e.detail.data && e.detail.data.relayStart && session) switchToRelay(false); });
 
 function showHost(code) {
-  drawQR($('qr'), location.origin + location.pathname + '#r=' + code, { scale: 6, dark: '#0e1630', light: '#ffffff' });
+  // Pure black at high resolution: the canvas is CSS-downscaled to 240px, and a smooth
+  // downscale of a hi-res code stays crisply decodable (a pixelated NON-integer downscale
+  // distorted module widths — iPhone's detector coped, Huawei's 扫一扫 didn't).
+  drawQR($('qr'), location.origin + location.pathname + '#r=' + code, { scale: 12, dark: '#000000', light: '#ffffff' });
   $('code-display').textContent = groupCode(code);
   $('host-status').textContent = '等待对方加入…';
   showView('host');
@@ -84,6 +106,7 @@ function onPeerGone() {
   session = null;
   rtcFails = 0;
   clearTimeout(linkWatch);
+  keepAwake(false);
   if (link) { link.close(); link = null; }
   showView('landing');
 }
@@ -115,6 +138,7 @@ function establishLink({ polite, room, role, token }) {
   // A session already downgraded to the server relay stays there (P2P provably doesn't work
   // on this network) — rebuild the relay transport instead of trying RTC again.
   if (session && session.relay) { switchToRelay(session.role === 'host'); return; }
+  keepAwake(true);
   const fresh = !link;
   if (link) { link.close(); link = null; } // drop the dead transport before building the new one
   const l = link = new PeerLink(sig, { polite });
@@ -173,6 +197,7 @@ function switchToRelay(initiate) {
   clearTimeout(linkWatch);
   if (initiate) sig.signal({ relayStart: 1 });
   if (link instanceof RelayLink) return;      // already relaying — keep the live transport
+  keepAwake(true);
   if (link) { link.close(); link = null; }
   const l = link = new RelayLink(sig);
   $('link-status').textContent = '直连失败，切换服务器中转…';
@@ -311,12 +336,12 @@ const dz = $('dropzone');
 ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'dragleave' && dz.contains(e.relatedTarget)) return; dz.classList.remove('drag'); }));
 dz.addEventListener('drop', (e) => { if (e.dataTransfer && e.dataTransfer.files.length) sendFiles(e.dataTransfer.files); });
 
-$('disconnect').addEventListener('click', () => { sig.leave(); session = null; if (link) { link.close(); link = null; } showView('landing'); });
+$('disconnect').addEventListener('click', () => { sig.leave(); session = null; keepAwake(false); if (link) { link.close(); link = null; } showView('landing'); });
 
 // ---- landing buttons ------------------------------------------------------
 $('btn-host').addEventListener('click', () => { if (sig.ws && sig.ws.readyState === WebSocket.OPEN) sig.create(); });
 $('btn-code').addEventListener('click', () => { $('code-error').hidden = true; clearCode(); showView('code'); setTimeout(() => boxes[0] && boxes[0].focus(), 50); });
-$('host-cancel').addEventListener('click', () => { sig.leave(); myRoom = null; session = null; showView('landing'); });
+$('host-cancel').addEventListener('click', () => { sig.leave(); myRoom = null; session = null; keepAwake(false); showView('landing'); });
 $('code-back').addEventListener('click', () => showView('landing'));
 $('code-join').addEventListener('click', submitCode);
 
