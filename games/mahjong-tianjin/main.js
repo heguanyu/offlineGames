@@ -16,6 +16,7 @@ import { $, faceTileEl, mkBtn, makeToast, bindKeys, startGamepad, forceLandscape
 import { BOT_NAMES } from '../mahjong-common/bot-names.js';
 import { serverUrl } from '../mahjong-common-online/server-url.js';
 import { clientUidSync } from '../../shared/client-id.js';
+import { homeHref } from '../../shared/hub-home.js';
 import { MahjongGame, HUMAN, WIND, SEAT_LABEL } from '../mahjong-common/game-base.js';
 
 const sound = new Sound();
@@ -1044,7 +1045,7 @@ class TianjinGame extends MahjongGame {
       this.startHand();
     });
     $('rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
-    $('start-hub-link').addEventListener('click', () => { location.replace('../../'); }); // difficulty screen → main hub
+    $('start-hub-link').addEventListener('click', () => { location.replace(homeHref()); }); // difficulty screen → hub (or the /mj/ sub-hub)
     $('menu-rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
     $('rules-close').addEventListener('click', () => $('rules-overlay').classList.add('hidden'));
     $('menu-btn').addEventListener('click', () => this.openMenu());
@@ -1097,9 +1098,9 @@ class TianjinGame extends MahjongGame {
     this.returnHub();
   }
 
-  // Leave the game: offline → the main hub; online → back to the lobby.
+  // Leave the game: offline → the hub we came from (main or a sub-hub); online → back to the lobby.
   returnHub() {
-    if (!ONLINE) { location.replace('../../'); return; }
+    if (!ONLINE) { location.replace(homeHref()); return; }
     const params = new URLSearchParams(location.search); // carry ?server=/fast/flat back to the lobby
     for (const k of ['online', 'viewer', 'vseat', 'vtable']) params.delete(k);
     params.set('game', 'tianjin'); // return to THIS game's split lobby

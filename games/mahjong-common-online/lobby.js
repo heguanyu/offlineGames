@@ -6,7 +6,12 @@
 import { createRing, updateRing } from '../mahjong-common/timer-ring.js';
 import { serverUrl } from './server-url.js';
 import { clientUidSync } from '../../shared/client-id.js';
+import { homeHref } from '../../shared/hub-home.js';
 const $ = (id) => document.getElementById(id);
+
+// Entered via a sub-hub (e.g. /mj/)? Point every "back to hub" exit there instead of the full hub.
+const backLink = document.querySelector('a.back');
+if (backLink) backLink.href = homeHref();
 
 // The game server (WebSocket) endpoint — see server-url.js (the single source of truth).
 const SERVER_URL = serverUrl();
@@ -75,7 +80,7 @@ function refreshMaintMessage() {
   $('maint-title').textContent = offline ? '📵 无网络连接' : '🛠️ 服务器维护中';
   $('maint-msg').textContent = offline ? '请检查你的网络连接，恢复后会自动重连…' : '服务器正在维护中，马上回来…';
 }
-$('maint-hub').addEventListener('click', () => { location.replace('../../'); });
+$('maint-hub').addEventListener('click', () => { location.replace(homeHref()); });
 // if connectivity flips while the overlay is showing, swap the message to match
 for (const ev of ['online', 'offline']) addEventListener(ev, () => { if (!$('maint-overlay').classList.contains('hidden')) refreshMaintMessage(); });
 

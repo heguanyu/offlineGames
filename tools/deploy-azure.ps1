@@ -22,6 +22,10 @@ Write-Host '==> packing voice sprites'
 node (Join-Path $root 'tools\pack-voice.js')
 if ($LASTEXITCODE) { throw 'pack-voice failed' }
 
+Write-Host '==> generating sub-hub service workers'
+node (Join-Path $root 'tools\gen-subhub.js')
+if ($LASTEXITCODE) { throw 'gen-subhub failed' }
+
 Write-Host '==> staging site into _deploy'
 $stage = Join-Path $root '_deploy'
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }

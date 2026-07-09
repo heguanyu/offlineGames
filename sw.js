@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.7.7';
+const CACHE = 'offline-games-0.7.8';
 
 const ASSETS = [
   './',
@@ -181,6 +181,7 @@ const ASSETS = [
   './shared/emu-persistence.js',
   './shared/power-mode.js', // 省电模式 (3-tier power mode) — shared by the card games
   './shared/audio-revive.js', // AudioContext keeper: revives audio after iOS kills it in the background (all game sound modules)
+  './shared/hub-home.js', // sub-hub home override (返回大厅 lands on /mj/ when entered through it)
   './shared/client-id.js', // one persistent per-browser uid (online seats + emulator cloud saves)
   './shared/save-sync.js', // cloud backup of emulator saves (imports client-id.js + server-url.js)
   './emulatorjs/data/emulator.css',

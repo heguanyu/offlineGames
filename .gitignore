@@ -40,3 +40,6 @@ server/*.legacy.bak
 # local deploy staging (tools/deploy-azure.ps1)
 _deploy/
 deploy.zip
+
+# generated sub-hub service workers (tools/gen-subhub.js)
+/sw-*.js

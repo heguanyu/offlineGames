@@ -1,0 +1,17 @@
+{
+  "mj": {
+    "cache": "mj-hub",
+    "extra": ["./mj/", "./mj/index.html", "./mj/manifest.webmanifest", "./sw-mj.js"],
+    "prefixes": [
+      "./app-nav.js",
+      "./icons/",
+      "./shared/power-mode.js",
+      "./shared/audio-revive.js",
+      "./shared/hub-home.js",
+      "./shared/client-id.js",
+      "./games/mahjong-common/",
+      "./games/mahjong-tianjin/",
+      "./games/mahjong-common-online/"
+    ]
+  }
+}

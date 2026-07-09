@@ -56,6 +56,17 @@ static file that a cached page imports/loads, also add it to the `ASSETS` list i
 offline play breaks on a missing module. To ship: push, then run `tools/deploy-azure.ps1`
 (pushing alone deploys nothing).
 
+## Sub-hubs — shareable, scoped entries (e.g. /mj/)
+A sub-hub exposes a SUBSET of the site to share with someone (e.g. `/mj/` = 天津麻将 only,
+offline + 联机 on the same server/tables; not linked from the main hub). Because everything is
+plain ES modules, code is already split per game — only the hub page and the SW precache span
+the whole site. So a sub-hub is: a committed landing page (`mj/index.html`, plants the
+`hub-home` sessionStorage marker so 返回大厅 comes back to it — see `shared/hub-home.js`) + a
+GENERATED service worker `sw-<name>.js` (git-ignored; `tools/gen-subhub.js`, run by the deploy
+script) — sw.js verbatim with a filtered ASSETS list + its own cache name, version inherited
+from sw.js. Profiles in `tools/subhubs.json`: a new partial hub = one profile entry (path
+prefixes) + one landing folder. `test/subhub-test.mjs` guards the subset + navigation loop.
+
 ## Voice clips — packed "sprites" (generated, not committed)
 The raw per-clip voice WAVs (`games/**/voice/<set>/*.wav`, ~291 files) are the **source of
 truth** and stay in the repo. `tools/pack-voice.js` concatenates each voice set into one
