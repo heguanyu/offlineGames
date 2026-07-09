@@ -121,10 +121,21 @@ const xiaohe = [27, S(9), S(9), M(1), M(2), M(3), P(4), P(5), P(6), P(7), P(8), 
 r = analyzeWin(xiaohe, [], { wilds: [27, 28], winningKind: 31 });
 ok(r === null, '小和 (score 1) is rejected by 起和 2番');
 
-// 天和 — dealer's立手 (first-draw) win → flat maximum (28), not the pattern score.
+// 天和/地和 — "天胡算龙 + 随意摆": an ADDITIVE 4 (like 龙); the hand is arranged in its best
+// reading and every other fan stacks normally (zh.wikipedia: 4番; folk rule: 天胡+混吊 = 混吊龙).
 r = analyzeWin(plain, [], { wilds: [27, 28], winningKind: S(5), tianOrDi: true, dealerWin: true });
-eq(r.score, 28, '天和 = 28 (flat max)');
-ok(r.fans.includes('天和'), '天和 labelled');
+eq(r.score, 8, '天和(4) × 素(2) = 8 — a wild-less 天和 keeps the 素 multiplier');
+ok(r.fans.includes('天和') && r.fans.includes('素'), '天和 + 素 labelled');
+
+// 地和 + 混吊 = the folk "混吊龙": 天地和(4) × 混吊(2) = 8.
+r = analyzeWin(hunDiaoRun, [], { wilds: [27, 28], winningKind: P(6), tianOrDi: true, dealerWin: false });
+eq(r.score, 8, '地和(4) × 混吊(2) = 8 (混吊龙)');
+ok(r.fans.includes('地和') && r.fans.includes('混吊'), '地和 + 混吊 labelled');
+
+// 天和 holding a REAL dragon stacks additively, multipliers on top: (天和4 + 龙4) × 本混2 = 16.
+r = analyzeWin(benHun, [], { wilds: [M(8), M(9)], winningKind: P(9), tianOrDi: true, dealerWin: true });
+eq(r.score, 16, '(天和4 + 本混龙4) × 本混(2) = 16');
+ok(r.fans.includes('天和') && r.fans.includes('本混龙'), '天和 + 本混龙 labelled');
 
 // A drawn 混儿 as the 5万 with 4万/6万 natural — NO standing 混儿 in the run — wins as
 // plain 捉五 = 3 (no 混吊 nor 双混吊: the only 混儿 is the drawn winning tile).

@@ -45,7 +45,9 @@ export const FAN = {
   LONG: 4,       // 龙 — full 1-9 run in one suit, as three chows (+)
   BENHUN: 2,     // 本混 — 龙's suit equals the wild's suit; doubles 龙 → 本混龙 = 8 (×2)
   GANGKAI: 2,    // 杠开 — win on a kong-replacement draw (×2)
-  TIANDI: 28,    // 天和 / 地和 — win off the very first draw → flat max (算龙 + 随意摆, capped)
+  TIANDI: 4,     // 天和 / 地和 — first-draw win, "天胡算龙": counts as a 龙 (+4 into the base);
+                 // the hand is 随意摆 (best decomposition) and every other fan stacks normally,
+                 // e.g. 天和+混吊 = 混吊龙 = 8. (zh.wikipedia: "一般认为是4番".)
 };
 export const WIN_MIN = 2; // 起和番: a win must reach 2番 (小和 is disallowed)
 
@@ -62,13 +64,11 @@ function scoreFromDecomp(decomp, ctx) {
   const { winningKind, wildCount, wildSuit, afterKong, tianOrDi } = ctx;
   const winIsWild = ctx.wilds.includes(winningKind);
 
-  // 天胡 / 地胡 — a first-draw win. 算龙 + 随意摆, capped at a flat max (no search).
-  if (tianOrDi) {
-    return { score: FAN.TIANDI, fans: [ctx.dealerWin ? '天和' : '地和'],
-      meta: { tian: true, su: wildCount === 0, hunDiao: false, shuangHun: false, zhuoWu: false, long: false, benHunLong: false } };
-  }
-
   const fans = [];
+  // 天胡 / 地胡 — a first-draw win, "天胡算龙 + 随意摆": an ADDITIVE 4 like 龙 (added below),
+  // and the hand is otherwise scored through the normal best-decomposition search, so 素 /
+  // 混吊 / 双混吊 multiply and 捉五 / a REAL 龙 add on top (天和+混吊 = 混吊龙 = 8).
+  if (tianOrDi) fans.push(ctx.dealerWin ? '天和' : '地和');
   // 素 — no wild present in the hand at all (decomposition-independent).
   const su = wildCount === 0;
 
@@ -140,8 +140,9 @@ function scoreFromDecomp(decomp, ctx) {
     shuangHun = wildCompleted && !winPair; // 双混吊 — a meld carries two 混儿
   }
 
-  // --- combine: additive base term (捉五 / 龙), then ×2 fans ---
+  // --- combine: additive base term (天地和 / 捉五 / 龙), then ×2 fans ---
   let add = 0;
+  if (tianOrDi) add += FAN.TIANDI;   // labelled above (first chip)
   if (zhuoWu) { add += FAN.ZHUOWU; fans.push('捉五'); }
   if (long) { add += FAN.LONG; fans.push(benHunLong ? '本混龙' : '龙'); }
   const base = add > 0 ? add : 1;

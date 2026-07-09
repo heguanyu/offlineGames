@@ -79,7 +79,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 // ·, e.g. 龙·4分); multiplier fans multiply it (shown ` xN`, e.g. 素 x2, matching the 庄x2 tags).
 // When no additive fan is present the base is 1 (提溜/小和), shown as a 小和·1分 chip so the math
 // reads. Mirrors the FAN table + scoreFromDecomp() in engine.js — keep in sync if those change.
-const FAN_ADD = { '捉五': 3, '龙': 4, '本混龙': 8, '天和': 28, '地和': 28 };
+const FAN_ADD = { '捉五': 3, '龙': 4, '本混龙': 8, '天和': 4, '地和': 4 };
 const FAN_MULT = { '素': 2, '混吊': 2, '双混吊': 2, '杠开': 2 };
 
 class TianjinGame extends MahjongGame {
@@ -1011,9 +1011,10 @@ class TianjinGame extends MahjongGame {
       <h3>番种</h3>
       提溜（底）<code>1</code>，混吊（将带混）/ 双混吊（一副带两混）<code>×2</code>，素（没混儿）<code>×2</code>，
       捉五（独胡五万，五万/四六万可为混儿）<code>+3</code>，龙（一色 1-9）<code>+4</code>，本混龙（龙与混同色）<code>×2 → 8</code>，
-      杠开 <code>×2</code>，天和/地和 <code>= 28（封顶）</code>。
+      杠开 <code>×2</code>，天和/地和（起手/首摸即胡）<code>+4</code>——“天胡算龙”：按龙记底、随意摆，
+      其余番照常叠加（如天和+混吊 = 混吊龙 <code>8</code>）。
       <h3>算番</h3>
-      捉五、龙<b>相加</b>成底（无则底为 1，即提溜）；本混、混吊、素、杠开各<b>×2</b>。先加后乘。
+      天和/地和、捉五、龙<b>相加</b>成底（无则底为 1，即提溜）；本混、混吊、素、杠开各<b>×2</b>。先加后乘。
       <b>起和 2 番</b>，不足 2 番为小和、不能胡。庄家加倍。
       <h3>杠分</h3>
       明杠 <code>+1</code>，暗杠 <code>+2</code>，金杠（暗杠四张混儿）<code>+4</code>。每家杠分由其它三家补，局末单独结算；涉及<b>庄家</b>的杠分<b>加倍</b>（庄x2）。
