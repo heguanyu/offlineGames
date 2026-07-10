@@ -165,9 +165,11 @@ section#list-view, section#thread-view { height: 100%; display: flex; flex-direc
 }
 .p-body details.nga-collapse > summary { color: var(--accent); cursor: pointer; font-size: 0.9rem; }
 .p-body del { color: var(--muted); }
-/* real NGA smiley images — inline, line-height sized */
+/* real NGA smiley images — inline, line-height sized. Many (esp. the ac/a2 sets) are dark line-art on
+   transparency and vanish on the dark theme, so sit them on a subtle warm/yellow plate. */
 .p-body img.nga-emote-img {
-  display: inline-block; height: 1.55em; width: auto; vertical-align: text-bottom; margin: 0 1px;
+  display: inline-block; height: 1.5em; width: auto; vertical-align: text-bottom; margin: 0 2px;
+  background: #f3e7c0; border-radius: 3px; padding: 1px 2px; box-sizing: content-box;
 }
 .p-body .nga-img { cursor: zoom-in; }
 /* inline video (NGA .gif.mp4 clips) */
