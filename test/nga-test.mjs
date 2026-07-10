@@ -80,9 +80,6 @@ try {
   const quote = await render('[quote]a[quote]b[/quote]c[/quote]');
   ok((quote.match(/<blockquote/g) || []).length === 2 && !/\[quote\]/i.test(quote), 'nested [quote] → nested blockquotes, no leftover tags');
 
-  const emote = await render('happy[s:ac:哭笑]end');
-  ok(/<span class="nga-emote">哭笑<\/span>/.test(emote), '[s:...:name] emote → labelled badge');
-
   const br = await render('line1<br/>line2<br />line3');
   ok((br.match(/<br>/g) || []).length === 2 && !/<br\s*\/>/.test(br), '<br/> variants folded to <br>');
 
@@ -94,6 +91,17 @@ try {
 
   const amp = await render('a & b < c > d "q"');
   ok(amp.includes('&amp;') && amp.includes('&lt;') && amp.includes('&gt;') && amp.includes('&quot;'), 'plain metacharacters escaped');
+
+  console.log('emotes / video:');
+  const emoteKnown = await render('哈[s:ac:哭笑]哈');
+  ok(/<img class="nga-emote-img"[^>]*src="\/api\/nga\/img\?u=[^"]*mon_201209[^"]*"/.test(emoteKnown), 'known emote [s:ac:哭笑] → proxied smiley image');
+  ok(/alt="哭笑"/.test(emoteKnown), 'emote carries its name as alt (fallback text)');
+  const emoteUnknown = await render('[s:zz:不存在]');
+  ok(/<span class="nga-emote">不存在<\/span>/.test(emoteUnknown) && !/nga-emote-img/.test(emoteUnknown), 'unknown emote → text badge, no broken image');
+  const vid = await render('前<span class="video"><video onplay="stopAudio()" src="https://img.nga.178.com/attachments/mon_202607/06/-x-k4.gif.mp4" class="videoSize" poster="https://img.nga.178.com/attachments/mon_202607/06/-x-k4.gif.mp4.thumb.jpg" controls></video></span>后');
+  ok(/<video class="nga-video"[^>]*><source src="\/api\/nga\/img\?u=[^"]*gif\.mp4[^"]*" type="video\/mp4">/.test(vid), 'NGA <video> → proxied <video><source> (not escaped text)');
+  ok(/poster="\/api\/nga\/img\?u=[^"]*thumb\.jpg[^"]*"/.test(vid) && vid.includes('前') && vid.includes('后'), 'video poster proxied; surrounding text preserved');
+  ok(!/&lt;video|onplay|stopAudio/.test(vid), 'raw <video> attributes/handlers do not leak as text or live');
 
   // iOS tappability: thread rows MUST be native <button>s — iOS Safari reliably fires a tap on a
   // button but often won't on a plain <div> even with cursor:pointer (a click-driven test can't catch

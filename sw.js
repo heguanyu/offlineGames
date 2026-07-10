@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.7.16';
+const CACHE = 'offline-games-0.7.17';
 
 const ASSETS = [
   './',
@@ -44,6 +44,7 @@ const ASSETS = [
   './nga/index.html',
   './nga/nga.css',
   './nga/main.js',
+  './nga/emotes.js', // NGA smiley code → image URL map
 
   './games/pad-test/',
   './games/pad-test/index.html',

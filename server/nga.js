@@ -150,6 +150,8 @@ async function getThread(tid, page) {
     author: (p.author && String(p.author.username || '')) || '',
     uid: (p.author && (p.author.uid | 0)) || 0,
     date: String(p.postdate || ''),
+    good: p.vote_good | 0,   // 赞 (likes)
+    bad: p.vote_bad | 0,     // 踩
     content: String(p.content || ''),
   }));
   const body = JSON.stringify({
@@ -162,10 +164,11 @@ async function getThread(tid, page) {
   return body;
 }
 
-// ---- image proxy ----------------------------------------------------------
-// `u` is an absolute NGA image URL (the client resolves relative attach paths against attachPrefix
-// before calling us). Validate the host, add the Referer NGA demands, stream the bytes back same-origin
-// (with a cross-origin CORP so our COEP:require-corp pages can embed it).
+// ---- image / media proxy --------------------------------------------------
+// `u` is an absolute NGA media URL — an image, an emote, or an inline video (NGA's short `.gif.mp4`
+// clips + `.thumb.jpg` posters, all on img.nga.178.com). The client resolves relative attach paths
+// against attachPrefix before calling us. Validate the host, add the Referer NGA demands, hand the
+// bytes back same-origin (with a cross-origin CORP so our COEP:require-corp pages can embed it).
 async function getImage(u) {
   let parsed;
   try { parsed = new URL(u); } catch { const e = new Error('bad url'); e.status = 400; throw e; }
@@ -178,7 +181,7 @@ async function getImage(u) {
     const r = await fetch(parsed.href, { headers: { 'User-Agent': NGA_UA, 'Referer': IMG_REFERER }, signal: to.signal });
     if (!r.ok) { const e = new Error('upstream ' + r.status); e.status = 502; throw e; }
     const type = r.headers.get('content-type') || 'image/jpeg';
-    if (!/^image\//i.test(type)) { const e = new Error('not an image'); e.status = 502; throw e; }
+    if (!/^(image|video|audio)\//i.test(type)) { const e = new Error('unexpected media type'); e.status = 502; throw e; }
     const body = Buffer.from(await r.arrayBuffer());
     const val = { type, body };
     cacheSet(key, val);

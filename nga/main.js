@@ -3,6 +3,8 @@
 // view: fetch → render. Two in-page views (thread list ⇄ thread reader) toggled by show/hide — NEVER
 // a history push (app-nav.js + the repo's edge-swipe rule), so nav is state, not the back stack.
 
+import { EMOTES } from './emotes.js';
+
 const BOARDS = [
   { fid: '-34587507', label: '明日方舟' },
   { fid: '846', label: '终末地' },
@@ -18,6 +20,7 @@ const els = {
   refresh: $('btn-refresh'), threadRefresh: $('btn-thread-refresh'),
   toList: $('btn-to-list'), threadTitle: $('thread-title'), posts: $('posts'),
   threadPager: $('thread-pager'), tpPrev: $('tp-prev'), tpNext: $('tp-next'), tpInfo: $('tp-info'),
+  lightbox: $('lightbox'), lbImg: $('lb-img'), lbScroll: $('lb-scroll'), lbClose: $('lb-close'),
   toast: $('toast'),
 };
 
@@ -71,19 +74,32 @@ function resolveSrc(src, prefix) {
 // EVERYTHING first, so the only tags in the output are ones this function emits. URLs are validated
 // and attribute-escaped; images are routed through our same-origin proxy (Referer + COEP).
 function renderContent(raw, prefix) {
-  // 1) fold NGA's literal <br> variants to newlines BEFORE escaping (the only raw HTML it uses)
-  let s = String(raw).replace(/<br\s*\/?>/gi, '\n');
-  // 2) escape — from here on the string contains no live HTML, only text + [bbcode] brackets
+  let s = String(raw);
+  // 1) extract NGA inline videos BEFORE escaping — `<span class="video"><video src poster …></video></span>`
+  //    (short .gif.mp4 clips on img.nga.178.com). Stash a safe, proxied <video> behind a control-char
+  //    placeholder that survives escaping, restored at the very end.
+  const videos = [];
+  s = s.replace(/(?:<span class="video">)?<video\b[^>]*>(?:\s*<\/video>)?(?:<\/span>)?/gi, (tag) => {
+    const src = (tag.match(/\bsrc="([^"]+)"/i) || [])[1];
+    if (!src || !/^https?:\/\//i.test(src)) return '';
+    const poster = (tag.match(/\bposter="([^"]+)"/i) || [])[1];
+    const posterAttr = poster && /^https?:\/\//i.test(poster) ? ` poster="${escapeHtml(proxyImg(poster))}"` : '';
+    videos.push(`<video class="nga-video" controls preload="none" playsinline${posterAttr}><source src="${escapeHtml(proxyImg(src))}" type="video/mp4"></video>`);
+    return '\x01' + (videos.length - 1) + '\x01';
+  });
+  // 2) fold NGA's literal <br> variants to newlines BEFORE escaping
+  s = s.replace(/<br\s*\/?>/gi, '\n');
+  // 3) escape — from here on the string has no live HTML, only text + [bbcode] brackets + placeholders
   s = escapeHtml(s);
 
-  // 3) images: [img]src[/img]  (src may be absolute or attachPrefix-relative)
+  // 4) images: [img]src[/img]  (src may be absolute or attachPrefix-relative)
   s = s.replace(/\[img\]([\s\S]*?)\[\/img\]/gi, (_, src) => {
     const abs = resolveSrc(src.replace(/&amp;/g, '&'), prefix);
     if (!/^https?:\/\//i.test(abs)) return '';
     return `<img class="nga-img" loading="lazy" src="${escapeHtml(proxyImg(abs))}" alt="图片">`;
   });
 
-  // 4) links: [url=href]text[/url]  and  [url]href[/url]
+  // 5) links: [url=href]text[/url]  and  [url]href[/url]
   const safeHref = (h) => { h = h.replace(/&amp;/g, '&').trim(); return /^https?:\/\//i.test(h) ? h : null; };
   s = s.replace(/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi, (_, href, text) => {
     const h = safeHref(href); if (!h) return text;
@@ -94,11 +110,11 @@ function renderContent(raw, prefix) {
     return `<a href="${escapeHtml(h)}" target="_blank" rel="noopener noreferrer">${escapeHtml(h)}</a>`;
   });
 
-  // 5) collapse / spoiler → <details>
+  // 6) collapse / spoiler → <details>
   s = s.replace(/\[collapse(?:=([^\]]*))?\]([\s\S]*?)\[\/collapse\]/gi, (_, title, body) =>
     `<details class="nga-collapse"><summary>${(title || '').trim() || '展开'}</summary>${body}</details>`);
 
-  // 6) quotes — innermost-first so nesting resolves; cap the passes so a malformed [quote] can't spin
+  // 7) quotes — innermost-first so nesting resolves; cap the passes so a malformed [quote] can't spin
   for (let i = 0; i < 8 && /\[quote\]/i.test(s); i++) {
     const before = s;
     s = s.replace(/\[quote\]((?:(?!\[quote\]|\[\/quote\])[\s\S])*?)\[\/quote\]/gi,
@@ -107,20 +123,25 @@ function renderContent(raw, prefix) {
   }
   s = s.replace(/\[\/?quote\]/gi, ''); // drop any leftover unmatched quote tags
 
-  // 7) simple inline styling
+  // 8) simple inline styling
   s = s.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<b>$1</b>')
        .replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<i>$1</i>')
        .replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>')
        .replace(/\[del\]([\s\S]*?)\[\/del\]/gi, '<del>$1</del>');
 
-  // 8) emotes [s:xxx:name] → a small badge with the trailing label
-  s = s.replace(/\[s:[^:\]]+:([^\]]+)\]/gi, (_, name) => `<span class="nga-emote">${name}</span>`);
+  // 9) emotes [s:cat:name] → the real NGA smiley image (proxied) when known, else a text badge
+  s = s.replace(/\[s:([^:\]]+):([^\]]+)\]/gi, (_, cat, name) => {
+    const url = EMOTES[cat + ':' + name];
+    if (url) return `<img class="nga-emote-img" src="${escapeHtml(proxyImg(url))}" alt="${escapeHtml(name)}" loading="lazy">`;
+    return `<span class="nga-emote">${escapeHtml(name)}</span>`;
+  });
 
-  // 9) strip any remaining known-but-unhandled tags, keep their text
-  s = s.replace(/\[\/?(?:color|size|align|font|list|table|tr|td|h|quote|randomblock|pid|uid|tid|flash|media|dice)(?:=[^\]]*)?\]/gi, '');
+  // 10) strip any remaining known-but-unhandled tags, keep their text
+  s = s.replace(/\[\/?(?:color|size|align|font|list|table|tr|td|h|randomblock|pid|uid|tid|flash|media|dice)(?:=[^\]]*)?\]/gi, '');
 
-  // 10) newlines → <br>
-  return s.replace(/\n/g, '<br>');
+  // 11) newlines → <br>, then restore the stashed <video> elements
+  s = s.replace(/\n/g, '<br>');
+  return s.replace(/\x01(\d+)\x01/g, (_, i) => videos[+i] || '');
 }
 
 // ---------- view switching -------------------------------------------------
@@ -321,6 +342,16 @@ function renderPosts(data) {
     body.className = 'p-body';
     body.innerHTML = renderContent(p.content, data.attachPrefix);
     el.appendChild(head); el.appendChild(body);
+    // likes (赞 / 踩) — show a count only when non-zero
+    const good = p.good | 0, bad = p.bad | 0;
+    if (good || bad) {
+      const foot = document.createElement('div');
+      foot.className = 'p-foot';
+      foot.innerHTML =
+        (good ? `<span class="p-vote good">👍 ${good}</span>` : '') +
+        (bad ? `<span class="p-vote bad">👎 ${bad}</span>` : '');
+      el.appendChild(foot);
+    }
     frag.appendChild(el);
   }
   els.posts.appendChild(frag);
@@ -341,6 +372,18 @@ els.lpNext.addEventListener('click', () => { state.list.page++; loadBoard(); });
 els.tpPrev.addEventListener('click', () => { if (state.thread.page > 1) { state.thread.page--; loadThread(); } });
 els.tpNext.addEventListener('click', () => { if (state.thread.page < state.thread.totalPage) { state.thread.page++; loadThread(); } });
 els.filterBtn.addEventListener('click', () => { els.filterPanel.hidden = !els.filterPanel.hidden; });
+
+// image lightbox — tap a post image to view it full-screen; tap it to toggle fit ⇄ actual size
+// (pan by scrolling when zoomed), tap the backdrop or ✕ to close.
+function openLightbox(src) { els.lbImg.src = src; els.lbScroll.classList.remove('zoom'); els.lightbox.hidden = false; }
+function closeLightbox() { els.lightbox.hidden = true; els.lbImg.removeAttribute('src'); }
+els.posts.addEventListener('click', (e) => {
+  const img = e.target.closest && e.target.closest('img.nga-img');
+  if (img && img.getAttribute('src')) { e.preventDefault(); openLightbox(img.getAttribute('src')); }
+});
+els.lbImg.addEventListener('click', (e) => { e.stopPropagation(); els.lbScroll.classList.toggle('zoom'); });
+els.lbScroll.addEventListener('click', closeLightbox);
+els.lbClose.addEventListener('click', closeLightbox);
 
 // restore last-read board
 try { const last = localStorage.getItem(LAST_BOARD_KEY); if (last && BOARDS.some((b) => b.fid === last)) state.list.fid = last; } catch {}
