@@ -44,21 +44,43 @@ function fmtBytes(n) {
 // ---- keep the screen awake while a share session is live -------------------
 // A sleeping device drops the WebSocket AND the DataChannel mid-transfer; the Screen Wake
 // Lock API prevents that (Safari 16.4+, Chromium incl. 华为浏览器). Best-effort — devices
-// without it just keep their normal sleep timers.
-let wakeLock = null;
-async function keepAwake(on) {
-  if (!('wakeLock' in navigator)) return;
+// without it just keep their normal sleep timers. iOS can DENY a request (Low Power Mode,
+// no user gesture) or RELEASE a held lock at any moment while the page stays visible, so a
+// single request isn't enough: re-acquire on release, retry on a slow ticker, and treat any
+// tap as a fresh user-gesture chance to acquire.
+let wakeLock = null;      // the held sentinel, if any
+let wantAwake = false;    // whether a share session wants the screen held on
+let wakeAcquiring = false;
+let wakeRetry = 0;
+async function acquireWake() {
+  if (!wantAwake || wakeLock || wakeAcquiring || document.hidden || !('wakeLock' in navigator)) return;
+  wakeAcquiring = true;
   try {
-    if (on && !wakeLock && !document.hidden) {
-      wakeLock = await navigator.wakeLock.request('screen');
-      wakeLock.addEventListener('release', () => { wakeLock = null; });
-    } else if (!on && wakeLock) {
-      const w = wakeLock; wakeLock = null; await w.release();
-    }
-  } catch { wakeLock = null; }   // denied (low battery etc.) — not fatal
+    const w = await navigator.wakeLock.request('screen');
+    if (!wantAwake) { w.release().catch(() => {}); return; }
+    wakeLock = w;
+    w.addEventListener('release', () => {
+      if (wakeLock === w) wakeLock = null;
+      if (wantAwake && !document.hidden) setTimeout(acquireWake, 1000);
+    });
+  } catch { /* denied — the ticker / next tap retries */ }
+  finally { wakeAcquiring = false; }
 }
-// the OS auto-releases the lock whenever the page hides; re-grab it on return
-document.addEventListener('visibilitychange', () => { if (!document.hidden && session) keepAwake(true); });
+function keepAwake(on) {
+  wantAwake = !!on;
+  if (on) {
+    acquireWake();
+    if (!wakeRetry) wakeRetry = setInterval(acquireWake, 20000);
+  } else {
+    clearInterval(wakeRetry); wakeRetry = 0;
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+}
+// the OS auto-releases the lock whenever the page hides; re-grab it on return. Taps double
+// as user-gesture retries for browsers that reject gesture-less requests.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) acquireWake(); });
+window.addEventListener('touchend', () => { acquireWake(); }, { passive: true });
+window.addEventListener('click', () => { acquireWake(); });
 
 // ---- connection status ----------------------------------------------------
 function setConn(s) { const el = $('conn'); el.className = 'conn ' + s; el.title = { on: '已连接', off: '未连接', connecting: '连接中…' }[s]; }
