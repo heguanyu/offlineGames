@@ -85,6 +85,24 @@ function rowsOf(data, hasKey) {
 
 const numFid = (fid) => String(fid);
 
+// A "collection" board (明日方舟 -34587507) aggregates many SUB-FORUMS; its threads carry the
+// sub-forum's fid (734, 635, 805, …), NOT the board's. So thread reads can't be limited to just the
+// two board fids — that 403s every sub-forum thread. Instead we LEARN the allowed thread fids from
+// each board we serve: its own fid, its listed threads' fids, and its declared subForum ids. The
+// reader always loads a board before its threads are clickable, so a clicked thread's fid is already
+// known. Seeded with the two boards themselves; board *listing* stays locked to ALLOWED_FIDS.
+const allowedThreadFids = new Set(ALLOWED_FIDS);
+function learnBoardFids(fid, result) {
+  allowedThreadFids.add(String(fid));
+  for (const t of rowsOf(result && result.data, 'tid')) if (t.fid != null) allowedThreadFids.add(String(t.fid));
+  const sf = result && result.subForum;
+  if (Array.isArray(sf)) for (const s of sf) {
+    const id = s && (s.id != null ? s.id : s['0']);
+    if (id != null) allowedThreadFids.add(String(id));
+  }
+}
+const isThreadFidAllowed = (fid) => allowedThreadFids.has(String(fid));
+
 // ---- board thread list ----------------------------------------------------
 async function getBoard(fid, page) {
   const key = `board:${fid}:${page}`;
@@ -92,6 +110,7 @@ async function getBoard(fid, page) {
   if (hit) return hit.body;
   const j = await appApi('subject', 'list', { fid, page });
   if (j.code !== 0 || !j.result) throw new Error('nga board: ' + (j.msg || 'error ' + j.code));
+  learnBoardFids(fid, j.result); // remember this board's sub-forum fids so its threads can be read
   const threads = rowsOf(j.result.data, 'tid').map((t) => ({
     tid: t.tid,
     subject: String(t.subject || ''),
@@ -114,9 +133,10 @@ async function getThread(tid, page) {
   const j = await appApi('post', 'list', { tid, page });
   if (j.code !== 0) throw new Error('nga thread: ' + (j.msg || 'error ' + j.code));
   const fid = numFid(j.fid);
-  // Whitelist enforcement on READS too: only ever serve posts that belong to our two boards, so a
-  // hand-crafted tid can't turn this into a general NGA reader.
-  if (!ALLOWED_FIDS.has(fid)) { const e = new Error('forbidden board'); e.status = 403; throw e; }
+  // Whitelist enforcement on READS too, but against the LEARNED set (the two boards + their
+  // sub-forums), so a hand-crafted tid to an unrelated board is refused while real sub-forum threads
+  // of our boards read fine.
+  if (!isThreadFidAllowed(fid)) { const e = new Error('forbidden board'); e.status = 403; throw e; }
   const prefix = String(j.attachPrefix || 'https://img.nga.178.com/attachments/');
   const posts = rowsOf(j.result, 'lou').map((p) => ({
     pid: p.pid,
@@ -210,4 +230,4 @@ async function handleNga(req, res, cors) {
   }
 }
 
-export { handleNga, BOARDS, ALLOWED_FIDS, rowsOf };
+export { handleNga, BOARDS, ALLOWED_FIDS, rowsOf, learnBoardFids, isThreadFidAllowed };

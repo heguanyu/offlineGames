@@ -170,26 +170,32 @@ async function loadBoard() {
   }
 }
 
+// One thread row. A native <button> (not a styled <div>): iOS Safari reliably fires a tap on a button
+// but often WON'T on a plain div, even one with cursor:pointer — which is why the tabs/pager worked but
+// the div rows didn't. Same natively-tappable element as the board tabs.
+function makeThreadRow(t) {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'thread';
+  const replies = t.replies | 0;
+  row.innerHTML =
+    `<div class="t-subject">${escapeHtml(t.subject)}</div>` +
+    `<div class="t-meta">` +
+      `<span class="t-author">${escapeHtml(t.author || '匿名')}</span>` +
+      `<span class="t-time">${relTime(t.lastpost || t.postdate)}</span>` +
+      `<span class="t-replies${replies >= 80 ? ' hot' : ''}">${replies}</span>` +
+    `</div>`;
+  row.addEventListener('click', () => openThread(t.tid, t.subject));
+  return row;
+}
+
 function renderThreadList(threads) {
   els.threads.innerHTML = '';
   if (!threads || !threads.length) {
     els.threads.innerHTML = '<div class="state">这一页没有主题</div>';
   } else {
     const frag = document.createDocumentFragment();
-    for (const t of threads) {
-      const row = document.createElement('div');
-      row.className = 'thread';
-      const replies = t.replies | 0;
-      row.innerHTML =
-        `<div class="t-subject">${escapeHtml(t.subject)}</div>` +
-        `<div class="t-meta">` +
-          `<span class="t-author">${escapeHtml(t.author || '匿名')}</span>` +
-          `<span class="t-time">${relTime(t.lastpost || t.postdate)}</span>` +
-          `<span class="t-replies${replies >= 80 ? ' hot' : ''}">${replies}</span>` +
-        `</div>`;
-      row.addEventListener('click', () => openThread(t.tid, t.subject));
-      frag.appendChild(row);
-    }
+    for (const t of threads) frag.appendChild(makeThreadRow(t));
     els.threads.appendChild(frag);
   }
   els.lpInfo.textContent = `第 ${state.list.page} 页`;
@@ -273,4 +279,4 @@ buildTabs();
 loadBoard();
 
 // e2e hook
-window.__nga = { state, renderContent };
+window.__nga = { state, renderContent, makeThreadRow };

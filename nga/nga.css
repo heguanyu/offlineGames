@@ -72,9 +72,13 @@ section#list-view, section#thread-view { height: 100%; display: flex; flex-direc
 }
 
 /* ---------- thread list rows ---------- */
+/* A native <button> so iOS reliably fires the tap (a styled <div> often won't, even with
+   cursor:pointer) — reset the button chrome so it reads as a plain full-width row. */
 .thread {
-  display: block; padding: 13px 6px; border-bottom: 1px solid var(--border);
-  cursor: pointer; /* REQUIRED on iOS Safari: a <div> with only a click listener won't fire a tap without it */
+  display: block; width: 100%; text-align: left;
+  margin: 0; padding: 13px 6px; border: none; border-bottom: 1px solid var(--border);
+  background: transparent; color: inherit; font: inherit;
+  -webkit-appearance: none; appearance: none; cursor: pointer;
   -webkit-user-select: none; user-select: none;
 }
 .thread:active { background: var(--bg-alt); }

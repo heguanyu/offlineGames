@@ -7,7 +7,7 @@
 // an error state; renderContent is still exposed and is what we exercise.
 // Usage: node test/nga-test.mjs
 import { startServer, launchBrowser } from './harness.mjs';
-import { rowsOf, ALLOWED_FIDS, BOARDS } from '../server/nga.js';
+import { rowsOf, ALLOWED_FIDS, BOARDS, learnBoardFids, isThreadFidAllowed } from '../server/nga.js';
 
 let failed = 0;
 const ok = (cond, msg) => { console.log(`  ${cond ? 'ok' : 'FAIL'}: ${msg}`); if (!cond) failed++; };
@@ -21,6 +21,16 @@ ok(rowsOf([{ tid: 1 }, { tid: 2 }, { x: 3 }], 'tid').length === 2, 'rowsOf array
 ok(rowsOf({ 0: { tid: 1 }, 1: { tid: 2 }, __ROWS: 9, meta: {} }, 'tid').length === 2, 'rowsOf object: numeric keys + key present only');
 ok(rowsOf(null, 'tid').length === 0 && rowsOf(undefined, 'lou').length === 0, 'rowsOf nullish → []');
 ok(rowsOf([{ lou: 0 }, { lou: 1 }], 'lou').length === 2, 'rowsOf keeps lou:0 (楼主, falsy but present)');
+
+// sub-forum learning: a collection board's threads carry sub-forum fids, which must be readable AFTER
+// the board is loaded, but an unrelated board's fid must still be refused.
+console.log('sub-forum fid learning:');
+ok(isThreadFidAllowed('846') && isThreadFidAllowed('-34587507'), 'the two boards are always readable');
+ok(!isThreadFidAllowed('734') && !isThreadFidAllowed('635'), 'sub-forum fids are refused BEFORE their board is loaded');
+learnBoardFids('-34587507', { data: [{ tid: 1, fid: 734 }, { tid: 2, fid: '635' }, { tid: 3, fid: '-34587507' }], subForum: [{ id: 805 }, { 0: 806 }] });
+ok(isThreadFidAllowed('734') && isThreadFidAllowed('635'), 'sub-forum threads readable AFTER the board is loaded');
+ok(isThreadFidAllowed('805') && isThreadFidAllowed('806'), 'declared subForum ids are learned too');
+ok(!isThreadFidAllowed('999999'), 'an unrelated board fid is still refused (not an open proxy)');
 
 // ---- 2) content sanitizer, in-browser ----
 const PORT = 8188;
@@ -85,16 +95,18 @@ try {
   const amp = await render('a & b < c > d "q"');
   ok(amp.includes('&amp;') && amp.includes('&lt;') && amp.includes('&gt;') && amp.includes('&quot;'), 'plain metacharacters escaped');
 
-  // iOS tappability: a clickable <div> (thread row) needs cursor:pointer or Safari never fires the
-  // tap. A click-driven test can't catch this (desktop Chromium clicks divs regardless), so assert
-  // the computed style directly.
+  // iOS tappability: thread rows MUST be native <button>s — iOS Safari reliably fires a tap on a
+  // button but often won't on a plain <div> even with cursor:pointer (a click-driven test can't catch
+  // this: desktop Chromium taps divs regardless). Assert the row the code actually builds is a button.
   console.log('iOS tap targets:');
-  const rowCursor = await page.evaluate(() => {
-    const el = document.createElement('div'); el.className = 'thread';
-    document.getElementById('threads').appendChild(el);
-    const c = getComputedStyle(el).cursor; el.remove(); return c;
+  const row = await page.evaluate(() => {
+    const b = window.__nga.makeThreadRow({ tid: 1, subject: 's', author: 'a', replies: 0, lastpost: 0, postdate: 0 });
+    document.getElementById('threads').appendChild(b);
+    const cs = getComputedStyle(b);
+    const r = { tag: b.tagName, cursor: cs.cursor }; b.remove(); return r;
   });
-  ok(rowCursor === 'pointer', `.thread rows are tap-eligible on iOS (cursor:${rowCursor})`);
+  ok(row.tag === 'BUTTON', `thread rows are native <button> (got <${row.tag.toLowerCase()}>)`);
+  ok(row.cursor === 'pointer', `thread rows show cursor:pointer (${row.cursor})`);
 } finally {
   await browser.close();
   server.close();
