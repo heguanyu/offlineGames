@@ -28,8 +28,15 @@ const IMG_HOST_OK = /(^|\.)(nga\.178\.com|nga\.cn|ngabbs\.com)$/i;
 const BOARDS = {
   '-34587507': '明日方舟',
   '846': '明日方舟：终末地',
+  '-7': '游戏综合讨论',
 };
 const ALLOWED_FIDS = new Set(Object.keys(BOARDS));
+
+// Some boards (e.g. 游戏综合讨论 -7) are NOT guest-readable — NGA returns code 12「未登录」. Set
+// NGA_COOKIE to a logged-in account's cookie string (at least `ngaPassportUid=…;ngaPassportCid=…`)
+// and the relay reads as that account, unlocking those boards (and unmasking usernames everywhere).
+// Left unset, the arknights boards still work as guest; gated boards report a friendly login error.
+const NGA_COOKIE = process.env.NGA_COOKIE || '';
 
 const FETCH_TIMEOUT_MS = 12_000;
 const LIST_TTL_MS = 60_000;   // thread lists move fast but not per-second
@@ -63,14 +70,14 @@ async function appApi(lib, act, form) {
   const url = `${APP_API}?__lib=${encodeURIComponent(lib)}&__act=${encodeURIComponent(act)}`;
   const to = withTimeout(FETCH_TIMEOUT_MS);
   try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'User-Agent': NGA_UA, 'X-User-Agent': NGA_UA, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(form).toString(),
-      signal: to.signal,
-    });
+    const headers = { 'User-Agent': NGA_UA, 'X-User-Agent': NGA_UA, 'Content-Type': 'application/x-www-form-urlencoded' };
+    if (NGA_COOKIE) headers.Cookie = NGA_COOKIE; // read as a logged-in account → gated boards + real usernames
+    const r = await fetch(url, { method: 'POST', headers, body: new URLSearchParams(form).toString(), signal: to.signal });
     const text = await r.text();
     let json; try { json = JSON.parse(text); } catch { throw new Error('nga: non-json reply'); }
+    // code 12「未登录」→ a guest-gated board with no (or an expired) NGA_COOKIE. Flag it so the client
+    // can show a clear "needs login" message instead of a generic failure.
+    if (json && json.code === 12) { const e = new Error('login required'); e.status = 401; e.needLogin = true; throw e; }
     return json;
   } finally { to.done(); }
 }

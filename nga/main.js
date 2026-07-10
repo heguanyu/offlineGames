@@ -8,6 +8,7 @@ import { EMOTES } from './emotes.js';
 const BOARDS = [
   { fid: '-34587507', label: '明日方舟' },
   { fid: '846', label: '终末地' },
+  { fid: '-7', label: '综合讨论' },
 ];
 const LAST_BOARD_KEY = 'nga.lastFid';
 
@@ -198,7 +199,11 @@ async function loadBoard() {
     buildFilterPanel();
     renderThreadList(data.threads);
   } catch (e) {
-    els.threads.innerHTML = `<div class="state err">加载失败<br>${escapeHtml(e.message)}<br><button type="button" id="retry-list">重试</button></div>`;
+    if (state.list.fid !== fid || state.list.page !== page) return; // superseded — don't clobber the newer view
+    const login = /login required|未登录/i.test(e.message);
+    els.threads.innerHTML = login
+      ? '<div class="state">🔒 此版块需要登录 NGA 账号才能查看<br><span style="font-size:0.85em">（服务器未配置账号）</span></div>'
+      : `<div class="state err">加载失败<br>${escapeHtml(e.message)}<br><button type="button" id="retry-list">重试</button></div>`;
     const rb = $('retry-list'); if (rb) rb.addEventListener('click', loadBoard);
   } finally {
     els.refresh.classList.remove('spin');
