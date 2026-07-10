@@ -113,6 +113,7 @@ async function getBoard(fid, page) {
   learnBoardFids(fid, j.result); // remember this board's sub-forum fids so its threads can be read
   const threads = rowsOf(j.result.data, 'tid').map((t) => ({
     tid: t.tid,
+    fid: numFid(t.fid),         // which sub-forum this thread lives in (client-side filtering)
     subject: String(t.subject || ''),
     author: String(t.author || ''),
     replies: t.replies | 0,
@@ -120,7 +121,12 @@ async function getBoard(fid, page) {
     lastpost: t.lastpost | 0,   // unix seconds
     lastposter: String(t.lastposter || ''),
   }));
-  const body = JSON.stringify({ ok: true, fid: numFid(fid), label: BOARDS[numFid(fid)] || '', page: page | 0, threads });
+  // The collection board's linked sub-forums (id + name), so the client can offer "uncheck to hide"
+  // filters like the native app.
+  const subForums = Array.isArray(j.result.subForum)
+    ? j.result.subForum.filter((s) => s && s.id != null).map((s) => ({ id: numFid(s.id), name: String(s.name || ('版块' + s.id)) }))
+    : [];
+  const body = JSON.stringify({ ok: true, fid: numFid(fid), label: BOARDS[numFid(fid)] || '', page: page | 0, subForums, threads });
   cacheSet(key, { body });
   return body;
 }

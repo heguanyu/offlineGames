@@ -13,6 +13,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   listView: $('list-view'), threadView: $('thread-view'),
   boards: $('boards'), threads: $('threads'),
+  filterBtn: $('btn-filter'), filterPanel: $('filter-panel'),
   listPager: $('list-pager'), lpPrev: $('lp-prev'), lpNext: $('lp-next'), lpInfo: $('lp-info'),
   refresh: $('btn-refresh'), threadRefresh: $('btn-thread-refresh'),
   toList: $('btn-to-list'), threadTitle: $('thread-title'), posts: $('posts'),
@@ -21,9 +22,10 @@ const els = {
 };
 
 // Where we are. `list` remembers the board + page so returning from a thread lands exactly back.
+// subForums/threads + `hidden` (a Set of hidden group ids) drive the sub-forum filter.
 const state = {
   view: 'list',
-  list: { fid: BOARDS[0].fid, page: 1, threads: null },
+  list: { fid: BOARDS[0].fid, page: 1, threads: null, subForums: [], label: '', hidden: new Set() },
   thread: { tid: null, page: 1, subject: '', totalPage: 1 },
 };
 
@@ -161,6 +163,11 @@ async function loadBoard() {
     const data = await api(`/api/nga/board?fid=${encodeURIComponent(fid)}&page=${page}`);
     if (state.list.fid !== fid || state.list.page !== page) return; // superseded by a newer tap
     state.list.threads = data.threads;
+    state.list.subForums = data.subForums || [];
+    state.list.label = data.label || (BOARDS.find((b) => b.fid === fid) || {}).label || '';
+    state.list.hidden = loadHidden(fid);
+    els.filterPanel.hidden = true; // collapse on each fresh load
+    buildFilterPanel();
     renderThreadList(data.threads);
   } catch (e) {
     els.threads.innerHTML = `<div class="state err">加载失败<br>${escapeHtml(e.message)}<br><button type="button" id="retry-list">重试</button></div>`;
@@ -191,11 +198,14 @@ function makeThreadRow(t) {
 
 function renderThreadList(threads) {
   els.threads.innerHTML = '';
+  const shown = (threads || []).filter((t) => !state.list.hidden.has(groupOf(t)));
   if (!threads || !threads.length) {
     els.threads.innerHTML = '<div class="state">这一页没有主题</div>';
+  } else if (!shown.length) {
+    els.threads.innerHTML = '<div class="state">当前筛选下没有主题<br>点右上角「版块」调整</div>';
   } else {
     const frag = document.createDocumentFragment();
-    for (const t of threads) frag.appendChild(makeThreadRow(t));
+    for (const t of shown) frag.appendChild(makeThreadRow(t));
     els.threads.appendChild(frag);
   }
   els.lpInfo.textContent = `第 ${state.list.page} 页`;
@@ -203,6 +213,65 @@ function renderThreadList(threads) {
   els.lpNext.disabled = !threads || threads.length === 0;
   els.listPager.hidden = false;
   els.threads.scrollTop = 0;
+}
+
+// ---------- sub-forum filter (uncheck to hide, like the native app) ---------
+const hiddenKey = (fid) => 'nga.hidden.' + fid;
+function loadHidden(fid) {
+  try { const a = JSON.parse(localStorage.getItem(hiddenKey(fid)) || '[]'); return new Set(Array.isArray(a) ? a.map(String) : []); }
+  catch { return new Set(); }
+}
+function saveHidden(fid, set) { try { localStorage.setItem(hiddenKey(fid), JSON.stringify([...set])); } catch {} }
+
+// The toggleable groups for the current board: the board's own forum first, then each linked
+// sub-forum. Threads whose fid isn't one of those collapse into a synthetic "其他" group.
+function filterGroups() {
+  const groups = [{ id: state.list.fid, name: state.list.label || '本版' }];
+  for (const sf of state.list.subForums || []) if (sf.id !== state.list.fid) groups.push({ id: sf.id, name: sf.name });
+  return groups;
+}
+function groupOf(t) {
+  const ids = new Set(filterGroups().map((g) => g.id));
+  return ids.has(t.fid) ? t.fid : '__other__';
+}
+function updateFilterBtn() {
+  const n = state.list.hidden.size;
+  els.filterBtn.classList.toggle('on', n > 0);
+  els.filterBtn.textContent = n > 0 ? `版块·隐藏${n} ▾` : '版块 ▾';
+}
+function buildFilterPanel() {
+  const groups = filterGroups().slice();
+  const counts = {};
+  for (const t of state.list.threads || []) counts[groupOf(t)] = (counts[groupOf(t)] || 0) + 1;
+  if (counts.__other__) groups.push({ id: '__other__', name: '其他' });
+  // Nothing to filter (e.g. 终末地 has no linked sub-forums) → hide the whole control.
+  if (groups.length <= 1) { els.filterBtn.hidden = true; els.filterPanel.hidden = true; return; }
+  els.filterBtn.hidden = false;
+  const hidden = state.list.hidden;
+  const chips = groups.map((g) =>
+    `<button class="fchip${hidden.has(g.id) ? ' off' : ''}" type="button" data-gid="${escapeHtml(g.id)}">` +
+    `${escapeHtml(g.name)}<span class="fc-n">${counts[g.id] || 0}</span></button>`).join('');
+  els.filterPanel.innerHTML =
+    `<div class="fp-head">显示的版块（取消勾选可隐藏）<span class="fp-actions">` +
+    `<button class="fp-act" type="button" data-act="all">全选</button>` +
+    `<button class="fp-act" type="button" data-act="none">全不选</button></span></div>` +
+    `<div class="fp-chips">${chips}</div>`;
+  els.filterPanel.querySelectorAll('.fchip').forEach((btn) => btn.addEventListener('click', () => {
+    const gid = btn.getAttribute('data-gid');
+    if (hidden.has(gid)) hidden.delete(gid); else hidden.add(gid);
+    btn.classList.toggle('off');
+    saveHidden(state.list.fid, hidden);
+    updateFilterBtn();
+    renderThreadList(state.list.threads);
+  }));
+  els.filterPanel.querySelectorAll('.fp-act').forEach((btn) => btn.addEventListener('click', () => {
+    hidden.clear();
+    if (btn.getAttribute('data-act') === 'none') for (const g of groups) hidden.add(g.id);
+    saveHidden(state.list.fid, hidden);
+    buildFilterPanel();
+    renderThreadList(state.list.threads);
+  }));
+  updateFilterBtn();
 }
 
 // ---------- thread reader --------------------------------------------------
@@ -271,6 +340,7 @@ els.lpPrev.addEventListener('click', () => { if (state.list.page > 1) { state.li
 els.lpNext.addEventListener('click', () => { state.list.page++; loadBoard(); });
 els.tpPrev.addEventListener('click', () => { if (state.thread.page > 1) { state.thread.page--; loadThread(); } });
 els.tpNext.addEventListener('click', () => { if (state.thread.page < state.thread.totalPage) { state.thread.page++; loadThread(); } });
+els.filterBtn.addEventListener('click', () => { els.filterPanel.hidden = !els.filterPanel.hidden; });
 
 // restore last-read board
 try { const last = localStorage.getItem(LAST_BOARD_KEY); if (last && BOARDS.some((b) => b.fid === last)) state.list.fid = last; } catch {}
@@ -279,4 +349,4 @@ buildTabs();
 loadBoard();
 
 // e2e hook
-window.__nga = { state, renderContent, makeThreadRow };
+window.__nga = { state, renderContent, makeThreadRow, groupOf, filterGroups, buildFilterPanel, renderThreadList };

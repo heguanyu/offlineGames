@@ -15,6 +15,9 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
+/* The `hidden` attribute MUST win over author display rules below (the views + pagers set display:flex
+   with an id/class that would otherwise override [hidden] — so toggling .hidden would do nothing). */
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   background: var(--bg);
@@ -51,13 +54,45 @@ section#list-view, section#thread-view { height: 100%; display: flex; flex-direc
 .bar-btn.spin { animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---------- board tabs ---------- */
-.tabs {
-  flex: none; display: flex; gap: 8px;
-  padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+/* ---------- board tabs + filter control ---------- */
+.listctl {
+  flex: none; display: flex; align-items: center;
   background: var(--bg-alt); border-bottom: 1px solid var(--border);
+  padding-right: max(10px, env(safe-area-inset-right));
+}
+.tabs {
+  flex: 1; min-width: 0; display: flex; gap: 8px;
+  padding: 10px 8px 10px max(16px, env(safe-area-inset-left));
   overflow-x: auto;
 }
+.filter-btn {
+  flex: none; margin-left: 8px; padding: 6px 12px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--border); color: var(--sub); font-size: 0.85rem;
+  white-space: nowrap;
+}
+.filter-btn.on { color: var(--accent); border-color: var(--accent); }
+.filter-btn:active { background: var(--accent-dim); }
+
+.filter-panel {
+  flex: none; background: var(--bg-alt); border-bottom: 1px solid var(--border);
+  padding: 10px max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left));
+}
+.filter-panel .fp-head {
+  display: flex; align-items: center; margin-bottom: 8px;
+  font-size: 0.8rem; color: var(--muted);
+}
+.filter-panel .fp-actions { margin-left: auto; display: flex; gap: 12px; }
+.filter-panel .fp-act { color: var(--accent); background: none; border: none; font-size: 0.8rem; padding: 0; }
+.filter-panel .fp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.fchip {
+  padding: 5px 12px; border-radius: 999px; font-size: 0.85rem;
+  background: var(--accent); border: 1px solid var(--accent); color: #11111b; font-weight: 600;
+}
+.fchip.off {
+  background: var(--panel); border-color: var(--border); color: var(--muted); font-weight: 400;
+  text-decoration: line-through;
+}
+.fchip .fc-n { opacity: 0.7; font-weight: 400; margin-left: 4px; }
 .tab {
   flex: none; padding: 6px 16px; border-radius: 999px;
   background: var(--panel); border: 1px solid var(--border);

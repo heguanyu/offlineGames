@@ -107,6 +107,40 @@ try {
   });
   ok(row.tag === 'BUTTON', `thread rows are native <button> (got <${row.tag.toLowerCase()}>)`);
   ok(row.cursor === 'pointer', `thread rows show cursor:pointer (${row.cursor})`);
+
+  // view switching: the [hidden] attribute MUST actually hide a view. The views set display:flex with
+  // an id selector, which silently overrides [hidden] unless a reset forces it — the bug where clicking
+  // a thread "did nothing" (list stayed visible). Assert VISIBILITY, not DOM presence.
+  console.log('view switching:');
+  const vis = await page.evaluate(() => {
+    const tv = document.getElementById('thread-view');
+    const hiddenDisp = getComputedStyle(tv).display;      // has the hidden attr on load
+    tv.hidden = false; const shownDisp = getComputedStyle(tv).display;
+    tv.hidden = true; return { hiddenDisp, shownDisp };
+  });
+  ok(vis.hiddenDisp === 'none', `a [hidden] view is display:none (was "${vis.hiddenDisp}")`);
+  ok(vis.shownDisp !== 'none', `a shown view is visible ("${vis.shownDisp}")`);
+
+  // sub-forum filter: hiding a group drops its threads; an unlisted fid falls into "其他".
+  console.log('sub-forum filter:');
+  const filt = await page.evaluate(() => {
+    const N = window.__nga;
+    Object.assign(N.state.list, {
+      fid: '-34587507', label: '明日方舟',
+      subForums: [{ id: '734', name: 'A' }, { id: '805', name: 'B' }],
+      threads: [{ tid: 1, fid: '-34587507', subject: 'main', replies: 0 }, { tid: 2, fid: '734', subject: 'a', replies: 0 },
+        { tid: 3, fid: '805', subject: 'b', replies: 0 }, { tid: 4, fid: '999', subject: 'other', replies: 0 }],
+      hidden: new Set(),
+    });
+    const count = () => document.querySelectorAll('#threads .thread').length;
+    N.renderThreadList(N.state.list.threads); const all = count();
+    N.state.list.hidden = new Set(['734']); N.renderThreadList(N.state.list.threads); const hid1 = count();
+    return { all, hid1, other: N.groupOf({ fid: '999' }), groups: N.filterGroups().map((g) => g.id) };
+  });
+  ok(filt.all === 4, `all threads shown with no filter (${filt.all})`);
+  ok(filt.hid1 === 3, `hiding a sub-forum drops its threads (${filt.hid1})`);
+  ok(filt.other === '__other__', 'a thread from an unlisted fid maps to the 其他 group');
+  ok(filt.groups[0] === '-34587507' && filt.groups.includes('734') && filt.groups.includes('805'), 'groups = board itself + linked sub-forums');
 } finally {
   await browser.close();
   server.close();

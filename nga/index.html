@@ -21,7 +21,11 @@
       <h1>方舟资讯</h1>
       <button id="btn-refresh" class="bar-btn" type="button" aria-label="刷新">↻</button>
     </header>
-    <nav id="boards" class="tabs"></nav>
+    <div class="listctl">
+      <nav id="boards" class="tabs"></nav>
+      <button id="btn-filter" class="filter-btn" type="button" hidden>版块 ▾</button>
+    </div>
+    <div id="filter-panel" class="filter-panel" hidden></div>
     <main id="threads" class="scroll"></main>
     <footer id="list-pager" class="pager" hidden>
       <button id="lp-prev" class="pg-btn" type="button">‹ 上一页</button>
