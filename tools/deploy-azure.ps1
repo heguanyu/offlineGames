@@ -33,7 +33,7 @@ New-Item -ItemType Directory $stage | Out-Null
 robocopy $root $stage /E /NFL /NDL /NJH /NJS /NP `
   /XD (Join-Path $root '.git') (Join-Path $root '.github') (Join-Path $root 'test') `
       (Join-Path $root 'server\node_modules') (Join-Path $root 'server\data') `
-      (Join-Path $root 'roms') $stage `
+      (Join-Path $root 'roms') (Join-Path $root 'epubs') $stage `
   /XF (Join-Path $root 'deploy.zip') | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
 
