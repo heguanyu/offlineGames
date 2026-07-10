@@ -14,14 +14,16 @@ let failed = 0;
 const ok = (c, m) => { console.log(`  ${c ? 'ok' : 'FAIL'}: ${m}`); if (!c) failed++; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Build a 2-page history (reader → nga) then attempt a back navigation; return where we ended up.
+// Build a 2-page history (hub → reader) then attempt a back navigation; return where we ended up.
+// Uses the reader as the destination — a generic page that relies on app-nav's blanket pin (the 方舟资讯
+// reader is NOT used here: it owns its history via window.__ownsHistory, covered by nga-test).
 async function backFrom(page) {
+  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
   await page.goto(`http://localhost:${PORT}/reader/`, { waitUntil: 'domcontentloaded' });
-  await page.goto(`http://localhost:${PORT}/nga/`, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => !!document.getElementById('boards'), { timeout: 10000 });
+  await page.waitForFunction(() => !!document.getElementById('library'), { timeout: 10000 });
   await page.evaluate(() => history.back());
   await sleep(600);
-  return { url: page.url(), onNga: (await page.$('#boards')) != null };
+  return { url: page.url(), onReader: (await page.$('#library')) != null };
 }
 
 try {
@@ -31,12 +33,12 @@ try {
     try { Object.defineProperty(navigator, 'standalone', { configurable: true, get: () => true }); } catch (e) {}
   });
   const r1 = await backFrom(pwa);
-  ok(r1.url.endsWith('/nga/') && r1.onNga, `standalone PWA: edge-swipe back is trapped (stayed at ${r1.url})`);
+  ok(r1.url.endsWith('/reader/') && r1.onReader, `standalone PWA: edge-swipe back is trapped (stayed at ${r1.url})`);
 
   // 2) normal browser tab → Back still navigates
   const tab = await browser.newPage();
   const r2 = await backFrom(tab);
-  ok(r2.url.endsWith('/reader/'), `normal browser tab: Back still works (went to ${r2.url})`);
+  ok(!r2.onReader, `normal browser tab: Back still works (left the reader → ${r2.url})`);
 } finally {
   await browser.close();
   server.close();

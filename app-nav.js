@@ -22,10 +22,12 @@
   // "looked fine"). So we PIN: seed a trap entry and re-arm it on every popstate, so a back/forward
   // swipe always lands right back here. Gated to installed standalone PWAs only — a normal browser tab
   // keeps its working Back button (nothing in the app uses history.back(); on-screen 返回 uses replace).
+  // A page that manages its own history (e.g. the 方舟资讯 reader, which turns a back-swipe into
+  // thread→list) sets window.__ownsHistory before this script runs — then we stay out of its way.
   try {
     var standalone = (navigator.standalone === true) ||
       (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    if (standalone) {
+    if (standalone && !window.__ownsHistory) {
       history.pushState(null, '', location.href);
       addEventListener('popstate', function () { history.pushState(null, '', location.href); });
     }

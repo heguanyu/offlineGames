@@ -103,6 +103,33 @@ try {
   ok(/poster="\/api\/nga\/img\?u=[^"]*thumb\.jpg[^"]*"/.test(vid) && vid.includes('前') && vid.includes('后'), 'video poster proxied; surrounding text preserved');
   ok(!/&lt;video|onplay|stopAudio/.test(vid), 'raw <video> attributes/handlers do not leak as text or live');
 
+  console.log('raw HTML formatting:');
+  const bdel = await render('<b>粗</b>和<del class=\'gray\'>删</del>');
+  ok(/<b>粗<\/b>/.test(bdel) && /<del>删<\/del>/.test(bdel), 'NGA <b> / <del class=…> render as real tags (attributes dropped)');
+  ok(!/&lt;b&gt;|&lt;del/.test(bdel), 'formatting tags are not left as escaped text');
+  const inj = await render('<b onclick="alert(1)">x</b><script>bad()</script>');
+  ok(/<b>x<\/b>/.test(inj) && !/onclick/.test(inj), 'attributes are stripped from re-enabled tags (no onclick)');
+  ok(!/<script>/.test(inj) && inj.includes('&lt;script&gt;'), 'non-whitelisted tags (script) stay escaped');
+  const vote = await render('<form><label for="v1">选项</label><input type="radio"/></form>');
+  ok(!/<form|<input|<label/.test(vote) && vote.includes('选项'), 'read-only vote widgets are dropped, label text kept');
+
+  console.log('history-driven back nav:');
+  const nav = await page.evaluate(async () => {
+    const wait = () => new Promise((r) => setTimeout(r, 60));
+    window.__nga.showList();                    // ensure we start on the list
+    window.__nga.openThread('123', 'T');        // list → thread (pushes a history entry)
+    await wait();
+    const afterOpen = window.__nga.state.view;
+    history.back(); await wait();                // back-swipe → thread → list
+    const afterBack1 = window.__nga.state.view;
+    const url1 = location.pathname;
+    history.back(); await wait();                // back-swipe from list → trapped (stay on /nga/)
+    return { afterOpen, afterBack1, url1, url2: location.pathname };
+  });
+  ok(nav.afterOpen === 'thread', 'openThread → thread view');
+  ok(nav.afterBack1 === 'list', 'back-swipe from a thread returns to the list (not the hub)');
+  ok(nav.url1.endsWith('/nga/') && nav.url2.endsWith('/nga/'), 'back-swipe never leaves the reader page');
+
   // iOS tappability: thread rows MUST be native <button>s — iOS Safari reliably fires a tap on a
   // button but often won't on a plain <div> even with cursor:pointer (a click-driven test can't catch
   // this: desktop Chromium taps divs regardless). Assert the row the code actually builds is a button.

@@ -165,6 +165,9 @@ section#list-view, section#thread-view { height: 100%; display: flex; flex-direc
 }
 .p-body details.nga-collapse > summary { color: var(--accent); cursor: pointer; font-size: 0.9rem; }
 .p-body del { color: var(--muted); }
+/* NGA's raw-HTML formatting (re-enabled, attributes stripped) — keep it in scale with the post text */
+.p-body h1, .p-body h2, .p-body h3, .p-body h4 { font-size: 1.05rem; font-weight: 600; margin: 8px 0 4px; }
+.p-body p { margin: 4px 0; }
 /* real NGA smiley images — inline, line-height sized. Many (esp. the ac/a2 sets) are dark line-art on
    transparency and vanish on the dark theme, so sit them on a subtle warm/yellow plate. */
 .p-body img.nga-emote-img {

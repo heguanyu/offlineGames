@@ -92,6 +92,13 @@ function renderContent(raw, prefix) {
   // 3) escape — from here on the string has no live HTML, only text + [bbcode] brackets + placeholders
   s = escapeHtml(s);
 
+  // 3b) NGA also formats with raw HTML (<b>, <del class='gray'>, <div style=…>, <h4>, <span class="red">…).
+  //     Re-enable a fixed whitelist of formatting tags with ALL ATTRIBUTES DROPPED (so no handler/style/
+  //     src can inject — we only ever emit `<tag>`/`</tag>`), then drop NGA's read-only vote/poll widgets
+  //     (keeping any label text). Everything not whitelisted stays escaped as plain text.
+  s = s.replace(/&lt;(\/?)(b|i|u|del|s|strong|em|sub|sup|span|div|p|center|h1|h2|h3|h4|blockquote)(?:\s[\s\S]*?)?&gt;/gi, '<$1$2>');
+  s = s.replace(/&lt;\/?(?:form|input|label|select|option|button|textarea)(?:\s[\s\S]*?)?&gt;/gi, '');
+
   // 4) images: [img]src[/img]  (src may be absolute or attachPrefix-relative)
   s = s.replace(/\[img\]([\s\S]*?)\[\/img\]/gi, (_, src) => {
     const abs = resolveSrc(src.replace(/&amp;/g, '&'), prefix);
@@ -301,6 +308,7 @@ function openThread(tid, subject) {
   state.thread = { tid: String(tid), page: 1, subject: subject || '主题', totalPage: 1 };
   els.threadTitle.textContent = state.thread.subject;
   showThread();
+  history.pushState({ ngaView: 'thread' }, ''); // one entry deeper → a back-swipe returns to the list
   loadThread();
 }
 
@@ -366,7 +374,7 @@ function renderPosts(data) {
 // ---------- wiring ---------------------------------------------------------
 els.refresh.addEventListener('click', loadBoard);
 els.threadRefresh.addEventListener('click', loadThread);
-els.toList.addEventListener('click', showList);
+els.toList.addEventListener('click', () => history.back()); // ‹ 版块 — same path as the back-swipe
 els.lpPrev.addEventListener('click', () => { if (state.list.page > 1) { state.list.page--; loadBoard(); } });
 els.lpNext.addEventListener('click', () => { state.list.page++; loadBoard(); });
 els.tpPrev.addEventListener('click', () => { if (state.thread.page > 1) { state.thread.page--; loadThread(); } });
@@ -391,5 +399,17 @@ try { const last = localStorage.getItem(LAST_BOARD_KEY); if (last && BOARDS.some
 buildTabs();
 loadBoard();
 
+// ---------- history-driven back navigation ---------------------------------
+// The reader owns its history (window.__ownsHistory keeps app-nav's blanket pin off). A back-swipe /
+// OS back should peel one layer at a time — lightbox → thread → list — and, from the list, do NOTHING
+// (never escape to the hub; that's only the explicit ‹ 返回 button). We keep one sentinel entry above
+// the reader's own page entry: opening a thread pushes a second; popping runs this handler.
+history.pushState({ ngaView: 'list' }, ''); // trap: a back-swipe from the list pops to here, we re-arm
+addEventListener('popstate', () => {
+  if (!els.lightbox.hidden) { closeLightbox(); history.pushState({ ngaView: state.view }, ''); return; }
+  if (state.view === 'thread') { showList(); return; }   // thread → list (sentinel already popped)
+  history.pushState({ ngaView: 'list' }, '');            // list → stay put, re-arm the trap
+});
+
 // e2e hook
-window.__nga = { state, renderContent, makeThreadRow, groupOf, filterGroups, buildFilterPanel, renderThreadList };
+window.__nga = { state, renderContent, makeThreadRow, groupOf, filterGroups, buildFilterPanel, renderThreadList, openThread, showList };
