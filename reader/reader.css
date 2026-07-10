@@ -1,0 +1,171 @@
+/* reader/reader.css — 电子书阅读. Theme mirrors the remote-developer tool
+   (Catppuccin Mocha): bg #1e1e2e, panels #181825/#11111b, text #cdd6f4, accent #89b4fa. */
+:root {
+  --bg: #1e1e2e;
+  --bg-alt: #181825;
+  --panel: #11111b;
+  --fg: #cdd6f4;
+  --muted: #6c7086;
+  --accent: #89b4fa;
+  --accent-dim: #45475a;
+  --bad: #f38ba8;
+  --border: #313244;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+/* ---------- library (书架) ---------- */
+#library { height: 100%; display: flex; flex-direction: column; }
+#bar {
+  flex: none; display: flex; align-items: center; gap: 12px;
+  padding: max(10px, env(safe-area-inset-top)) 16px 10px;
+  background: var(--bg-alt); border-bottom: 1px solid var(--border);
+}
+#bar .back { color: var(--accent); text-decoration: none; font-size: 1rem; flex: none; }
+#bar h1 { font-size: 1.1rem; flex: 1; }
+#btn-add {
+  flex: none; color: var(--accent); background: none;
+  border: 1px solid var(--border); border-radius: 999px; padding: 5px 14px; font-size: 0.9rem;
+}
+#btn-add:active { background: var(--accent-dim); }
+
+#shelf {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: flex; flex-wrap: wrap; gap: 16px; align-content: flex-start;
+  padding: 20px max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left));
+}
+.book {
+  position: relative; width: 132px; cursor: pointer;
+  -webkit-user-select: none; user-select: none;
+}
+.book .cover {
+  width: 132px; height: 186px; border-radius: 8px; overflow: hidden;
+  background: var(--bg-alt); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3rem; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+.book .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.book:active .cover { border-color: var(--accent); }
+.book .btitle {
+  margin-top: 8px; font-size: 0.82rem; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.book .bmeta { margin-top: 2px; font-size: 0.72rem; color: var(--muted); }
+.book .bpct { color: var(--accent); }
+.book .del {
+  position: absolute; top: -8px; right: -8px; width: 26px; height: 26px;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--panel);
+  color: var(--muted); font-size: 0.85rem; line-height: 1;
+}
+.book .del:active { color: var(--bad); border-color: var(--bad); }
+.empty { padding: 60px 24px; text-align: center; color: var(--muted); font-size: 0.95rem; }
+#busy { padding: 14px 24px; text-align: center; color: var(--accent); font-size: 0.9rem; }
+#busy[hidden] { display: none; }
+
+/* ---------- reader (翻页) ---------- */
+#reader { position: fixed; inset: 0; background: var(--bg); }
+#reader[hidden] { display: none; }
+
+/* The page: a clipped viewport over a CSS-multicolumn strip; each column is one
+   page and flipping translates the strip — the iOS-Books slide flip. */
+#viewport {
+  position: absolute;
+  inset: max(24px, env(safe-area-inset-top)) max(28px, env(safe-area-inset-right))
+         max(34px, env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left));
+  overflow: hidden;
+}
+.flow {
+  height: 100%;
+  column-fill: auto;
+  will-change: transform;
+  font-family: Georgia, "Songti SC", "Noto Serif SC", serif;
+  font-size: var(--reader-font, 19px);
+  line-height: 1.7;
+  text-align: justify;
+  -webkit-hyphens: auto; hyphens: auto;
+  word-break: break-word;
+}
+/* Books ship their own colors/faces; force ours so dark-on-dark never happens. */
+.flow, .flow * { color: var(--fg) !important; background: transparent !important; font-family: inherit !important; }
+.flow p { margin: 0 0 0.9em; text-indent: 2em; }
+.flow h1, .flow h2, .flow h3, .flow h4 { margin: 0 0 0.8em; line-height: 1.4; break-after: avoid; }
+.flow img, .flow svg, .flow image { max-width: 100%; max-height: 95%; object-fit: contain; break-inside: avoid; }
+.flow [data-epub-path] { color: var(--accent) !important; text-decoration: underline; }
+.flow blockquote { margin: 0 0 0.9em 1.5em; color: var(--muted) !important; }
+.flow hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+
+/* transparent gesture layer: taps (zones/links) + swipe-to-flip */
+#gesture { position: absolute; inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; }
+
+/* page number, always visible under the text area */
+#pageno {
+  position: absolute; left: 0; right: 0;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  text-align: center; font-size: 0.72rem; color: var(--muted); pointer-events: none;
+}
+
+/* ---------- HUD (tap center to toggle) ---------- */
+.hud {
+  position: absolute; left: 0; right: 0; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-alt); border-color: var(--border);
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+#hud-top {
+  top: 0; padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+#hud-bottom {
+  bottom: 0; padding: 10px 14px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+}
+#reader:not(.hud-open) #hud-top { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+#reader:not(.hud-open) #hud-bottom { transform: translateY(100%); opacity: 0; pointer-events: none; }
+#hud-top .back { color: var(--accent); background: none; border: none; font-size: 1rem; flex: none; }
+#hud-title {
+  flex: 1; font-size: 0.92rem; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hud-btn {
+  flex: none; min-width: 42px; padding: 7px 12px; font-size: 0.9rem;
+  color: var(--fg); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.hud-btn:active { background: var(--accent-dim); }
+#hud-info { flex: 1; text-align: center; font-size: 0.8rem; color: var(--muted); }
+
+/* ---------- TOC drawer ---------- */
+#toc {
+  position: absolute; top: 0; bottom: 0; left: 0; z-index: 10;
+  width: min(320px, 82vw);
+  background: var(--panel); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  box-shadow: 12px 0 30px rgba(0, 0, 0, 0.45);
+}
+#toc[hidden] { display: none; }
+#toc h2 {
+  flex: none; font-size: 0.95rem; color: var(--muted);
+  padding: max(14px, env(safe-area-inset-top)) 18px 12px;
+  border-bottom: 1px solid var(--border);
+}
+#toc-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 0 max(20px, env(safe-area-inset-bottom)); }
+.toc-item {
+  display: block; width: 100%; text-align: left; font-size: 0.9rem;
+  color: var(--fg); background: none; border: none;
+  padding: 11px 18px; border-radius: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.toc-item:active { background: var(--accent-dim); }
+.toc-item.current { color: var(--accent); }
+#toc-scrim { position: absolute; inset: 0; z-index: 9; background: rgba(0, 0, 0, 0.45); }
+#toc-scrim[hidden] { display: none; }
