@@ -1,0 +1,157 @@
+/* nga/nga.css — 方舟资讯 (NGA 论坛只读阅读器). Catppuccin Mocha, matching the 电子书阅读 tool. */
+:root {
+  --bg: #1e1e2e;
+  --bg-alt: #181825;
+  --panel: #11111b;
+  --fg: #cdd6f4;
+  --muted: #6c7086;
+  --sub: #9399b2;
+  --accent: #89b4fa;
+  --accent-dim: #45475a;
+  --bad: #f38ba8;
+  --good: #a6e3a1;
+  --border: #313244;
+  --quote: #1a1a28;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; color: inherit; }
+
+section#list-view, section#thread-view { height: 100%; display: flex; flex-direction: column; }
+
+/* ---------- top bar ---------- */
+.bar {
+  flex: none; display: flex; align-items: center; gap: 12px;
+  padding: max(10px, env(safe-area-inset-top)) 16px 10px;
+  background: var(--bg-alt); border-bottom: 1px solid var(--border);
+}
+.bar .back {
+  color: var(--accent); text-decoration: none; font-size: 1rem; flex: none;
+  background: none; border: none; padding: 0;
+}
+.bar h1 {
+  font-size: 1.05rem; flex: 1; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bar-btn {
+  flex: none; color: var(--accent); background: none;
+  border: 1px solid var(--border); border-radius: 999px;
+  width: 34px; height: 34px; font-size: 1.1rem; line-height: 1;
+}
+.bar-btn:active { background: var(--accent-dim); }
+.bar-btn.spin { animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- board tabs ---------- */
+.tabs {
+  flex: none; display: flex; gap: 8px;
+  padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+  background: var(--bg-alt); border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.tab {
+  flex: none; padding: 6px 16px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--sub); font-size: 0.92rem;
+}
+.tab.active { background: var(--accent); border-color: var(--accent); color: #11111b; font-weight: 600; }
+
+/* ---------- scroll region ---------- */
+.scroll {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 4px max(12px, env(safe-area-inset-right)) 24px max(12px, env(safe-area-inset-left));
+}
+
+/* ---------- thread list rows ---------- */
+.thread {
+  display: block; padding: 13px 6px; border-bottom: 1px solid var(--border);
+  -webkit-user-select: none; user-select: none;
+}
+.thread:active { background: var(--bg-alt); }
+.thread .t-subject { font-size: 0.98rem; line-height: 1.42; color: var(--fg); }
+.thread .t-meta {
+  margin-top: 6px; display: flex; gap: 12px; align-items: center;
+  font-size: 0.78rem; color: var(--muted);
+}
+.thread .t-author { color: var(--sub); }
+.thread .t-replies {
+  margin-left: auto; flex: none; color: var(--accent);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 999px; padding: 1px 9px; font-variant-numeric: tabular-nums;
+}
+.thread .t-replies.hot { color: var(--bad); border-color: var(--bad); }
+
+/* ---------- posts ---------- */
+.post { padding: 14px 4px; border-bottom: 1px solid var(--border); }
+.post .p-head {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px;
+  font-size: 0.8rem; color: var(--muted);
+}
+.post .p-author { color: var(--accent); font-weight: 600; font-size: 0.9rem; }
+.post .p-author.uid { color: var(--sub); font-weight: 400; }
+.post .p-floor { flex: none; }
+.post .p-floor.op { color: var(--good); }
+.post .p-date { margin-left: auto; flex: none; }
+.post .p-body { font-size: 1rem; line-height: 1.62; word-break: break-word; }
+
+/* rendered NGA content */
+.p-body img.nga-img {
+  max-width: 100%; height: auto; border-radius: 6px; margin: 6px 0;
+  border: 1px solid var(--border); display: block; background: var(--panel);
+}
+.p-body a { color: var(--accent); text-decoration: none; word-break: break-all; }
+.p-body a:active { text-decoration: underline; }
+.p-body blockquote.nga-quote {
+  margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--accent-dim);
+  background: var(--quote); border-radius: 0 6px 6px 0; color: var(--sub); font-size: 0.94rem;
+}
+.p-body .nga-emote {
+  display: inline-block; padding: 0 5px; margin: 0 1px; border-radius: 4px;
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--sub); font-size: 0.82rem; vertical-align: baseline;
+}
+.p-body details.nga-collapse {
+  margin: 8px 0; padding: 6px 10px; background: var(--quote);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.p-body details.nga-collapse > summary { color: var(--accent); cursor: pointer; font-size: 0.9rem; }
+.p-body del { color: var(--muted); }
+
+/* ---------- pager ---------- */
+.pager {
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 10px max(16px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: var(--bg-alt); border-top: 1px solid var(--border);
+}
+.pg-btn {
+  padding: 7px 16px; border-radius: 8px; background: var(--panel);
+  border: 1px solid var(--border); color: var(--accent); font-size: 0.9rem;
+}
+.pg-btn:active { background: var(--accent-dim); }
+.pg-btn:disabled { color: var(--muted); opacity: 0.5; }
+.pager span { flex: 1; text-align: center; color: var(--sub); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+/* ---------- states ---------- */
+.state { text-align: center; color: var(--muted); padding: 48px 20px; font-size: 0.95rem; line-height: 1.7; }
+.state.err { color: var(--bad); }
+.state button {
+  margin-top: 14px; padding: 7px 20px; border-radius: 999px;
+  background: none; border: 1px solid var(--border); color: var(--accent); font-size: 0.9rem;
+}
+
+#toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%); z-index: 20;
+  background: var(--panel); border: 1px solid var(--border); color: var(--fg);
+  padding: 9px 18px; border-radius: 999px; font-size: 0.88rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); max-width: 84vw; text-align: center;
+}

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>方舟资讯</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<script src="../app-nav.js"></script>
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<link rel="icon" href="../icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1e1e2e">
+<link rel="stylesheet" href="./nga.css">
+</head>
+<body>
+  <!-- 版块 / 主题列表 (board thread list) -->
+  <section id="list-view">
+    <header class="bar">
+      <a class="back" href="../" onclick="event.preventDefault(); location.replace('../')" aria-label="返回">‹ 返回</a>
+      <h1>方舟资讯</h1>
+      <button id="btn-refresh" class="bar-btn" type="button" aria-label="刷新">↻</button>
+    </header>
+    <nav id="boards" class="tabs"></nav>
+    <main id="threads" class="scroll"></main>
+    <footer id="list-pager" class="pager" hidden>
+      <button id="lp-prev" class="pg-btn" type="button">‹ 上一页</button>
+      <span id="lp-info"></span>
+      <button id="lp-next" class="pg-btn" type="button">下一页 ›</button>
+    </footer>
+  </section>
+
+  <!-- 主题阅读 (thread reader) -->
+  <section id="thread-view" hidden>
+    <header class="bar">
+      <button class="back" id="btn-to-list" type="button">‹ 版块</button>
+      <h1 id="thread-title">主题</h1>
+      <button id="btn-thread-refresh" class="bar-btn" type="button" aria-label="刷新">↻</button>
+    </header>
+    <main id="posts" class="scroll"></main>
+    <footer id="thread-pager" class="pager" hidden>
+      <button id="tp-prev" class="pg-btn" type="button">‹ 上一页</button>
+      <span id="tp-info"></span>
+      <button id="tp-next" class="pg-btn" type="button">下一页 ›</button>
+    </footer>
+  </section>
+
+  <div id="toast" hidden></div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

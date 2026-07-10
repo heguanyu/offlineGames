@@ -30,6 +30,7 @@ import { handleEmuSave } from './emu-saves.js';
 import { handleEmuAdmin } from './emu-admin.js';
 import { handlePasskey } from './admin-auth.js';
 import { handleFs, fsOnClose, startFsSweep } from './fileshare.js';
+import { handleNga } from './nga.js';
 
 // The games the lobby can host. Each table hosts ONE game; the lobby is split per game (the hub's
 // online cards deep-link a game). Every game shares the same lobby + reconnect + { type:'game' }
@@ -434,6 +435,16 @@ const server = http.createServer((req, res) => {
     const body = getWeatherJson();
     res.writeHead(body ? 200 : 503, cors);
     res.end(req.method === 'HEAD' ? undefined : (body || '{"error":"warming up"}'));
+    return;
+  }
+  // NGA 论坛只读中转 for the 方舟资讯 reader (server/nga.js): proxies NGA's guest app API for the two
+  // whitelisted 明日方舟 boards + an image proxy (NGA image hosts need a Referer). CORS-enabled like
+  // /api/weather so a straggler on the old Pages origin still reaches it; same-origin in practice.
+  if (req.url.split('?')[0].startsWith('/api/nga/')) {
+    const origin = req.headers.origin;
+    const cors = {};
+    if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
+    handleNga(req, res, cors);
     return;
   }
   serveStatic(req, res);
