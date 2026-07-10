@@ -84,6 +84,17 @@ try {
 
   const amp = await render('a & b < c > d "q"');
   ok(amp.includes('&amp;') && amp.includes('&lt;') && amp.includes('&gt;') && amp.includes('&quot;'), 'plain metacharacters escaped');
+
+  // iOS tappability: a clickable <div> (thread row) needs cursor:pointer or Safari never fires the
+  // tap. A click-driven test can't catch this (desktop Chromium clicks divs regardless), so assert
+  // the computed style directly.
+  console.log('iOS tap targets:');
+  const rowCursor = await page.evaluate(() => {
+    const el = document.createElement('div'); el.className = 'thread';
+    document.getElementById('threads').appendChild(el);
+    const c = getComputedStyle(el).cursor; el.remove(); return c;
+  });
+  ok(rowCursor === 'pointer', `.thread rows are tap-eligible on iOS (cursor:${rowCursor})`);
 } finally {
   await browser.close();
   server.close();
