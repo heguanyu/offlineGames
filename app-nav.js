@@ -14,6 +14,23 @@
   try { document.documentElement.style.overscrollBehavior = 'none'; } catch (e) {}
   addEventListener('DOMContentLoaded', function () { try { document.body.style.overscrollBehavior = 'none'; } catch (e) {} });
 
+  // --- history PIN (kills the iPhone standalone-PWA edge-swipe outright) -------------------------
+  // Turning link clicks into REPLACE keeps history shallow, but it can't stop the gesture once ANY
+  // entry exists — e.g. after tapping an external (target=_blank) link in the 方舟资讯 reader, which on
+  // an installed iPhone PWA (no tabs) navigates in-place and leaves an entry to swipe back to. iPhone
+  // standalone PWAs expose the interactive edge-swipe-back; iPad ones effectively don't (why iPad
+  // "looked fine"). So we PIN: seed a trap entry and re-arm it on every popstate, so a back/forward
+  // swipe always lands right back here. Gated to installed standalone PWAs only — a normal browser tab
+  // keeps its working Back button (nothing in the app uses history.back(); on-screen 返回 uses replace).
+  try {
+    var standalone = (navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (standalone) {
+      history.pushState(null, '', location.href);
+      addEventListener('popstate', function () { history.pushState(null, '', location.href); });
+    }
+  } catch (e) {}
+
   document.addEventListener('click', function (e) {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
