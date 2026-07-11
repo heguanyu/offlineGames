@@ -16,13 +16,13 @@
 
   // --- history PIN (kills the iPhone standalone-PWA edge-swipe outright) -------------------------
   // Turning link clicks into REPLACE keeps history shallow, but it can't stop the gesture once ANY
-  // entry exists — e.g. after tapping an external (target=_blank) link in the 方舟资讯 reader, which on
+  // entry exists — e.g. after tapping an external (target=_blank) link in the NGA reader, which on
   // an installed iPhone PWA (no tabs) navigates in-place and leaves an entry to swipe back to. iPhone
   // standalone PWAs expose the interactive edge-swipe-back; iPad ones effectively don't (why iPad
   // "looked fine"). So we PIN: seed a trap entry and re-arm it on every popstate, so a back/forward
   // swipe always lands right back here. Gated to installed standalone PWAs only — a normal browser tab
   // keeps its working Back button (nothing in the app uses history.back(); on-screen 返回 uses replace).
-  // A page that manages its own history (e.g. the 方舟资讯 reader, which turns a back-swipe into
+  // A page that manages its own history (e.g. the NGA reader, which turns a back-swipe into
   // thread→list) sets window.__ownsHistory before this script runs — then we stay out of its way.
   try {
     var standalone = (navigator.standalone === true) ||

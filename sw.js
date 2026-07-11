@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.7.21';
+const CACHE = 'offline-games-0.7.22';
 
 const ASSETS = [
   './',
@@ -37,7 +37,7 @@ const ASSETS = [
   './reader/main.js',
   './reader/epub.js',
 
-  // 方舟资讯 — Tools card: read-only NGA reader for the two 明日方舟 boards. Its data + images come
+  // NGA — Tools card: read-only NGA reader for the two 明日方舟 boards. Its data + images come
   // from the server relay (/api/nga/*) over the network, so only the shell is precached (the page
   // shows a "加载失败" state offline); no offline reading.
   './nga/',

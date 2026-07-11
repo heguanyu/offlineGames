@@ -15,7 +15,7 @@ const ok = (c, m) => { console.log(`  ${c ? 'ok' : 'FAIL'}: ${m}`); if (!c) fail
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Build a 2-page history (hub → reader) then attempt a back navigation; return where we ended up.
-// Uses the reader as the destination — a generic page that relies on app-nav's blanket pin (the 方舟资讯
+// Uses the reader as the destination — a generic page that relies on app-nav's blanket pin (the NGA
 // reader is NOT used here: it owns its history via window.__ownsHistory, covered by nga-test).
 async function backFrom(page) {
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });

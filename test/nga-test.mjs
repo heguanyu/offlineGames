@@ -1,4 +1,4 @@
-// 方舟资讯 (nga/) — deterministic, offline test. Two parts, NO live NGA dependency:
+// NGA (nga/) — deterministic, offline test. Two parts, NO live NGA dependency:
 //   1) server/nga.js pure helpers: the fid whitelist + the list/post row normalizer.
 //   2) The client's untrusted-content sanitizer (window.__nga.renderContent), driven in a real
 //      browser against a batch of XSS / BBCode fixtures — this is the security-critical path

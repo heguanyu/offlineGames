@@ -1,4 +1,4 @@
-// 方舟资讯 — read-only NGA reader for the two 明日方舟 boards. All data comes from our own
+// NGA — read-only reader, currently the two 明日方舟 boards (more forums to come). All data comes from our own
 // same-origin relay (server/nga.js), which proxies NGA's guest app API + images. This file is pure
 // view: fetch → render. Two in-page views (thread list ⇄ thread reader) toggled by show/hide — NEVER
 // a history push (app-nav.js + the repo's edge-swipe rule), so nav is state, not the back stack.

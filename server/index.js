@@ -437,7 +437,7 @@ const server = http.createServer((req, res) => {
     res.end(req.method === 'HEAD' ? undefined : (body || '{"error":"warming up"}'));
     return;
   }
-  // NGA 论坛只读中转 for the 方舟资讯 reader (server/nga.js): proxies NGA's guest app API for the two
+  // NGA 论坛只读中转 for the NGA reader (server/nga.js): proxies NGA's guest app API for the two
   // whitelisted 明日方舟 boards + an image proxy (NGA image hosts need a Referer). CORS-enabled like
   // /api/weather so a straggler on the old Pages origin still reaches it; same-origin in practice.
   if (req.url.split('?')[0].startsWith('/api/nga/')) {
