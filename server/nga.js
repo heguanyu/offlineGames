@@ -28,14 +28,14 @@ const IMG_HOST_OK = /(^|\.)(nga\.178\.com|nga\.cn|ngabbs\.com)$/i;
 const BOARDS = {
   '-34587507': '明日方舟',
   '846': '明日方舟：终末地',
-  '-7': '游戏综合讨论',
+  '414': '游戏综合讨论',
 };
 const ALLOWED_FIDS = new Set(Object.keys(BOARDS));
 
-// Some boards (e.g. 游戏综合讨论 -7) are NOT guest-readable — NGA returns code 12「未登录」. Set
-// NGA_COOKIE to a logged-in account's cookie string (at least `ngaPassportUid=…;ngaPassportCid=…`)
-// and the relay reads as that account, unlocking those boards (and unmasking usernames everywhere).
-// Left unset, the arknights boards still work as guest; gated boards report a friendly login error.
+// All three boards above are guest-readable. Some OTHER NGA boards aren't (guest → code 12「未登录」);
+// set NGA_COOKIE to a logged-in account's cookie string (at least `ngaPassportUid=…;ngaPassportCid=…`)
+// and the relay reads as that account, unlocking gated boards (and unmasking usernames everywhere).
+// Optional — left unset, all three boards still work as guest.
 const NGA_COOKIE = process.env.NGA_COOKIE || '';
 
 const FETCH_TIMEOUT_MS = 12_000;

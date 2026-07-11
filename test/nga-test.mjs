@@ -17,7 +17,7 @@ console.log('relay helpers:');
 ok(ALLOWED_FIDS.has('846') && ALLOWED_FIDS.has('-34587507'), 'both 方舟 boards whitelisted');
 ok(!ALLOWED_FIDS.has('7') && !ALLOWED_FIDS.has(''), 'other/empty fids rejected');
 ok(BOARDS['846'] === '明日方舟：终末地' && BOARDS['-34587507'] === '明日方舟', 'board labels');
-ok(ALLOWED_FIDS.has('-7') && BOARDS['-7'] === '游戏综合讨论', '游戏综合讨论 (-7) is whitelisted');
+ok(ALLOWED_FIDS.has('414') && BOARDS['414'] === '游戏综合讨论', '游戏综合讨论 (414) is whitelisted');
 ok(rowsOf([{ tid: 1 }, { tid: 2 }, { x: 3 }], 'tid').length === 2, 'rowsOf array: keeps rows with the key');
 ok(rowsOf({ 0: { tid: 1 }, 1: { tid: 2 }, __ROWS: 9, meta: {} }, 'tid').length === 2, 'rowsOf object: numeric keys + key present only');
 ok(rowsOf(null, 'tid').length === 0 && rowsOf(undefined, 'lou').length === 0, 'rowsOf nullish → []');

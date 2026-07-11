@@ -8,7 +8,7 @@ import { EMOTES } from './emotes.js';
 const BOARDS = [
   { fid: '-34587507', label: '明日方舟' },
   { fid: '846', label: '终末地' },
-  { fid: '-7', label: '综合讨论' },
+  { fid: '414', label: '游戏综合' },
 ];
 const LAST_BOARD_KEY = 'nga.lastFid';
 
