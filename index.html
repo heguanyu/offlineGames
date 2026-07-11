@@ -41,7 +41,7 @@
   }
   #update-btn:active:not(:disabled) { background: var(--accent-dim); }
   #update-btn:disabled { color: var(--muted); border-color: var(--border); cursor: default; }
-  /* download progress for an in-flight update — a bar + live percentage next to the button */
+  /* download progress for an in-flight update — a bar + live percentage + downloaded/total size next to the button */
   #update-progress { display: inline-flex; align-items: center; gap: 7px; margin-left: 10px; vertical-align: middle; }
   /* the id-selector display above would beat the UA [hidden] rule, leaving the bar permanently
      shown at 0%; this restores hide-ability (id+attr specificity wins). */
@@ -49,6 +49,8 @@
   #update-bar { display: inline-block; width: 90px; height: 7px; border-radius: 999px; background: var(--border); overflow: hidden; }
   #update-fill { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--accent); transition: width 0.2s ease; }
   #update-pct { font-size: 0.78rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+  #update-size { font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #update-size:empty { display: none; }
   /* "Add to Home Screen" helper (iOS/iPadOS Safari has no install API → we guide instead) */
   #install-btn {
     font: inherit; font-size: 0.78rem; line-height: 1;
@@ -214,7 +216,7 @@
     </div>
   </aside>
   <main id="content">
-  <p id="meta"><span id="app-version"></span><span id="net-status"></span><button id="update-btn" type="button" hidden></button><span id="update-progress" hidden><span id="update-bar"><span id="update-fill"></span></span><span id="update-pct">0%</span></span><button id="install-btn" type="button" data-i18n="install_btn" hidden></button></p>
+  <p id="meta"><span id="app-version"></span><span id="net-status"></span><button id="update-btn" type="button" hidden></button><span id="update-progress" hidden><span id="update-bar"><span id="update-fill"></span></span><span id="update-pct">0%</span><span id="update-size"></span></span><button id="install-btn" type="button" data-i18n="install_btn" hidden></button></p>
 
   <div id="install-overlay" hidden>
     <div class="install-card" role="dialog" aria-modal="true" aria-labelledby="install-title">
@@ -447,6 +449,7 @@
     const progress = document.getElementById('update-progress');
     const progressFill = document.getElementById('update-fill');
     const progressPct = document.getElementById('update-pct');
+    const progressSize = document.getElementById('update-size');
     const swSupported = 'serviceWorker' in navigator;
 
     let swReg = null;       // the service-worker registration
@@ -481,20 +484,28 @@
       // in-flight check/update (busy || updating) so a background install — or a broadcast when
       // there's nothing for the user to update — never pops the bar up unbidden.
       navigator.serviceWorker.addEventListener('message', (e) => {
-        if (e.data && e.data.type === 'install-progress' && (busy || updating)) setProgress(e.data.pct);
+        if (e.data && e.data.type === 'install-progress' && (busy || updating)) setProgress(e.data);
       });
     }
 
-    // Reveal/update the download progress bar (pct 0–100); pct === null hides it.
-    // On an update the page reloads at activation; on a first-ever install there's no
-    // reload, so hide the bar a beat after it fills.
+    // Reveal/update the download progress bar. Pass the SW's install-progress
+    // payload ({ pct, bytes, totalBytesEst }); pass null to hide it. On an update
+    // the page reloads at activation; on a first-ever install there's no reload, so
+    // hide the bar a beat after it fills.
     let progressDone = null;
-    function setProgress(pct) {
+    const fmtMB = (b) => (b / 1048576).toFixed(1) + ' MB';
+    function setProgress(data) {
       clearTimeout(progressDone);
-      if (pct == null) { progress.hidden = true; return; }
+      if (data == null) { progress.hidden = true; progressSize.textContent = ''; return; }
+      const pct = data.pct;
       progress.hidden = false;
       progressFill.style.width = pct + '%';
       progressPct.textContent = pct + '%';
+      // downloaded / total (total is an estimate until the last asset lands, so tag it ~).
+      if (data.bytes && data.totalBytesEst) {
+        const tilde = pct >= 100 ? '' : '~';
+        progressSize.textContent = `${fmtMB(data.bytes)} / ${tilde}${fmtMB(data.totalBytesEst)}`;
+      } else progressSize.textContent = '';
       if (pct >= 100) progressDone = setTimeout(() => setProgress(null), 800);
     }
 

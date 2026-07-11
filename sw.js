@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.7.22';
+const CACHE = 'offline-games-0.7.23';
 
 const ASSETS = [
   './',
@@ -261,18 +261,32 @@ self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
     const cache = await caches.open(CACHE);
     const total = ASSETS.length;
-    let done = 0, lastPct = -1;
+    let done = 0, bytes = 0, lastPct = -1;
     // Report progress only when the whole-number percent changes (≤101 messages,
     // not one per asset). Fire-and-forget — progress is best-effort cosmetics.
+    // `bytes` = downloaded so far; `totalBytesEst` extrapolates the full download
+    // from the average asset size seen — rough early, exact once done === total.
     const tick = () => {
       const pct = Math.floor((done / total) * 100);
-      if (pct !== lastPct) { lastPct = pct; broadcast({ type: 'install-progress', done, total, pct }); }
+      if (pct !== lastPct) {
+        lastPct = pct;
+        const totalBytesEst = done ? Math.round((bytes / done) * total) : 0;
+        broadcast({ type: 'install-progress', done, total, pct, bytes, totalBytesEst });
+      }
     };
     tick();
-    // Per-asset cache.add (instead of cache.addAll) so we can count completions.
-    // Promise.all still rejects on any failure, so a broken asset fails the whole
-    // install exactly like addAll did — the cache never ends up half-populated.
-    await Promise.all(ASSETS.map((url) => cache.add(url).then(() => { done++; tick(); })));
+    // Manual fetch + cache.put (instead of cache.add/addAll) so we can count
+    // completions AND measure bytes. A non-ok response throws, so a broken asset
+    // fails the whole install exactly like addAll did — the cache is never left
+    // half-populated. Size comes free from Content-Length; blob() is the fallback.
+    await Promise.all(ASSETS.map(async (url) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`install: ${res.status} for ${url}`);
+      let len = Number(res.headers.get('content-length'));
+      if (!(len > 0)) len = (await res.clone().blob()).size;
+      await cache.put(url, res);
+      bytes += len; done++; tick();
+    }));
     await self.skipWaiting();
   })());
 });
