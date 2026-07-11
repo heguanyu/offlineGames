@@ -1,18 +1,5 @@
-/* nga/nga.css — 方舟资讯 (NGA 论坛只读阅读器). Catppuccin Mocha, matching the 电子书阅读 tool. */
-:root {
-  --bg: #1e1e2e;
-  --bg-alt: #181825;
-  --panel: #11111b;
-  --fg: #cdd6f4;
-  --muted: #6c7086;
-  --sub: #9399b2;
-  --accent: #89b4fa;
-  --accent-dim: #45475a;
-  --bad: #f38ba8;
-  --good: #a6e3a1;
-  --border: #313244;
-  --quote: #1a1a28;
-}
+/* nga/nga.css — 方舟资讯 (NGA 论坛只读阅读器). Colors come from the shared theme
+   layer (shared/theme.css); this file only uses the semantic tokens. */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 /* The `hidden` attribute MUST win over author display rules below (the views + pagers set display:flex
@@ -86,7 +73,7 @@ section#list-view, section#thread-view { height: 100%; display: flex; flex-direc
 .filter-panel .fp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .fchip {
   padding: 5px 12px; border-radius: 999px; font-size: 0.85rem;
-  background: var(--accent); border: 1px solid var(--accent); color: #11111b; font-weight: 600;
+  background: var(--accent); border: 1px solid var(--accent); color: var(--on-accent); font-weight: 600;
 }
 .fchip.off {
   background: var(--panel); border-color: var(--border); color: var(--muted); font-weight: 400;
@@ -98,7 +85,7 @@ section#list-view, section#thread-view { height: 100%; display: flex; flex-direc
   background: var(--panel); border: 1px solid var(--border);
   color: var(--sub); font-size: 0.92rem;
 }
-.tab.active { background: var(--accent); border-color: var(--accent); color: #11111b; font-weight: 600; }
+.tab.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 
 /* ---------- scroll region ---------- */
 .scroll {
@@ -172,7 +159,7 @@ section#list-view, section#thread-view { height: 100%; display: flex; flex-direc
    transparency and vanish on the dark theme, so sit them on a subtle warm/yellow plate. */
 .p-body img.nga-emote-img {
   display: inline-block; height: 1.5em; width: auto; vertical-align: text-bottom; margin: 0 2px;
-  background: #f3e7c0; border-radius: 3px; padding: 1px 2px; box-sizing: content-box;
+  background: var(--emote-plate); border-radius: 3px; padding: 1px 2px; box-sizing: content-box;
 }
 .p-body .nga-img { cursor: zoom-in; }
 /* inline video (NGA .gif.mp4 clips) */
@@ -232,5 +219,5 @@ section#list-view, section#thread-view { height: 100%; display: flex; flex-direc
   transform: translateX(-50%); z-index: 20;
   background: var(--panel); border: 1px solid var(--border); color: var(--fg);
   padding: 9px 18px; border-radius: 999px; font-size: 0.88rem;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); max-width: 84vw; text-align: center;
+  box-shadow: 0 6px 20px var(--shadow); max-width: 84vw; text-align: center;
 }

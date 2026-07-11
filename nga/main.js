@@ -416,5 +416,14 @@ addEventListener('popstate', () => {
   history.pushState({ ngaView: 'list' }, '');            // list → stay put, re-arm the trap
 });
 
+// ---------- theme picker (shared/theme.js) ---------------------------------
+const themePop = $('theme-pop'), btnTheme = $('btn-theme');
+$('theme-mount').appendChild(window.Theme.buildPicker());
+const closeThemePop = () => { themePop.hidden = true; };
+btnTheme.addEventListener('click', (e) => { e.stopPropagation(); themePop.hidden = !themePop.hidden; });
+themePop.addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => { if (!themePop.hidden) closeThemePop(); });
+window.Theme.onChange(closeThemePop);
+
 // e2e hook
 window.__nga = { state, renderContent, makeThreadRow, groupOf, filterGroups, buildFilterPanel, renderThreadList, openThread, showList };

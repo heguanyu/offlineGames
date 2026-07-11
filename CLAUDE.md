@@ -56,6 +56,30 @@ static file that a cached page imports/loads, also add it to the `ASSETS` list i
 offline play breaks on a missing module. To ship: push, then run `tools/deploy-azure.ps1`
 (pushing alone deploys nothing).
 
+## Theming — shared token layer, never hardcode colors
+Colors live in ONE place: `shared/theme.css` defines a semantic token vocabulary
+(`--bg/--bg-alt/--panel/--panel-2/--fg/--sub/--muted/--accent/--accent-dim/--on-accent/--good/--bad/--warn/--border/--quote/--emote-plate/--scrim/--shadow`)
+across 4 palettes selected by `html[data-theme=…]`: **mocha** (dark default), **latte** (light),
+**midnight** (the old hub/fileshare blue), **sepia** (warm reading). `shared/theme.js` is a PLAIN
+(non-module) `<head>` script that applies the theme before first paint (no flash), persists the
+choice **per page** (key `og-theme:<scope>`), and syncs `<meta name="theme-color">`. Both files are
+in the `sw.js` ASSETS precache — keep them there.
+
+A themed page:
+- sets `<html data-theme-scope="…">` (its persistence bucket) and optionally
+  `data-theme-default="midnight"` (out-of-box palette; defaults `mocha`);
+- loads `<script src="…/shared/theme.js"></script>` in `<head>` and
+  `<link rel="stylesheet" href="…/shared/theme.css">` BEFORE its own stylesheet;
+- **styles only with the tokens above — no hardcoded hex** (the one exception: intrinsic overlays
+  like a media lightbox or the QR white plate, which stay fixed regardless of theme);
+- mounts a picker with `window.Theme.buildPicker()` (see `reader/main.js`, `nga/main.js`).
+
+Currently wired: reader, nga, fileshare, hub (`index.html`). **Games are intentionally NOT themed**
+— board/pool/card CSS keep their tuned dark look (felt/tiles/cards + canvas surfaces). If that ever
+changes, do chrome-only token conversion (menus/buttons/HUD/scoreboards) and keep game surfaces
+fixed. To add a palette: add one `html[data-theme="id"]{…}` block filling every token, then add the
+id to the `THEMES` list in `theme.js`.
+
 ## Sub-hubs — shareable, scoped entries (e.g. /mj/)
 A sub-hub exposes a SUBSET of the site to share with someone (e.g. `/mj/` = 天津麻将 only,
 offline + 联机 on the same server/tables; not linked from the main hub). Because everything is

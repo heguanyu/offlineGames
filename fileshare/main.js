@@ -475,3 +475,11 @@ function boot() {
 addEventListener('online', () => { if (!$('view-offline').hidden) { showView('landing'); sig.connect(); } });
 addEventListener('offline', () => { if ($('view-landing').hidden === false || $('view-host').hidden === false) showView('offline'); });
 boot();
+
+// ---- theme picker (shared/theme.js) ----
+const themePop = $('theme-pop'), btnTheme = $('btn-theme');
+$('theme-mount').appendChild(window.Theme.buildPicker());
+btnTheme.addEventListener('click', (e) => { e.stopPropagation(); themePop.hidden = !themePop.hidden; });
+themePop.addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => { if (!themePop.hidden) themePop.hidden = true; });
+window.Theme.onChange(() => { themePop.hidden = true; });

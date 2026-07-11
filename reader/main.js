@@ -319,6 +319,20 @@ function bumpFont(d) {
 $('btn-font-dec').addEventListener('click', () => bumpFont(-2));
 $('btn-font-inc').addEventListener('click', () => bumpFont(2));
 
+// ---- theme picker (shared/theme.js) ----
+const settingsPop = $('settings-pop'), btnTheme = $('btn-theme');
+$('theme-mount').appendChild(window.Theme.buildPicker());
+function closeSettings() { settingsPop.hidden = true; btnTheme.classList.remove('on'); }
+btnTheme.addEventListener('click', (e) => {
+  e.stopPropagation();
+  settingsPop.hidden = !settingsPop.hidden;
+  btnTheme.classList.toggle('on', !settingsPop.hidden);
+});
+// tap anywhere outside the popover (or on a swatch) dismisses it
+settingsPop.addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => { if (!settingsPop.hidden) closeSettings(); });
+window.Theme.onChange(closeSettings);
+
 // font-size / viewport changes reflow the columns — keep the reading spot by fraction
 function relayoutKeepingSpot() {
   const frac = cur.pageCount > 1 ? cur.page / cur.pageCount : 0;

@@ -1,16 +1,5 @@
-/* reader/reader.css — 电子书阅读. Theme mirrors the remote-developer tool
-   (Catppuccin Mocha): bg #1e1e2e, panels #181825/#11111b, text #cdd6f4, accent #89b4fa. */
-:root {
-  --bg: #1e1e2e;
-  --bg-alt: #181825;
-  --panel: #11111b;
-  --fg: #cdd6f4;
-  --muted: #6c7086;
-  --accent: #89b4fa;
-  --accent-dim: #45475a;
-  --bad: #f38ba8;
-  --border: #313244;
-}
+/* reader/reader.css — 电子书阅读. Colors come from the shared theme layer
+   (shared/theme.css); this file only uses the semantic tokens. */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
@@ -143,6 +132,18 @@ button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparen
 }
 .hud-btn:active { background: var(--accent-dim); }
 #hud-info { flex: 1; text-align: center; font-size: 0.8rem; color: var(--muted); }
+
+/* ---------- settings popover (theme picker) ---------- */
+#settings-pop {
+  position: absolute; z-index: 6;
+  left: 12px; right: 12px; bottom: calc(100% + 8px);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px; box-shadow: 0 10px 30px var(--shadow);
+}
+#settings-pop[hidden] { display: none; }
+#settings-pop .pop-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 10px; }
+#settings-pop .theme-picker { justify-content: center; }
+#btn-theme.on { color: var(--accent); border-color: var(--accent); }
 
 /* ---------- TOC drawer ---------- */
 #toc {

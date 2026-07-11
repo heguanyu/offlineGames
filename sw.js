@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.7.20';
+const CACHE = 'offline-games-0.7.21';
 
 const ASSETS = [
   './',
@@ -194,6 +194,8 @@ const ASSETS = [
   './games/snooker/index.html',
   './games/snooker/main.js',
   './games/snooker/rules.js',
+  './shared/theme.css', // repo-wide theme palettes (all pages link this before their own CSS)
+  './shared/theme.js', // theme registry + per-module persistence + picker
   './shared/emu-persistence.js',
   './shared/power-mode.js', // 省电模式 (3-tier power mode) — shared by the card games
   './shared/audio-revive.js', // AudioContext keeper: revives audio after iOS kills it in the background (all game sound modules)

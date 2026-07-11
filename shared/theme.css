@@ -1,0 +1,177 @@
+/* shared/theme.css — repo-wide theme layer.
+ *
+ * Every page links this BEFORE its own stylesheet, then styles with the semantic
+ * tokens below (never hardcoded hex). The active palette is chosen by the
+ * `data-theme` attribute on <html>, set synchronously by shared/theme.js so the
+ * first paint is already themed (no flash). Per-module persistence lives in
+ * theme.js (localStorage `og-theme:<scope>`).
+ *
+ * To add a palette: add one `html[data-theme="id"] { … }` block below filling in
+ * every token, then add the id to the THEMES list in theme.js. That's it.
+ *
+ * Token vocabulary (all themes define all of these):
+ *   Surfaces  --bg        page background
+ *             --bg-alt    bars / raised strips
+ *             --panel     cards, chips, buttons at rest
+ *             --panel-2   deeper wells (inputs, progress tracks)
+ *   Text      --fg        primary text
+ *             --sub       secondary text (still readable)
+ *             --muted     tertiary / disabled text
+ *   Accent    --accent    links, active state, primary action
+ *             --accent-dim pressed / hover fill
+ *             --on-accent text/icon ON an --accent fill (contrast pair)
+ *   Status    --good / --bad / --warn
+ *   Lines     --border    hairlines, outlines
+ *   Extras    --quote        blockquote / collapsed-content background
+ *             --emote-plate  fixed warm plate behind dark line-art emotes
+ *             --scrim        modal/backdrop overlay
+ *             --shadow       drop-shadow color
+ *   Game      --felt / --felt-rail   card/mahjong table surface + rail
+ *             --card-face / --card-ink  playing-card face + its ink
+ */
+
+/* ---------- Mocha — dark default (Catppuccin Mocha) ---------- */
+:root,
+html[data-theme="mocha"] {
+  --bg: #1e1e2e;
+  --bg-alt: #181825;
+  --panel: #11111b;
+  --panel-2: #0c0c14;
+  --fg: #cdd6f4;
+  --sub: #9399b2;
+  --muted: #6c7086;
+  --accent: #89b4fa;
+  --accent-dim: #45475a;
+  --on-accent: #11111b;
+  --good: #a6e3a1;
+  --bad: #f38ba8;
+  --warn: #f9e2af;
+  --border: #313244;
+  --quote: #1a1a28;
+  --emote-plate: #f3e7c0;
+  --scrim: rgba(0, 0, 0, 0.5);
+  --shadow: rgba(0, 0, 0, 0.4);
+  --felt: #14532d;
+  --felt-rail: #0c3a20;
+  --card-face: #f7f4ea;
+  --card-ink: #1b1b24;
+}
+
+/* ---------- Latte — light (Catppuccin Latte) ---------- */
+html[data-theme="latte"] {
+  --bg: #eff1f5;
+  --bg-alt: #e6e9ef;
+  --panel: #dce0e8;
+  --panel-2: #ccd0da;
+  --fg: #4c4f69;
+  --sub: #6c6f85;
+  --muted: #8c8fa1;
+  --accent: #1e66f5;
+  --accent-dim: #bcc0cc;
+  --on-accent: #ffffff;
+  --good: #40a02b;
+  --bad: #d20f39;
+  --warn: #df8e1d;
+  --border: #ccd0da;
+  --quote: #e6e9ef;
+  --emote-plate: #f3e7c0;
+  --scrim: rgba(60, 60, 90, 0.28);
+  --shadow: rgba(80, 80, 110, 0.2);
+  --felt: #2f7d4f;
+  --felt-rail: #226039;
+  --card-face: #ffffff;
+  --card-ink: #1b1b24;
+}
+
+/* ---------- Midnight — the original hub/fileshare blue ---------- */
+html[data-theme="midnight"] {
+  --bg: #1a1a2e;
+  --bg-alt: #16213e;
+  --panel: #0e1630;
+  --panel-2: #0a1024;
+  --fg: #eaeaea;
+  --sub: #b9b9d6;
+  --muted: #8a8aa3;
+  --accent: #9fb4ff;
+  --accent-dim: #0f3460;
+  --on-accent: #0e1630;
+  --good: #4ade80;
+  --bad: #ef6f6f;
+  --warn: #e9c46a;
+  --border: #2c3a63;
+  --quote: #12193a;
+  --emote-plate: #f3e7c0;
+  --scrim: rgba(10, 10, 20, 0.62);
+  --shadow: rgba(0, 0, 0, 0.4);
+  --felt: #123b6b;
+  --felt-rail: #0c2a4d;
+  --card-face: #f7f4ea;
+  --card-ink: #1b1b24;
+}
+
+/* ---------- Sepia — warm reading paper ---------- */
+html[data-theme="sepia"] {
+  --bg: #f4ecd8;
+  --bg-alt: #ece0c8;
+  --panel: #e8dcc0;
+  --panel-2: #ddd0b0;
+  --fg: #5b4636;
+  --sub: #7a6a58;
+  --muted: #9a8878;
+  --accent: #9c6b3f;
+  --accent-dim: #d8c4a0;
+  --on-accent: #fbf3e0;
+  --good: #5a7d3c;
+  --bad: #b3402f;
+  --warn: #b8860b;
+  --border: #d9c7a8;
+  --quote: #ece0c8;
+  --emote-plate: #f3e7c0;
+  --scrim: rgba(60, 40, 20, 0.35);
+  --shadow: rgba(90, 70, 40, 0.25);
+  --felt: #6d7d4a;
+  --felt-rail: #55632f;
+  --card-face: #fbf6e8;
+  --card-ink: #3b2f22;
+}
+
+/* ---------- reusable theme picker (a segmented pill row) ---------- */
+.theme-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.theme-opt {
+  font: inherit;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  color: var(--sub);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.theme-opt.on {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* reusable top-anchored popover for the picker (nga, fileshare, hub) */
+.theme-pop {
+  position: fixed;
+  z-index: 60;
+  top: max(58px, calc(env(safe-area-inset-top) + 50px));
+  right: max(12px, env(safe-area-inset-right));
+  max-width: min(320px, 92vw);
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px var(--shadow);
+}
+.theme-pop[hidden] { display: none; }
+.theme-pop .pop-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 10px; }
+
