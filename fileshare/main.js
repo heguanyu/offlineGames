@@ -78,7 +78,12 @@ function keepAwake(on) {
 }
 // the OS auto-releases the lock whenever the page hides; re-grab it on return. Taps double
 // as user-gesture retries for browsers that reject gesture-less requests.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) acquireWake(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  acquireWake();
+  // only bother checking the link if we were away long enough for iOS to have suspended us
+  if (session && Date.now() - hiddenAt > 1500) verifyLive();
+});
 window.addEventListener('touchend', () => { acquireWake(); }, { passive: true });
 window.addEventListener('click', () => { acquireWake(); });
 
@@ -92,6 +97,22 @@ sig.addEventListener('open', () => {
   else if (pendingJoin) { sig.join(pendingJoin); pendingJoin = null; }
 });
 sig.addEventListener('close', () => setConn('off'));
+
+// ---- foreground liveness: heal a dropped / half-open socket on return ---------------------------
+// iOS suspends a backgrounded PWA and can leave its WebSocket reading OPEN but actually dead (a
+// screen-lock, or the save/share sheet covering the app). On return-to-foreground we ping; if no
+// fs-pong lands in time we force a fresh socket, whose 'open' triggers sig.resume() to rebuild the
+// session (the server holds the room for the grace window). Brief hides are ignored to avoid churn.
+let pongTimer = 0;
+let hiddenAt = 0;
+sig.addEventListener('fs-pong', () => { clearTimeout(pongTimer); pongTimer = 0; });
+function verifyLive() {
+  if (!session) return;
+  if (!(sig.ws && sig.ws.readyState === WebSocket.OPEN)) { sig.reconnect(); return; }
+  clearTimeout(pongTimer);
+  sig.ping();
+  pongTimer = setTimeout(() => { pongTimer = 0; if (session) sig.reconnect(); }, 2500);
+}
 
 // ---- pairing: signaling events -------------------------------------------
 sig.addEventListener('fs-created', (e) => { myRoom = e.detail.room; showHost(myRoom); });
@@ -242,16 +263,27 @@ function wireTransfer(l) {
   l.addEventListener('progress', (e) => updateProgress(e.detail.dir, e.detail.id, e.detail.done, e.detail.total));
 }
 
-function setPickersEnabled(on) { for (const id of ['pick-files', 'pick-media']) $(id).disabled = !on; $('dropzone').classList.toggle('disabled', !on); }
+function setPickersEnabled(on) { $('pick-files').disabled = !on; $('dropzone').classList.toggle('disabled', !on); }
 
 // ---- transfer list rendering ---------------------------------------------
 const itemEls = { out: new Map(), in: new Map() };
 const received = new Map(); // id → { name, blob } for every fully-received file (the batch-save pool)
+const savedIds = new Set(); // received ids the user has already saved (→ dim the row, uncheck it)
+const clearSentBtn = $('clear-sent');
 function resetLists() {
   for (const dir of ['out', 'in']) { itemEls[dir].clear(); $(dir + '-list').innerHTML = '<li class="empty muted">暂无</li>'; }
   received.clear();
+  savedIds.clear();
+  refreshClearSent();
   refreshInActions();
 }
+// show the 清除已发送 action once at least one send has finished (completed or failed)
+function refreshClearSent() { clearSentBtn.hidden = ![...itemEls.out.values()].some((li) => li.classList.contains('finished')); }
+clearSentBtn.addEventListener('click', () => {
+  for (const [id, li] of [...itemEls.out]) if (li.classList.contains('finished')) { li.remove(); itemEls.out.delete(id); }
+  if (!itemEls.out.size) $('out-list').innerHTML = '<li class="empty muted">暂无</li>';
+  refreshClearSent();
+});
 function addItem(dir, id, name, size) {
   const list = $(dir + '-list');
   const empty = list.querySelector('.empty'); if (empty) empty.remove();
@@ -266,8 +298,8 @@ function updateProgress(dir, id, done, total) {
   li.querySelector('.bar > span').style.width = pct + '%';
   li.querySelector('.pct').textContent = pct + '%';
 }
-function completeItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已发送'; }
-function failItem(dir, id) { const li = itemEls[dir].get(id); if (li) li.querySelector('.pct').textContent = '失败'; }
+function completeItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已发送'; if (dir === 'out') { li.classList.add('finished'); refreshClearSent(); } }
+function failItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; li.querySelector('.pct').textContent = '失败'; if (dir === 'out') { li.classList.add('finished'); refreshClearSent(); } }
 function receiveItem({ id, name, blob }) {
   const li = itemEls.in.get(id); if (!li) return;
   li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已接收';
@@ -282,7 +314,20 @@ function receiveItem({ id, name, blob }) {
 
   // keep a per-file one-tap save too (single download within the click gesture — iOS-safe)
   const a = document.createElement('a'); a.className = 'dl'; a.href = URL.createObjectURL(blob); a.download = name; a.textContent = '保存';
+  a.addEventListener('click', () => markSaved(id)); // the download still proceeds; just flag it saved
   li.appendChild(a);
+  refreshInActions();
+}
+
+// mark a received file as saved: dim the row, flip its 保存 to a confirmed state, and drop it from
+// the batch selection so 全选/打包 default to what you HAVEN'T saved yet.
+function markSaved(id) {
+  if (savedIds.has(id)) return;
+  savedIds.add(id);
+  const li = itemEls.in.get(id); if (!li) return;
+  li.classList.add('saved');
+  const cb = li.querySelector('.pick'); if (cb) cb.checked = false;
+  const a = li.querySelector('a.dl'); if (a) { a.classList.add('saved'); a.textContent = '已保存 ✓'; }
   refreshInActions();
 }
 
@@ -299,18 +344,22 @@ if (canShareFiles) $('share-selected').hidden = false;
 
 function refreshInActions() {
   const actions = $('in-actions');
-  if (!received.size) { actions.hidden = true; return; }
-  actions.hidden = false;
+  // The batch bar earns its place only when it does something a single row's 保存 can't: bundle ≥2
+  // files into one .zip (desktop) or reach Photos via the share sheet (mobile). A lone received file
+  // on desktop is handled entirely by its own 保存 — so no duplicate 下载 button appears.
+  const showBatch = received.size > 0 && (received.size >= 2 || canShareFiles);
+  actions.hidden = !showBatch;
+  if (!showBatch) return;
   const picks = [...received.keys()].map((id) => itemEls.in.get(id)?.querySelector('.pick')).filter(Boolean);
   const checked = picks.filter((c) => c.checked).length;
-  const all = $('sel-all'); all.checked = checked === picks.length; all.indeterminate = checked > 0 && checked < picks.length;
+  const all = $('sel-all'); all.checked = checked > 0 && checked === picks.length; all.indeterminate = checked > 0 && checked < picks.length;
   const n = checked > 1 ? ` (${checked})` : '';
-  const zip = $('save-selected'); zip.disabled = checked === 0; zip.textContent = (checked > 1 ? '打包 .zip' : '下载') + n;
+  const zip = $('save-selected'); zip.disabled = checked < 2; zip.textContent = '打包 .zip' + n; // only bundles ≥2
   const share = $('share-selected'); share.disabled = checked === 0; share.textContent = '保存到相册 / 分享' + n;
 }
-function selectedFiles() {
+function selectedIds() {
   const out = [];
-  for (const [id, f] of received) { const cb = itemEls.in.get(id)?.querySelector('.pick'); if (cb && cb.checked) out.push(f); }
+  for (const id of received.keys()) { const cb = itemEls.in.get(id)?.querySelector('.pick'); if (cb && cb.checked) out.push(id); }
   return out;
 }
 function triggerDownload(blob, name) {
@@ -330,29 +379,28 @@ $('sel-all').addEventListener('change', (e) => {
 // Mobile: hand the selected files to the OS share sheet — keep them as distinct files (→ Photos/Files).
 // Build the File[] synchronously so navigator.share() still runs inside the click gesture.
 $('share-selected').addEventListener('click', async () => {
-  const picks = selectedFiles();
-  if (!picks.length) return;
+  const ids = selectedIds();
+  if (!ids.length) return;
+  const picks = ids.map((id) => received.get(id));
   const files = picks.map((f) => new File([f.blob], f.name, { type: f.blob.type || 'application/octet-stream' }));
-  try { await navigator.share({ files }); }
-  catch (e) { if (e && e.name !== 'AbortError') triggerDownload(picks.length === 1 ? picks[0].blob : await makeZip(picks), picks.length === 1 ? picks[0].name : zipName()); }
+  try { await navigator.share({ files }); ids.forEach(markSaved); }
+  catch (e) { if (e && e.name !== 'AbortError') { triggerDownload(picks.length === 1 ? picks[0].blob : await makeZip(picks), picks.length === 1 ? picks[0].name : zipName()); ids.forEach(markSaved); } }
 });
-// Desktop: a single file saves as-is; multiple bundle into one .zip.
+// Desktop: bundle the selected files into one .zip (single files are saved from their own row).
 $('save-selected').addEventListener('click', async () => {
-  const picks = selectedFiles();
-  if (!picks.length) return;
-  if (picks.length === 1) { triggerDownload(picks[0].blob, picks[0].name); return; }
+  const ids = selectedIds();
+  if (ids.length < 2) return; // a lone file uses its row's 保存 — this button only bundles
+  const picks = ids.map((id) => received.get(id));
   const btn = $('save-selected'); const label = btn.textContent;
   btn.disabled = true; btn.textContent = '打包中…';
-  try { triggerDownload(await makeZip(picks), zipName()); }
+  try { triggerDownload(await makeZip(picks), zipName()); ids.forEach(markSaved); }
   finally { btn.textContent = label; refreshInActions(); }
 });
 
 // ---- file picking / drag-drop --------------------------------------------
 function sendFiles(files) { if (!link) return; for (const f of files) link.send(f); }
 $('pick-files').addEventListener('click', () => $('file-input').click());
-$('pick-media').addEventListener('click', () => $('media-input').click());
 $('file-input').addEventListener('change', (e) => { sendFiles(e.target.files); e.target.value = ''; });
-$('media-input').addEventListener('change', (e) => { sendFiles(e.target.files); e.target.value = ''; });
 const dz = $('dropzone');
 ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('drag'); }));
 ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'dragleave' && dz.contains(e.relatedTarget)) return; dz.classList.remove('drag'); }));

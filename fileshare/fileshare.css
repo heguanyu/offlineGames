@@ -97,7 +97,11 @@ button.secondary:active { background: var(--accent-dim); }
 
 .lists { display: flex; gap: 16px; margin: 18px 0; }
 .list-col { flex: 1; min-width: 0; }
-.list-col h2 { font-size: 0.92rem; color: var(--sub); margin-bottom: 8px; font-weight: 600; }
+.col-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; min-height: 20px; }
+.list-col h2 { font-size: 0.92rem; color: var(--sub); font-weight: 600; }
+.col-clear { font: inherit; font-size: 0.76rem; color: var(--accent); background: none; border: none; padding: 2px 0; cursor: pointer; }
+.col-clear:active { opacity: 0.6; }
+.col-clear[hidden] { display: none; }
 .xfer-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .xfer-list li.empty { font-size: 0.85rem; padding: 4px 0; }
 .xfer-list li.item {
@@ -114,6 +118,9 @@ button.secondary:active { background: var(--accent-dim); }
   border: 1px solid var(--border); border-radius: 7px; padding: 4px 10px;
 }
 .xfer-list a.dl:active { background: var(--accent-dim); }
+/* once a received file has been saved, dim its row + flip the action to a confirmed state */
+.xfer-list li.item.saved { opacity: 0.55; }
+.xfer-list a.dl.saved { color: var(--good); border-color: var(--good); }
 
 /* received item: checkbox + filename on one tappable row */
 .recv-head { display: flex; align-items: center; gap: 8px; cursor: pointer; }

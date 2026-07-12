@@ -19,6 +19,10 @@ export class Signaling extends EventTarget {
   }
 
   _open() {
+    // Drop any prior socket cleanly first, so a forced reconnect() can't leave the old one's
+    // onclose scheduling a duplicate retry alongside the fresh connection.
+    if (this.ws) { try { this.ws.onclose = null; this.ws.onerror = null; this.ws.close(); } catch {} }
+    clearTimeout(this.retry);
     this.ws = new WebSocket(this.url);
     this.ws.onopen = () => this.dispatchEvent(new Event('open'));
     this.ws.onmessage = (e) => {
@@ -44,6 +48,11 @@ export class Signaling extends EventTarget {
   // both sockets up but the P2P link died — ask the server to re-issue the pairing
   repair() { this.send({ type: 'fs-repair' }); }
   leave() { this.send({ type: 'fs-leave' }); }
+  // liveness probe (server echoes fs-pong) — used to detect an iOS half-open socket on foreground
+  ping() { this.send({ type: 'fs-ping' }); }
+  // force a fresh socket now (return-to-foreground): tears down the possibly-dead one and reopens,
+  // which fires 'open' → the app re-attaches via fs-resume.
+  reconnect() { if (this.closed) return; this._open(); }
 
   close() { this.closed = true; clearTimeout(this.retry); try { this.ws && this.ws.close(); } catch {} }
 }

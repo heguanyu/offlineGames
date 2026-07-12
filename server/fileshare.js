@@ -28,7 +28,9 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const CODE_LEN = 9;
 const TOKEN_LEN = 24;               // per-slot resume token (~124 bits) — proves re-attach identity
 const ROOM_TTL_MS = 120_000;        // an unclaimed room expires after this
-const DISCONNECT_GRACE_MS = 120_000; // a dropped peer may resume within this before the room ends
+const DISCONNECT_GRACE_MS = 300_000; // a dropped peer may resume within this before the room ends
+                                     // (generous: iOS can keep a PWA backgrounded for minutes while
+                                     //  a save/share sheet is up — the session must outlive that)
 const JOIN_WINDOW_MS = 60_000;      // rate-limit window per ip
 const JOIN_MAX = 30;                // max join attempts per ip per window (blunts code-guessing)
 
@@ -163,6 +165,12 @@ function handleFs(client, msg, ip) {
     }
     case 'fs-leave': {
       detach(client);
+      return true;
+    }
+    case 'fs-ping': {
+      // Liveness probe: the client pings on return-to-foreground to tell a truly-open socket from an
+      // iOS "half-open" one that reads OPEN but is dead. No pong in time → the client force-reconnects.
+      send(client.ws, { type: 'fs-pong' });
       return true;
     }
     default:

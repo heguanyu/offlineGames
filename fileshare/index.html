@@ -94,21 +94,21 @@
 
         <div id="dropzone" class="dropzone">
           <p class="muted">把文件拖到这里，或</p>
-          <div class="choices row wrap">
-            <button id="pick-files" class="primary" type="button">选择文件</button>
-            <button id="pick-media" class="secondary" type="button">选择照片 / 视频</button>
+          <div class="choices row">
+            <!-- One picker. A plain (no-accept) input lets iOS offer 照片图库 / 拍照 / 浏览(Files) — a
+                 superset of the old media button — while desktop shows the normal file dialog. -->
+            <button id="pick-files" class="primary" type="button">📤 发送文件</button>
           </div>
           <input id="file-input" type="file" multiple hidden>
-          <input id="media-input" type="file" accept="image/*,video/*" multiple hidden>
         </div>
 
         <div class="lists">
           <div class="list-col">
-            <h2>发送</h2>
+            <div class="col-head"><h2>发送</h2><button id="clear-sent" class="col-clear" type="button" hidden>清除已发送</button></div>
             <ul id="out-list" class="xfer-list"><li class="empty muted">暂无</li></ul>
           </div>
           <div class="list-col">
-            <h2>接收</h2>
+            <div class="col-head"><h2>接收</h2></div>
             <ul id="in-list" class="xfer-list"><li class="empty muted">暂无</li></ul>
             <div id="in-actions" class="in-actions" hidden>
               <label class="sel-all"><input type="checkbox" id="sel-all" checked> 全选</label>
