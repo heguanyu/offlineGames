@@ -20,6 +20,12 @@ allowlist is `ALLOWED` in `server/index.js` (env `ALLOWED_ORIGINS`) — update i
 Current backend: `offlinegames.azurewebsites.net` (Azure App Service, West Central US, resource
 group `offlineGamesRg`). Deploy: `tools/deploy-azure.ps1` from this machine (needs `az login`).
 
+**Runtime is pinned to `NODE|22-lts` (the deploy script enforces it).** `better-sqlite3@11` ships NO
+prebuilt for Node 24 (ABI 137), so on Node 24 Oryx recompiles it from C++ (node-gyp) on EVERY deploy
+— slow and it wedges Kudu on the B1 instance. Node 22 (ABI 127) has a prebuilt → `npm install` just
+downloads it → fast, reliable deploys. SQLite's file format is version-independent so the DB carries
+over. Don't bump the App Service to Node 24. (Same gotcha bit the sibling `panoply` project.)
+
 ## Online is multi-game — seat count + table driver are per-game
 `server/index.js` hosts one table per game in the `GAMES` registry; each entry declares `kind`,
 `seats`, `label`, `page` (mahjong: `ruleset`). The lobby/reconnect/score plumbing is seat-count

@@ -10,10 +10,15 @@
 #      + write the deploy package.json (type:module, start script, runtime deps)
 #   3. zip WITHOUT node_modules and `az webapp deploy` it with SCM_DO_BUILD_DURING_DEPLOYMENT=true:
 #      Kudu/Oryx runs `npm install` ON THE AZURE LINUX RUNTIME, so better-sqlite3's native binary
-#      always matches the host (the old workflow compiled on a Node 20 runner while the app runs
-#      NODE|24-lts — building server-side is strictly safer).
+#      always matches the host.
 #   4. verify /health + the live sw.js version.
 # Requires: Azure CLI logged in (`az login`) with access to resource group offlineGamesRg.
+#
+# ⚠️ Runtime is pinned to NODE|22-lts (enforced in step 3 below). better-sqlite3@11 ships NO prebuilt
+# binary for Node 24 (ABI 137), so on Node 24 Oryx COMPILES it from C++ (node-gyp) on EVERY deploy —
+# slow, memory-heavy, and it intermittently wedges Kudu on the B1 instance. Node 22 (ABI 127) HAS a
+# prebuilt → `npm install` just downloads it → fast, reliable deploys. SQLite's file format is
+# version-independent, so the DB carries over. (Learned in the sibling panoply project, 2026-07-12.)
 $ErrorActionPreference = 'Stop'
 $RG = 'offlineGamesRg'; $APP = 'offlineGames'
 $root = Split-Path -Parent $PSScriptRoot
@@ -47,6 +52,14 @@ if (Test-Path $zip) { Remove-Item -Force $zip }
 tar -a -c -f $zip -C $stage .
 if ($LASTEXITCODE) { throw 'zip failed' }
 Write-Host ("    {0:n1} MB" -f ((Get-Item $zip).Length / 1MB))
+
+Write-Host '==> pinning runtime to NODE|22-lts (better-sqlite3 prebuilt → no node-gyp compile; see header)'
+$fx = az webapp config show -g $RG -n $APP --query linuxFxVersion -o tsv
+if ($fx -ne 'NODE|22-lts') {
+  Write-Host "    runtime was '$fx' — setting NODE|22-lts"
+  az webapp config set -g $RG -n $APP --linux-fx-version 'NODE|22-lts' --output none
+  if ($LASTEXITCODE) { throw 'failed to set NODE|22-lts runtime' }
+} else { Write-Host '    already NODE|22-lts' }
 
 Write-Host '==> ensuring server-side build is enabled'
 az webapp config appsettings set -g $RG -n $APP --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true ENABLE_ORYX_BUILD=true --output none
