@@ -22,7 +22,7 @@ multiplayer mahjong & poker served from the same Node process.
 - `games/mahjong-common-online/` — the shared online lobby (麻将 + 斗地主)
 - `games/doudizhu/`, `games/guandan/` — 斗地主 / 掼蛋 poker games (poker-common base)
 - `games/pool8/`, `games/snooker/` — 黑八 / 斯诺克 billiards (pool-common physics engine)
-- `fileshare/`, `voicepick/`, `tourguide/` — tools (WebRTC file share, voice-clip audit, trip dial)
+- `fileshare/`, `voicepick/` — tools (WebRTC file share, voice-clip audit)
 
 ## Mahjong (天津麻将)
 

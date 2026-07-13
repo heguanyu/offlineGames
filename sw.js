@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-1.0.0';
+const CACHE = 'offline-games-1.0.1';
 
 const ASSETS = [
   './',
@@ -13,7 +13,6 @@ const ASSETS = [
   './icons/icon-512.png',
   './voicepick/', // QA tool (hub Tools card): voice-clip play-time audit; fetches the raw per-clip WAVs over the network (not SW-cached — needs connectivity)
   './voicepick/index.html',
-  './tourguide/tahoe-itinerary.html', // Tools card: 出游助手 — Tahoe trip itinerary (6/21–6/22)
   // 文件共享助手 — Tools card: WebRTC device-to-device file transfer (PC ↔ iPad). Needs the server
   // to PAIR (signaling) but transfers peer-to-peer; cached so the page shell loads offline (it then
   // shows its "needs network" notice). server-url.js is already cached above (online lobby).
@@ -254,8 +253,8 @@ function crossOriginIsolate(res) {
 // version bump above, never silently mid-session.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  // Dynamic API (e.g. /api/weather) must never be cached or served cache-first — let it hit the
-  // network so the page always gets the latest. Offline, the fetch fails and the page falls back.
+  // Any dynamic API path must never be cached or served cache-first — let it hit the network so the
+  // page always gets the latest. Offline, the fetch fails and the page falls back.
   try { if (new URL(e.request.url).pathname.startsWith('/api/')) return; } catch {}
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((hit) => {

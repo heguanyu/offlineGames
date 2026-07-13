@@ -1,5 +1,0 @@
-# Personal travel documents — keep these local, never publish to the public site.
-# (Booking PDFs, boarding-pass / ticket QR images with names + booking numbers.)
-*.pdf
-cruise-ticket-*.png
-cruise-checkin-qr.png
