@@ -57,7 +57,10 @@ Write-Host '==> pinning runtime to NODE|22-lts (better-sqlite3 prebuilt → no n
 $fx = az webapp config show -g $RG -n $APP --query linuxFxVersion -o tsv
 if ($fx -ne 'NODE|22-lts') {
   Write-Host "    runtime was '$fx' — setting NODE|22-lts"
-  az webapp config set -g $RG -n $APP --linux-fx-version 'NODE|22-lts' --output none
+  # The runtime value contains a '|'. az is a .cmd (batch) wrapper, and PowerShell 5.1 does NOT
+  # re-quote args when calling it, so an unquoted '|' is parsed by cmd as a pipe. Use the stop-parsing
+  # token --% and a double-quoted value so cmd keeps 'NODE|22-lts' as one literal token.
+  az webapp config set -g $RG -n $APP --output none --% --linux-fx-version "NODE|22-lts"
   if ($LASTEXITCODE) { throw 'failed to set NODE|22-lts runtime' }
 } else { Write-Host '    already NODE|22-lts' }
 
