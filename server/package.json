@@ -13,7 +13,6 @@
     "dev": "node index.js"
   },
   "dependencies": {
-    "@simplewebauthn/server": "^13.3.2",
     "better-sqlite3": "^11.10.0",
     "ws": "^8.18.0"
   }

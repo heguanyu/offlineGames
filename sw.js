@@ -1,15 +1,13 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-0.8.0';
+const CACHE = 'offline-games-1.0.0';
 
 const ASSETS = [
   './',
   './index.html',
   './sw.js', // cached so the hub can read the version offline
   './app-nav.js', // history-replace navigation (kills iOS edge-swipe back/forward) — on every page
-  './storage-check.html', // debug tool: inspect emulator IndexedDB + export/import saves across origins
-  './save-recovery.html', // debug tool: admin view/recover of server-side cloud saves (needs ADMIN_TOKEN)
   './manifest.webmanifest',
   './icons/icon-180.png',
   './icons/icon-512.png',
@@ -29,29 +27,7 @@ const ASSETS = [
   './fileshare/qr.js',
   './fileshare/zip.js', // store-only ZIP writer for the batch (desktop) download
   './fileshare/jsqr.js', // QR decoder for the in-app camera scanner (BarcodeDetector fallback, e.g. iOS)
-  // 电子书阅读 — Tools card: local EPUB reader. Books + last-read spot live in its own
-  // IndexedDB ('epub-reader'), so reading is fully offline once a book is imported.
-  './reader/',
-  './reader/index.html',
-  './reader/reader.css',
-  './reader/main.js',
-  './reader/epub.js',
 
-  // NGA — Tools card: read-only NGA reader for the two 明日方舟 boards. Its data + images come
-  // from the server relay (/api/nga/*) over the network, so only the shell is precached (the page
-  // shows a "加载失败" state offline); no offline reading.
-  './nga/',
-  './nga/index.html',
-  './nga/nga.css',
-  './nga/main.js',
-  './nga/emotes.js', // NGA smiley code → image URL map
-
-  './games/pad-test/',
-  './games/pad-test/index.html',
-  './games/gba/',
-  './games/gba/index.html',
-  './games/nds/',
-  './games/nds/index.html',
   // mahjong-common — shared by every mahjong variant (天津 + 国标): tile model, 3D/2D
   // table renderers, sound, hand ordering, UI utils, board CSS, the three.js lib and
   // the tile/felt/wood art. Tianjin is just one variant on top, not the base.
@@ -196,57 +172,10 @@ const ASSETS = [
   './games/snooker/rules.js',
   './shared/theme.css', // repo-wide theme palettes (all pages link this before their own CSS)
   './shared/theme.js', // theme registry + per-module persistence + picker
-  './shared/emu-persistence.js',
   './shared/power-mode.js', // 省电模式 (3-tier power mode) — shared by the card games
   './shared/audio-revive.js', // AudioContext keeper: revives audio after iOS kills it in the background (all game sound modules)
   './shared/hub-home.js', // sub-hub home override (返回大厅 lands on /mj/ when entered through it)
-  './shared/client-id.js', // one persistent per-browser uid (online seats + emulator cloud saves)
-  './shared/save-sync.js', // cloud backup of emulator saves (imports client-id.js + server-url.js)
-  './emulatorjs/data/emulator.css',
-  './emulatorjs/data/loader.js',
-  './emulatorjs/data/version.json',
-  './emulatorjs/data/compression/extract7z.js',
-  './emulatorjs/data/compression/extractzip.js',
-  './emulatorjs/data/compression/libunrar.js',
-  './emulatorjs/data/compression/libunrar.wasm',
-  // GBA runs the WebGL1 (legacy) cores (forced via EJS_forceLegacyCores in gba/index.html);
-  // NDS (melonds) runs the WebGL2 cores (thread when cross-origin-isolated, else non-thread).
-  // The unused mgba/vbam-wasm (WebGL2) + melonds*-legacy (WebGL1) builds are NOT bundled.
-  './emulatorjs/data/cores/mgba-legacy-wasm.data',
-  './emulatorjs/data/cores/melonds-wasm.data',
-  './emulatorjs/data/cores/melonds-thread-wasm.data',
-  './emulatorjs/data/cores/vbam-legacy-wasm.data',
-  './emulatorjs/data/cores/reports/mgba.json',
-  './emulatorjs/data/cores/reports/melonds.json',
-  './emulatorjs/data/cores/reports/vbam.json',
-  './emulatorjs/data/localization/af-FR.json',
-  './emulatorjs/data/localization/ar-AR.json',
-  './emulatorjs/data/localization/ben-BEN.json',
-  './emulatorjs/data/localization/de-GER.json',
-  './emulatorjs/data/localization/el-GR.json',
-  './emulatorjs/data/localization/en-US.json',
-  './emulatorjs/data/localization/es-ES.json',
-  './emulatorjs/data/localization/fa-AF.json',
-  './emulatorjs/data/localization/hi-HI.json',
-  './emulatorjs/data/localization/it-IT.json',
-  './emulatorjs/data/localization/ja-JA.json',
-  './emulatorjs/data/localization/jv-JV.json',
-  './emulatorjs/data/localization/ko-KO.json',
-  './emulatorjs/data/localization/pt-BR.json',
-  './emulatorjs/data/localization/retroarch.json',
-  './emulatorjs/data/localization/ro-RO.json',
-  './emulatorjs/data/localization/ru-RU.json',
-  './emulatorjs/data/localization/tr-TR.json',
-  './emulatorjs/data/localization/vi-VN.json',
-  './emulatorjs/data/localization/zh-CN.json',
-  './emulatorjs/data/src/compression.js',
-  './emulatorjs/data/src/emulator.js',
-  './emulatorjs/data/src/GameManager.js',
-  './emulatorjs/data/src/gamepad.js',
-  './emulatorjs/data/src/nipplejs.js',
-  './emulatorjs/data/src/shaders.js',
-  './emulatorjs/data/src/socket.io.min.js',
-  './emulatorjs/data/src/storage.js',
+  './shared/client-id.js', // one persistent per-browser uid (online seats)
 ];
 
 // Post a message to every window of this origin — including ones not yet

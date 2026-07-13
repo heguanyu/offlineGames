@@ -14,16 +14,17 @@ let failed = 0;
 const ok = (c, m) => { console.log(`  ${c ? 'ok' : 'FAIL'}: ${m}`); if (!c) failed++; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Build a 2-page history (hub → reader) then attempt a back navigation; return where we ended up.
-// Uses the reader as the destination — a generic page that relies on app-nav's blanket pin (the NGA
-// reader is NOT used here: it owns its history via window.__ownsHistory, covered by nga-test).
+// Build a 2-page history (hub → fileshare) then attempt a back navigation; return where we ended up.
+// Uses fileshare as the destination — a generic page that relies on app-nav's blanket pin (it does not
+// set window.__ownsHistory, so the pin applies). Presence is judged by URL, so it's page-agnostic.
 async function backFrom(page) {
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
-  await page.goto(`http://localhost:${PORT}/reader/`, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => !!document.getElementById('library'), { timeout: 10000 });
+  await page.goto(`http://localhost:${PORT}/fileshare/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => !!document.getElementById('bar'), { timeout: 10000 });
   await page.evaluate(() => history.back());
   await sleep(600);
-  return { url: page.url(), onReader: (await page.$('#library')) != null };
+  const onFileshare = page.url().endsWith('/fileshare/');
+  return { url: page.url(), onFileshare };
 }
 
 try {
@@ -33,12 +34,12 @@ try {
     try { Object.defineProperty(navigator, 'standalone', { configurable: true, get: () => true }); } catch (e) {}
   });
   const r1 = await backFrom(pwa);
-  ok(r1.url.endsWith('/reader/') && r1.onReader, `standalone PWA: edge-swipe back is trapped (stayed at ${r1.url})`);
+  ok(r1.onFileshare, `standalone PWA: edge-swipe back is trapped (stayed at ${r1.url})`);
 
   // 2) normal browser tab → Back still navigates
   const tab = await browser.newPage();
   const r2 = await backFrom(tab);
-  ok(!r2.onReader, `normal browser tab: Back still works (left the reader → ${r2.url})`);
+  ok(!r2.onFileshare, `normal browser tab: Back still works (left fileshare → ${r2.url})`);
 } finally {
   await browser.close();
   server.close();

@@ -8,10 +8,7 @@
 // so a dropped connection can reconnect to its seat and resync the game in progress.
 //
 // This same process ALSO serves the static PWA site (the whole repo, staged alongside) for
-// every non-WebSocket request, with native COOP/COEP/CORP headers so the threaded emulator
-// cores get crossOriginIsolated (SharedArrayBuffer) without the sw.js header hack that GitHub
-// Pages forced. GitHub Pages remains a fully working mirror; the client (lobby.js) connects to
-// whichever origin served it, so both hosts work.
+// every non-WebSocket request. The client (lobby.js) connects to whichever origin served it.
 //
 // Run locally:  PORT=8090 node index.js   (serves the site at http://localhost:8090/)
 import http from 'node:http';
@@ -26,11 +23,7 @@ import { ruleset as guobiao, freeRuleset as guobiaoFree } from './rulesets/guobi
 import { BOT_NAMES } from '../games/mahjong-common/bot-names.js';
 import db from './db.js';
 import { startWeather, getWeatherJson } from './weather.js';
-import { handleEmuSave } from './emu-saves.js';
-import { handleEmuAdmin } from './emu-admin.js';
-import { handlePasskey } from './admin-auth.js';
 import { handleFs, fsOnClose, startFsSweep } from './fileshare.js';
-import { handleNga } from './nga.js';
 
 // The games the lobby can host. Each table hosts ONE game; the lobby is split per game (the hub's
 // online cards deep-link a game). Every game shares the same lobby + reconnect + { type:'game' }
@@ -60,7 +53,7 @@ const ALLOWED = (process.env.ALLOWED_ORIGINS ||
   .split(',').map((s) => s.trim());
 
 // The static site root. The server lives at <root>/server/index.js, so the publishable site
-// (index.html, games/, emulatorjs/, icons/, shared/, sw.js …) sits one level up — true both for
+// (index.html, games/, icons/, shared/, sw.js …) sits one level up — true both for
 // a local checkout and for the staged Azure package. Override with STATIC_ROOT if needed.
 const STATIC_ROOT = process.env.STATIC_ROOT || fileURLToPath(new URL('..', import.meta.url));
 
@@ -372,9 +365,8 @@ function resolveStatic(reqUrl) {
   return full;
 }
 
-// COOP/COEP/CORP enable cross-origin isolation (crossOriginIsolated === true → SharedArrayBuffer →
-// threaded emulator cores). Served natively here so a fresh load is isolated immediately, before the
-// service worker (which sets the same headers for the GitHub Pages mirror) is even installed.
+// COOP/COEP/CORP headers, kept for a consistent cross-origin-isolation posture across responses.
+// All assets are same-origin, so require-corp is always satisfied.
 function isolate(headers) {
   headers['Cross-Origin-Opener-Policy'] = 'same-origin';
   headers['Cross-Origin-Embedder-Policy'] = 'require-corp';
@@ -400,31 +392,6 @@ async function serveStatic(req, res) {
 // ---- HTTP + WebSocket -----------------------------------------------------
 const server = http.createServer((req, res) => {
   if (req.url === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('mahjong-online ok'); return; }
-  // Cloud backup of emulator saves (manual upload/download), keyed by browser uid. Handled before the
-  // GET-only gate so PUT/DELETE/OPTIONS reach it. CORS-enabled like /api/weather so the Pages mirror
-  // can reach the Azure backend cross-origin; the uid is the only credential.
-  if (req.url.split('?')[0] === '/api/emu-save') {
-    const origin = req.headers.origin;
-    const cors = {};
-    if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
-    handleEmuSave(req, res, cors);
-    return;
-  }
-  // Admin view/recovery over the save store (enumerate every uid, download any blob) + passkey auth.
-  // Gated by ADMIN_TOKEN / passkey session inside the handlers; CORS-enabled so the recovery page
-  // works from the Pages mirror too (passkey itself is domain-bound to the Azure origin).
-  {
-    const p = req.url.split('?')[0];
-    if (p === '/api/emu-admin' || p.startsWith('/api/emu-admin/')) {
-      const origin = req.headers.origin;
-      const cors = {};
-      if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
-      const PK = '/api/emu-admin/passkey/';
-      if (p.startsWith(PK)) { handlePasskey(req, res, cors, p.slice(PK.length)); return; }
-      handleEmuAdmin(req, res, cors);
-      return;
-    }
-  }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
   // Server-polled weather for the tourguide dial. CORS-enabled (no isolate()) so the GitHub Pages
   // mirror can read it cross-origin; never cached (dynamic). 503 until the first poll lands.
@@ -435,16 +402,6 @@ const server = http.createServer((req, res) => {
     const body = getWeatherJson();
     res.writeHead(body ? 200 : 503, cors);
     res.end(req.method === 'HEAD' ? undefined : (body || '{"error":"warming up"}'));
-    return;
-  }
-  // NGA 论坛只读中转 for the NGA reader (server/nga.js): proxies NGA's guest app API for the two
-  // whitelisted 明日方舟 boards + an image proxy (NGA image hosts need a Referer). CORS-enabled like
-  // /api/weather so a straggler on the old Pages origin still reaches it; same-origin in practice.
-  if (req.url.split('?')[0].startsWith('/api/nga/')) {
-    const origin = req.headers.origin;
-    const cors = {};
-    if (origin && (ALLOWED.includes(origin) || localhostOrigin(origin))) { cors['Access-Control-Allow-Origin'] = origin; cors['Vary'] = 'Origin'; }
-    handleNga(req, res, cors);
     return;
   }
   serveStatic(req, res);

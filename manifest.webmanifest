@@ -1,7 +1,7 @@
 {
   "name": "Offline Games",
   "short_name": "OffGames",
-  "description": "A set of offline-playable games with gamepad support",
+  "description": "A set of offline-playable games plus online mahjong & poker",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

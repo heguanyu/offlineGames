@@ -1,13 +1,10 @@
-// The ONE persistent per-browser identity, shared by every game on the site. Two unrelated features
-// key off the same id: the online games use it to reclaim a dropped seat on reconnect, and the
-// emulator cloud-save backup (shared/save-sync.js) uses it as the per-uid blob key. Keeping a single
-// id means a player's online history and their emulator saves live under the same identity.
+// The ONE persistent per-browser identity, shared by every game on the site. The online games use it
+// to reclaim a dropped seat on reconnect (keyed on this uid across the lobby + tables).
 //
 // localStorage is the primary store (historical key 'mahjong-online-uid'), additionally MIRRORED into
 // a dedicated IndexedDB. iOS treats localStorage as disposable for home-screen PWAs (storage pressure
 // purges it while IndexedDB survives), so without the mirror a purge would silently mint a NEW id —
-// losing the online seat history AND orphaning the cloud saves. The mirror lets getClientUid() restore
-// the original id after such a purge.
+// losing the online seat history. The mirror lets getClientUid() restore the original id after a purge.
 
 const UID_KEY = 'mahjong-online-uid'; // historical name; the single key shared across all games
 const ID_DB = 'client-id';
@@ -48,7 +45,7 @@ export function clientUidSync() {
 }
 
 // Async durable get-or-create: if localStorage was purged, restore the original id from the IndexedDB
-// mirror before minting a new one. Use this wherever you can await (the emulator save backup).
+// mirror before minting a new one. Use this wherever you can await.
 export async function getClientUid() {
   let uid = localStorage.getItem(UID_KEY);
   if (!uid) {

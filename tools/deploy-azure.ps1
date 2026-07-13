@@ -6,7 +6,7 @@
 #
 # What it does (mirrors the old workflow):
 #   1. node tools/pack-voice.js         — regenerate the voice sprites (git-ignored output)
-#   2. stage the publishable site into _deploy (excludes .git/.github/test/server data+modules/roms)
+#   2. stage the publishable site into _deploy (excludes .git/.github/test/server data+modules)
 #      + write the deploy package.json (type:module, start script, runtime deps)
 #   3. zip WITHOUT node_modules and `az webapp deploy` it with SCM_DO_BUILD_DURING_DEPLOYMENT=true:
 #      Kudu/Oryx runs `npm install` ON THE AZURE LINUX RUNTIME, so better-sqlite3's native binary
@@ -32,13 +32,12 @@ if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory $stage | Out-Null
 robocopy $root $stage /E /NFL /NDL /NJH /NJS /NP `
   /XD (Join-Path $root '.git') (Join-Path $root '.github') (Join-Path $root 'test') `
-      (Join-Path $root 'server\node_modules') (Join-Path $root 'server\data') `
-      (Join-Path $root 'roms') (Join-Path $root 'epubs') $stage `
+      (Join-Path $root 'server\node_modules') (Join-Path $root 'server\data') $stage `
   /XF (Join-Path $root 'deploy.zip') | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
 
 # The deploy package.json — Oryx installs these deps during the server-side build.
-'{"name":"mahjong-online-deploy","private":true,"type":"module","engines":{"node":">=20"},"scripts":{"start":"node server/index.js"},"dependencies":{"ws":"^8.18.0","better-sqlite3":"^11.10.0","@simplewebauthn/server":"^13.1.1"}}' |
+'{"name":"mahjong-online-deploy","private":true,"type":"module","engines":{"node":">=20"},"scripts":{"start":"node server/index.js"},"dependencies":{"ws":"^8.18.0","better-sqlite3":"^11.10.0"}}' |
   Set-Content -Encoding ascii (Join-Path $stage 'package.json')
 
 Write-Host '==> zipping'

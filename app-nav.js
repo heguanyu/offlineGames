@@ -16,14 +16,13 @@
 
   // --- history PIN (kills the iPhone standalone-PWA edge-swipe outright) -------------------------
   // Turning link clicks into REPLACE keeps history shallow, but it can't stop the gesture once ANY
-  // entry exists — e.g. after tapping an external (target=_blank) link in the NGA reader, which on
-  // an installed iPhone PWA (no tabs) navigates in-place and leaves an entry to swipe back to. iPhone
-  // standalone PWAs expose the interactive edge-swipe-back; iPad ones effectively don't (why iPad
-  // "looked fine"). So we PIN: seed a trap entry and re-arm it on every popstate, so a back/forward
-  // swipe always lands right back here. Gated to installed standalone PWAs only — a normal browser tab
-  // keeps its working Back button (nothing in the app uses history.back(); on-screen 返回 uses replace).
-  // A page that manages its own history (e.g. the NGA reader, which turns a back-swipe into
-  // thread→list) sets window.__ownsHistory before this script runs — then we stay out of its way.
+  // entry exists — e.g. after tapping an external (target=_blank) link, which on an installed iPhone
+  // PWA (no tabs) navigates in-place and leaves an entry to swipe back to. iPhone standalone PWAs
+  // expose the interactive edge-swipe-back; iPad ones effectively don't (why iPad "looked fine"). So
+  // we PIN: seed a trap entry and re-arm it on every popstate, so a back/forward swipe always lands
+  // right back here. Gated to installed standalone PWAs only — a normal browser tab keeps its working
+  // Back button (nothing in the app uses history.back(); on-screen 返回 uses replace). A page that
+  // manages its own history can set window.__ownsHistory before this script runs to stay out of it.
   try {
     var standalone = (navigator.standalone === true) ||
       (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
@@ -53,12 +52,10 @@
   // on entry, ask the SW to check for a new version; and when a NEW worker takes control, reload to swap
   // in the fresh page + assets. Two escape hatches keep it from interrupting anything:
   //   • window.__appHandlesUpdate — the page owns its own update UX (the hub) → app-nav stays out.
-  //   • the page is mid-activity → defer the reload. Detected generically (an emulator ROM running, or a
-  //     mahjong/斗地主/掼蛋 hand past its start screen) or via an explicit window.appBusy() hook.
+  //   • the page is mid-activity → defer the reload. Detected generically (a mahjong/斗地主/掼蛋 hand
+  //     past its start screen) or via an explicit window.appBusy() hook.
   function pageBusy() {
     if (typeof window.appBusy === 'function') { try { return !!window.appBusy(); } catch (e) {} }
-    var gw = document.getElementById('game-wrap');                 // emulator: a ROM is running
-    if (gw && !gw.hidden) return true;
     var so = document.getElementById('start-overlay');             // card/tile games: hidden once a hand is in play
     if (so) { try { if (getComputedStyle(so).display === 'none') return true; } catch (e) {} }
     return false;
