@@ -51,7 +51,7 @@ rule, repo-wide:
   alone). A new page → add the script tag, or its links push history.
 - **Never assign `location.href = …` / `window.location = …` / `location.assign(…)`** for
   in-app jumps. Use `location.replace(url)`. On-screen back buttons use
-  `onclick="event.preventDefault(); location.replace('../')"` (see `voicepick`) so
+  `onclick="event.preventDefault(); location.replace('../')"` (see `fileshare`) so
   they work even before `app-nav.js` runs.
 There should be **zero** `location.href=`/`window.location=` assignments in the repo (grep before
 adding one). `app-nav.js` itself is the only allowed place that calls `location.replace` on clicks.

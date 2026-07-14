@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-1.0.1';
+const CACHE = 'offline-games-1.0.2';
 
 const ASSETS = [
   './',
@@ -11,8 +11,6 @@ const ASSETS = [
   './manifest.webmanifest',
   './icons/icon-180.png',
   './icons/icon-512.png',
-  './voicepick/', // QA tool (hub Tools card): voice-clip play-time audit; fetches the raw per-clip WAVs over the network (not SW-cached — needs connectivity)
-  './voicepick/index.html',
   // 文件共享助手 — Tools card: WebRTC device-to-device file transfer (PC ↔ iPad). Needs the server
   // to PAIR (signaling) but transfers peer-to-peer; cached so the page shell loads offline (it then
   // shows its "needs network" notice). server-url.js is already cached above (online lobby).

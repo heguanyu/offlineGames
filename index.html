@@ -149,8 +149,6 @@
   .tab-btn:active { background: var(--accent-dim); }
   .tab-btn.active { background: var(--accent-dim); color: var(--fg); border-color: var(--accent); }
   /* Debug tools floats to the bottom of the rail */
-  .tab-btn.debug { margin-top: auto; color: var(--muted); }
-  .tab-btn.debug.active { color: var(--fg); }
 
   #content { flex: 1; min-width: 0; overflow-y: auto; padding: 20px 24px 40px; }
   #meta { font-size: 0.85rem; color: var(--muted); margin: 0 0 22px; padding-right: 140px; } /* room for the fixed theme + lang controls */
@@ -217,7 +215,6 @@
       <button class="tab-btn" type="button" data-tab="daily"><span class="tico">🧰</span><span data-i18n="nav-daily">日常工具</span></button>
       <button class="tab-btn" type="button" data-tab="card"><span class="tico">🀄</span><span data-i18n="nav-card">牌类游戏</span></button>
       <button class="tab-btn" type="button" data-tab="pool"><span class="tico">🎱</span><span data-i18n="nav-pool">台球</span></button>
-      <button class="tab-btn debug" type="button" data-tab="debug"><span class="tico">🐞</span><span data-i18n="nav-debug">调试工具</span></button>
     </div>
   </aside>
   <main id="content">
@@ -329,16 +326,6 @@
       </a>
     </nav>
   </section>
-
-  <!-- 调试工具 (Debug Tools) -->
-  <section class="tab-panel" id="panel-debug">
-    <nav class="cards">
-      <a class="card" href="./voicepick/">
-        <span class="emoji">🎙️</span>
-        <span data-i18n="card-voicepick">声音体检</span>
-      </a>
-    </nav>
-  </section>
   </main>
   <script>
     // The hub owns its own service-worker update UX (the 检查更新 button + progress bar + reload below),
@@ -354,9 +341,9 @@
         'card-tianjin': '天津麻将', 'card-tianjin-online': '天津麻将联机版',
         'card-guobiao': '国标麻将', 'card-guobiao-free': '国标（无定番）',
         'card-guobiao-online': '国标麻将联机版', 'card-guobiao-free-online': '国标（无定番）联机版',
-        'card-voicepick': '声音体检', 'card-fileshare': '文件共享助手',
+        'card-fileshare': '文件共享助手',
         'card-pool8': '黑八台球', 'card-snooker': '斯诺克',
-        'nav-daily': '日常工具', 'nav-card': '牌类游戏', 'nav-pool': '台球', 'nav-debug': '调试工具',
+        'nav-daily': '日常工具', 'nav-card': '牌类游戏', 'nav-pool': '台球',
         'sub-mahjong': '麻将', 'sub-poker': '扑克',
         online: '在线', offline: '离线 · 使用缓存运行', online_unavailable: '（离线无法使用）',
         btn_idle: '检查更新', btn_checking: '检查中…', btn_updating: '更新中…',
@@ -381,9 +368,9 @@
         'card-tianjin': 'Tianjin Mahjong', 'card-tianjin-online': 'Tianjin Mahjong · Online',
         'card-guobiao': 'Guobiao (MCR)', 'card-guobiao-free': 'Guobiao (no minimum)',
         'card-guobiao-online': 'Guobiao (MCR) · Online', 'card-guobiao-free-online': 'Guobiao (no min) · Online',
-        'card-voicepick': 'Voice Audit', 'card-fileshare': 'File Sharing',
+        'card-fileshare': 'File Sharing',
         'card-pool8': '8-Ball Pool', 'card-snooker': 'Snooker',
-        'nav-daily': 'Daily Tools', 'nav-card': 'Card Games', 'nav-pool': 'Billiards', 'nav-debug': 'Debug Tools',
+        'nav-daily': 'Daily Tools', 'nav-card': 'Card Games', 'nav-pool': 'Billiards',
         'sub-mahjong': 'Mahjong', 'sub-poker': 'Poker',
         online: 'online', offline: 'offline — running from cache', online_unavailable: ' (unavailable offline)',
         btn_idle: 'Check for updates', btn_checking: 'Checking…', btn_updating: 'Updating…',

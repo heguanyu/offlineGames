@@ -57,7 +57,7 @@ send or receive (covers PC→iPad and iPad→PC, and iPad↔iPad).
 
 ## Files
 
-New page (a Tools-section entry, sits at repo root next to `voicepick/`):
+New page (a Tools-section entry, sits at repo root):
 
 - `fileshare/index.html` — page shell. Loads `app-nav.js` (nav rule), manifest, links the CSS/JS.
   Back button uses `onclick="event.preventDefault(); location.replace('../')"` like other tools.

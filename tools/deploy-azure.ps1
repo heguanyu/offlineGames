@@ -68,7 +68,10 @@ Write-Host '==> ensuring server-side build is enabled'
 az webapp config appsettings set -g $RG -n $APP --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true ENABLE_ORYX_BUILD=true --output none
 
 Write-Host '==> deploying (upload + remote npm install; a few minutes)'
-az webapp deploy -g $RG -n $APP --src-path $zip --type zip --timeout 1200 --output none
+# --clean true wipes wwwroot before laying down this zip, so files DELETED from the repo (removed
+# games/tools/pages) don't linger on the server. Without it, zip-deploy OVERLAYS and stale routes stay
+# reachable forever. Safe: the SQLite DB lives on the persistent /home mount (/home/data), NOT wwwroot.
+az webapp deploy -g $RG -n $APP --src-path $zip --type zip --clean true --timeout 1200 --output none
 if ($LASTEXITCODE) {
   # The SCM gateway can 504 while the server-side deployment keeps running (seen in practice:
   # CLI gave up at ~4 min, deployment finished fine). Poll the deployment record to a terminal

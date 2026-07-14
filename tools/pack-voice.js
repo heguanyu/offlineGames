@@ -5,8 +5,8 @@
 // duration)), so the service worker fetches ~7 files instead of ~291 — the big
 // per-file request count was what made a full offline update crawl.
 //
-// The raw per-clip WAVs stay in the repo (source of truth, used by the QA voicepick
-// tool and as the loaders' per-file fallback). The packed output is GENERATED — it is
+// The raw per-clip WAVs stay in the repo (source of truth, and the loaders' per-file
+// fallback). The packed output is GENERATED — it is
 // git-ignored and produced by the CD pipeline (and can be run locally: `node
 // tools/pack-voice.js`). Re-run whenever the raw clips change.
 //
