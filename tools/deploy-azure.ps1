@@ -68,10 +68,16 @@ Write-Host '==> ensuring server-side build is enabled'
 az webapp config appsettings set -g $RG -n $APP --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true ENABLE_ORYX_BUILD=true --output none
 
 Write-Host '==> deploying (upload + remote npm install; a few minutes)'
-# --clean true wipes wwwroot before laying down this zip, so files DELETED from the repo (removed
-# games/tools/pages) don't linger on the server. Without it, zip-deploy OVERLAYS and stale routes stay
-# reachable forever. Safe: the SQLite DB lives on the persistent /home mount (/home/data), NOT wwwroot.
-az webapp deploy -g $RG -n $APP --src-path $zip --type zip --clean true --timeout 1200 --output none
+# NOTE: with SCM_DO_BUILD_DURING_DEPLOYMENT=true, Oryx builds into wwwroot and OVERLAYS — it does NOT
+# clear files first (the `--clean` flag is ignored in this mode). So a file DELETED from the repo stays
+# reachable on the server at its old URL forever. When you REMOVE a game/tool/page, purge it from the
+# live wwwroot afterwards (the SQLite DB is safe — it's on /home/data, not wwwroot). One-time purge via
+# the Kudu command API (needs an AAD token):
+#   $tok = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
+#   $body = @{ command = 'rm -rf <path> ...'; dir = '/home/site/wwwroot' } | ConvertTo-Json
+#   Invoke-RestMethod -Method Post -Uri 'https://offlinegames.scm.azurewebsites.net/api/command' `
+#     -Headers @{ Authorization = "Bearer $tok" } -ContentType 'application/json' -Body $body
+az webapp deploy -g $RG -n $APP --src-path $zip --type zip --timeout 1200 --output none
 if ($LASTEXITCODE) {
   # The SCM gateway can 504 while the server-side deployment keeps running (seen in practice:
   # CLI gave up at ~4 min, deployment finished fine). Poll the deployment record to a terminal
