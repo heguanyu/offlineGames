@@ -7,6 +7,7 @@ import { PeerLink } from './rtc.js';
 import { RelayLink } from './relay.js';
 import { drawQR } from './qr.js';
 import { makeZip } from './zip.js';
+import { deleteFile, pruneOld } from './recv-store.js';
 
 const $ = (id) => document.getElementById(id);
 const VIEWS = ['offline', 'landing', 'host', 'code', 'scan', 'transfer'];
@@ -39,6 +40,16 @@ function fmtBytes(n) {
   if (n < 1024) return n + ' B';
   const u = ['KB', 'MB', 'GB']; let i = -1; do { n /= 1024; i++; } while (n >= 1024 && i < 2);
   return n.toFixed(n < 10 ? 1 : 0) + ' ' + u[i];
+}
+function fmtRate(bps) { return fmtBytes(Math.max(0, bps)) + '/s'; }
+function fmtEta(sec) {
+  if (!isFinite(sec) || sec < 0) return '';
+  sec = Math.round(sec);
+  if (sec < 60) return '剩余 ' + sec + ' 秒';
+  const m = Math.floor(sec / 60), s = sec % 60;
+  if (m < 60) return '剩余 ' + m + ' 分 ' + String(s).padStart(2, '0') + ' 秒';
+  const h = Math.floor(m / 60);
+  return '剩余 ' + h + ' 小时 ' + (m % 60) + ' 分';
 }
 
 // ---- keep the screen awake while a share session is live -------------------
@@ -267,13 +278,20 @@ function setPickersEnabled(on) { $('pick-files').disabled = !on; $('dropzone').c
 
 // ---- transfer list rendering ---------------------------------------------
 const itemEls = { out: new Map(), in: new Map() };
-const received = new Map(); // id → { name, blob } for every fully-received file (the batch-save pool)
+const received = new Map(); // id → { name, blob } for every SMALL received file (the batch-save pool)
 const savedIds = new Set(); // received ids the user has already saved (→ dim the row, uncheck it)
+const rateStats = new Map(); // `${dir}:${id}` → { last, lastDone, bps } for live speed/ETA
+const idbIds = new Set();    // ids of LARGE received files streamed to IndexedDB (for cleanup)
 const clearSentBtn = $('clear-sent');
 function resetLists() {
   for (const dir of ['out', 'in']) { itemEls[dir].clear(); $(dir + '-list').innerHTML = '<li class="empty muted">暂无</li>'; }
   received.clear();
   savedIds.clear();
+  rateStats.clear();
+  // A brand-new pairing clears the receive list, so last session's streamed files can no longer be
+  // saved from the UI — drop them from IndexedDB to reclaim space.
+  for (const id of idbIds) deleteFile(id).catch(() => {});
+  idbIds.clear();
   refreshClearSent();
   refreshInActions();
 }
@@ -288,7 +306,7 @@ function addItem(dir, id, name, size) {
   const list = $(dir + '-list');
   const empty = list.querySelector('.empty'); if (empty) empty.remove();
   const li = document.createElement('li'); li.className = 'item';
-  li.innerHTML = `<span class="fname"></span><div class="fmeta"><span class="pct">0%</span><span class="size">${fmtBytes(size)}</span></div><div class="bar"><span></span></div>`;
+  li.innerHTML = `<span class="fname"></span><div class="fmeta"><span class="pct">0%</span><span class="rate"></span><span class="size">${fmtBytes(size)}</span></div><div class="bar"><span></span></div>`;
   li.querySelector('.fname').textContent = name;
   list.appendChild(li); itemEls[dir].set(id, li);
 }
@@ -297,12 +315,39 @@ function updateProgress(dir, id, done, total) {
   const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
   li.querySelector('.bar > span').style.width = pct + '%';
   li.querySelector('.pct').textContent = pct + '%';
+  // Live transfer speed + ETA, sampled ~4×/s and EMA-smoothed so the number doesn't jitter.
+  const key = dir + ':' + id;
+  const now = performance.now();
+  let st = rateStats.get(key);
+  if (!st) { rateStats.set(key, { last: now, lastDone: done, bps: 0 }); return; }
+  const dt = now - st.last;
+  if (dt < 250) return;
+  const inst = (done - st.lastDone) / (dt / 1000);
+  st.bps = st.bps ? st.bps * 0.7 + inst * 0.3 : inst;
+  st.last = now; st.lastDone = done;
+  const rate = li.querySelector('.rate'); if (!rate) return;
+  rate.textContent = (done < total && st.bps > 0) ? `${fmtRate(st.bps)} · ${fmtEta((total - done) / st.bps)}` : '';
 }
-function completeItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已发送'; if (dir === 'out') { li.classList.add('finished'); refreshClearSent(); } }
-function failItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; li.querySelector('.pct').textContent = '失败'; if (dir === 'out') { li.classList.add('finished'); refreshClearSent(); } }
-function receiveItem({ id, name, blob }) {
+function clearRate(dir, id) { rateStats.delete(dir + ':' + id); const li = itemEls[dir].get(id); const r = li && li.querySelector('.rate'); if (r) r.textContent = ''; }
+function completeItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; clearRate(dir, id); li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已发送'; if (dir === 'out') { li.classList.add('finished'); refreshClearSent(); } }
+function failItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; clearRate(dir, id); li.querySelector('.pct').textContent = '失败'; if (dir === 'out') { li.classList.add('finished'); refreshClearSent(); } }
+function receiveItem({ id, name, blob, error }) {
   const li = itemEls.in.get(id); if (!li) return;
+  clearRate('in', id);
+  if (error) { li.querySelector('.pct').textContent = '接收失败'; li.classList.add('recv-fail'); return; }
   li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已接收';
+
+  // Large files streamed to IndexedDB have no in-memory blob: save them via the service-worker
+  // attachment stream (memory-safe, writes straight to disk), and skip the batch checkbox — batching
+  // zips/shares in memory, which is exactly what we avoid for big files.
+  if (!blob) {
+    idbIds.add(id);
+    const a = document.createElement('a'); a.className = 'dl'; a.href = 'dl/' + id; a.download = name; a.textContent = '保存';
+    a.addEventListener('click', () => markSaved(id));
+    li.appendChild(a);
+    return;
+  }
+
   received.set(id, { name, blob });
 
   // checkbox + filename in one tappable row → drives the multi-select batch download
@@ -510,6 +555,7 @@ function doJoin(code) { if (link || joining) return; joining = true; if (sig.ws 
 // ---- boot -----------------------------------------------------------------
 function boot() {
   buildCodeInput();
+  pruneOld().catch(() => {}); // reclaim IndexedDB space from files a prior session never cleaned up
   if (!navigator.onLine) { showView('offline'); return; }
   sig.connect();
   const hashCode = extractCode(location.hash.slice(1) ? new URLSearchParams(location.hash.slice(1)).get('r') || '' : '');

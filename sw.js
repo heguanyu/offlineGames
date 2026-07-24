@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-1.0.2';
+const CACHE = 'offline-games-1.0.3';
 
 const ASSETS = [
   './',
@@ -24,6 +24,7 @@ const ASSETS = [
   './fileshare/qr.js',
   './fileshare/zip.js', // store-only ZIP writer for the batch (desktop) download
   './fileshare/jsqr.js', // QR decoder for the in-app camera scanner (BarcodeDetector fallback, e.g. iOS)
+  './fileshare/recv-store.js', // IndexedDB sink for LARGE received files (streamed to disk via /fileshare/dl/)
 
   // mahjong-common — shared by every mahjong variant (天津 + 国标): tile model, 3D/2D
   // table renderers, sound, hand ordering, UI utils, board CSS, the three.js lib and
@@ -247,10 +248,55 @@ function crossOriginIsolate(res) {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
+// ---- File Sharing: stream a large received file straight from IndexedDB to disk ------------------
+// A big incoming file (e.g. a 1 GB video) is written to IndexedDB in ~4 MB blocks by the page (see
+// fileshare/recv-store.js). The 保存 link points here; we answer with an `attachment` Response whose
+// body is a ReadableStream pulled block-by-block from IndexedDB — so the browser writes to disk as it
+// streams and the whole file never has to live in memory at once (which is what produced a 0-byte
+// save on iOS). Content-Length drives the browser's own download progress.
+function fsRecvDb() {
+  return new Promise((resolve, reject) => {
+    const r = indexedDB.open('offlinegames-fileshare');
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+}
+function fsGet(store, key) {
+  return fsRecvDb().then((d) => new Promise((resolve, reject) => {
+    let rq;
+    try { rq = d.transaction(store, 'readonly').objectStore(store).get(key); }
+    catch (e) { resolve(undefined); return; } // store missing (nothing received yet)
+    rq.onsuccess = () => resolve(rq.result);
+    rq.onerror = () => reject(rq.error);
+  }));
+}
+async function streamRecvFile(id) {
+  const meta = await fsGet('files', id).catch(() => null);
+  if (!meta) return new Response('not found', { status: 404 });
+  let seq = 0;
+  const stream = new ReadableStream({
+    async pull(controller) {
+      if (seq >= meta.blocks) { controller.close(); return; }
+      const block = await fsGet('blocks', [id, seq++]);
+      if (block) controller.enqueue(new Uint8Array(block));
+      if (seq >= meta.blocks) controller.close();
+    },
+  });
+  const fn = encodeURIComponent(meta.name || ('file-' + id)).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16));
+  return new Response(stream, { headers: {
+    'content-type': meta.mime || 'application/octet-stream',
+    'content-length': String(meta.size),
+    'content-disposition': `attachment; filename*=UTF-8''${fn}`,
+    'cache-control': 'no-store',
+  } });
+}
+
 // Cache-first: guarantees offline play; new versions arrive via the
 // version bump above, never silently mid-session.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // File Sharing streamed download — /fileshare/dl/<id> → attachment from IndexedDB (never cached).
+  try { const dl = new URL(e.request.url).pathname.match(/\/fileshare\/dl\/(\d+)$/); if (dl) { e.respondWith(streamRecvFile(Number(dl[1]))); return; } } catch {}
   // Any dynamic API path must never be cached or served cache-first — let it hit the network so the
   // page always gets the latest. Offline, the fetch fails and the page falls back.
   try { if (new URL(e.request.url).pathname.startsWith('/api/')) return; } catch {}

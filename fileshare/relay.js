@@ -8,6 +8,8 @@
 // main.js swaps one for the other. Flow control is a simple ack window: the receiver acks every
 // chunk, the sender keeps at most WINDOW chunks in flight.
 
+import { FileSink, INLINE_MAX } from './recv-store.js';
+
 const CHUNK = 32 * 1024;
 const WINDOW = 6;
 
@@ -44,21 +46,42 @@ export class RelayLink extends EventTarget {
     const m = data && data.relay;
     if (!m) return;
     if (m.t === 'meta') {
-      this.incoming = { id: m.id, name: m.name, size: m.size, mime: m.mime || 'application/octet-stream', parts: [], received: 0 };
-      this.dispatchEvent(new CustomEvent('incoming', { detail: { id: m.id, name: m.name, size: m.size, mime: this.incoming.mime } }));
+      const mime = m.mime || 'application/octet-stream';
+      const inline = !(m.size > INLINE_MAX); // large files stream to IndexedDB, not memory (see rtc.js)
+      this.incoming = {
+        id: m.id, name: m.name, size: m.size, mime, received: 0, inline,
+        parts: inline ? [] : null,
+        sink: inline ? null : new FileSink({ id: m.id, name: m.name, size: m.size, mime }),
+      };
+      this.dispatchEvent(new CustomEvent('incoming', { detail: { id: m.id, name: m.name, size: m.size, mime } }));
     } else if (m.t === 'chunk' && this.incoming) {
       const buf = unb64(m.d);
-      this.incoming.parts.push(buf);
+      if (this.incoming.inline) this.incoming.parts.push(buf);
+      else this.incoming.sink.push(buf);
       this.incoming.received += buf.byteLength;
       this.sig.signal({ relay: { t: 'ack', id: m.id, seq: m.seq } });
       this.dispatchEvent(new CustomEvent('progress', { detail: { id: this.incoming.id, dir: 'in', done: this.incoming.received, total: this.incoming.size } }));
     } else if (m.t === 'end' && this.incoming) {
       const f = this.incoming; this.incoming = null;
-      const blob = new Blob(f.parts, { type: f.mime });
-      this.dispatchEvent(new CustomEvent('received', { detail: { id: f.id, name: f.name, mime: f.mime, blob } }));
+      this._finish(f);
     } else if (m.t === 'ack') {
       this._inflight--;
       if (this._ackWait) { const r = this._ackWait; this._ackWait = null; r(); }
+    }
+  }
+
+  // Finalize a received file: inline → Blob; streamed → flush to IndexedDB (saved via the SW stream).
+  async _finish(f) {
+    if (f.inline) {
+      const blob = new Blob(f.parts, { type: f.mime });
+      this.dispatchEvent(new CustomEvent('received', { detail: { id: f.id, name: f.name, mime: f.mime, size: f.size, blob } }));
+      return;
+    }
+    try {
+      await f.sink.finish();
+      this.dispatchEvent(new CustomEvent('received', { detail: { id: f.id, name: f.name, mime: f.mime, size: f.size } }));
+    } catch (e) {
+      this.dispatchEvent(new CustomEvent('received', { detail: { id: f.id, name: f.name, mime: f.mime, size: f.size, error: true } }));
     }
   }
 

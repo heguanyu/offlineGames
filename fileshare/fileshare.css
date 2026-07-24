@@ -109,7 +109,11 @@ button.secondary:active { background: var(--accent-dim); }
   display: flex; flex-direction: column; gap: 6px;
 }
 .xfer-list .fname { font-size: 0.86rem; word-break: break-all; }
-.xfer-list .fmeta { font-size: 0.74rem; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.xfer-list .fmeta { font-size: 0.74rem; color: var(--muted); display: flex; align-items: baseline; gap: 8px; }
+.xfer-list .fmeta .pct { flex: none; }
+.xfer-list .fmeta .rate { flex: 1; text-align: center; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xfer-list .fmeta .size { flex: none; }
+.xfer-list li.item.recv-fail .pct { color: var(--bad); }
 .xfer-list .bar { height: 5px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
 .xfer-list .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s ease; }
 .xfer-list .bar.done > span { background: var(--good); }

@@ -8,6 +8,8 @@
 // which kicks off the initial offer; the guest receives the channel via ondatachannel. Once open the
 // channel is symmetric — either side can send files.
 
+import { FileSink, INLINE_MAX } from './recv-store.js';
+
 const CHUNK = 16 * 1024;          // 16 KB messages — safely under every browser's SCTP message cap
 const HIGH_WATER = 8 * 1024 * 1024; // pause sending when this much is buffered
 const LOW_WATER = 1 * 1024 * 1024;  // resume once it drains below this
@@ -93,20 +95,44 @@ export class PeerLink extends EventTarget {
     if (typeof data === 'string') {
       let m; try { m = JSON.parse(data); } catch { return; }
       if (m.t === 'meta') {
-        this.incoming = { id: m.id, name: m.name, size: m.size, mime: m.mime || 'application/octet-stream', parts: [], received: 0 };
-        this.dispatchEvent(new CustomEvent('incoming', { detail: { id: m.id, name: m.name, size: m.size, mime: this.incoming.mime } }));
+        const mime = m.mime || 'application/octet-stream';
+        // Small files ride fully in memory (keeps the share-sheet/zip actions synchronous); large ones
+        // stream to IndexedDB so a 1 GB transfer never has to materialize as one in-memory Blob.
+        const inline = !(m.size > INLINE_MAX);
+        this.incoming = {
+          id: m.id, name: m.name, size: m.size, mime, received: 0, inline,
+          parts: inline ? [] : null,
+          sink: inline ? null : new FileSink({ id: m.id, name: m.name, size: m.size, mime }),
+        };
+        this.dispatchEvent(new CustomEvent('incoming', { detail: { id: m.id, name: m.name, size: m.size, mime } }));
       } else if (m.t === 'end' && this.incoming) {
         const f = this.incoming; this.incoming = null;
-        const blob = new Blob(f.parts, { type: f.mime });
-        this.dispatchEvent(new CustomEvent('received', { detail: { id: f.id, name: f.name, mime: f.mime, blob } }));
+        this._finish(f);
       }
       return;
     }
     // binary chunk → current incoming file
     if (!this.incoming) return;
-    this.incoming.parts.push(data);
+    if (this.incoming.inline) this.incoming.parts.push(data);
+    else this.incoming.sink.push(data);
     this.incoming.received += data.byteLength || data.length || 0;
     this.dispatchEvent(new CustomEvent('progress', { detail: { id: this.incoming.id, dir: 'in', done: this.incoming.received, total: this.incoming.size } }));
+  }
+
+  // Finalize a received file: an inline one becomes a Blob; a streamed one is flushed to IndexedDB and
+  // will be saved via the service-worker attachment stream (detail carries no blob, just its id/size).
+  async _finish(f) {
+    if (f.inline) {
+      const blob = new Blob(f.parts, { type: f.mime });
+      this.dispatchEvent(new CustomEvent('received', { detail: { id: f.id, name: f.name, mime: f.mime, size: f.size, blob } }));
+      return;
+    }
+    try {
+      await f.sink.finish();
+      this.dispatchEvent(new CustomEvent('received', { detail: { id: f.id, name: f.name, mime: f.mime, size: f.size } }));
+    } catch (e) {
+      this.dispatchEvent(new CustomEvent('received', { detail: { id: f.id, name: f.name, mime: f.mime, size: f.size, error: true } }));
+    }
   }
 
   // queue a File/Blob (with .name) for sending; transfers run one at a time
