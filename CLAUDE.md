@@ -58,9 +58,36 @@ adding one). `app-nav.js` itself is the only allowed place that calls `location.
 
 ## Before every push
 Bump the `CACHE` patch version in `sw.js` (it busts the offline asset cache). When adding a new
-static file that a cached page imports/loads, also add it to the `ASSETS` list in `sw.js`, or
-offline play breaks on a missing module. To ship: push, then run `tools/deploy-azure.ps1`
-(pushing alone deploys nothing).
+static file that a cached page imports/loads, also add it to the `ASSETS` list in `sw.js` — or to
+**`MEDIA`** if it is artwork/audio/a big vendor lib (see the next section) — or offline play breaks
+on a missing module. To ship: push, then run `tools/deploy-azure.ps1` (pushing alone deploys nothing).
+
+## Two cache tiers — `ASSETS` (per version) and `MEDIA` (per content) — v1.1.0
+`CACHE` is named for the app version, so **everything in `ASSETS` re-downloads on every deploy**.
+That was fine when the list was code; it was not fine at 16.6 MB, ~15 MB of which was voice sprites
+and tile/card artwork that had not changed in months — a one-line fix cost every user sixteen
+megabytes, and on a weak link the update never finished. So `sw.js` now has **two** lists:
+
+- **`ASSETS`** — code, CSS, HTML, small icons (~1.2 MB). Version-keyed, re-fetched every release.
+- **`MEDIA`** — voice sprites, tile/card images, oversized vendor libs (~15.3 MB). Hashed by
+  **content** into **`assets.json`** by `tools/build-asset-manifest.mjs`, and cached in
+  **`MEDIA_CACHE` (`offline-games-media`)**, which `activate` deliberately does **not** delete.
+
+These are equally **required** — a mahjong table with no tile images is not a game — so the install
+still guarantees them: it is all-or-nothing across both phases, and a media file that will not
+download fails the update exactly like a missing module. It simply fetches only the entries whose
+hash differs from the `__media-versions` record the bucket already holds, which for a normal release
+is **none**. Modules (`voice` / `image` / `lib`) group the manifest for legibility; the download unit
+is the individual file. The bucket is **shared with every sub-hub**, so `mahjong-common`'s voice —
+listed by both `sw.js` and `sw-mj.js` — is stored and fetched once. `gen-subhub.js` filters `MEDIA`
+by the same profile prefixes as `ASSETS`, and `/assets.json` is never served from cache (a cached copy
+would carry the previous build's hashes and skip a real change).
+
+`assets.json` is **git-ignored and rebuilt on every deploy**, after `pack-voice.js` (it hashes that
+output) and before staging. Packing is deterministic — verified by `test/asset-manifest-test.mjs` —
+so regenerating the sprites does not by itself change any hash. Guarded by
+`node test/asset-manifest-test.mjs` (no browser needed): manifest accuracy, tier disjointness, and a
+fake-worker install proving an unchanged release re-downloads nothing.
 
 ## Theming — shared token layer, never hardcode colors
 Colors live in ONE place: `shared/theme.css` defines a semantic token vocabulary

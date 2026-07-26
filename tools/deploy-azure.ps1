@@ -27,6 +27,13 @@ Write-Host '==> packing voice sprites'
 node (Join-Path $root 'tools\pack-voice.js')
 if ($LASTEXITCODE) { throw 'pack-voice failed' }
 
+# Content hashes for the MEDIA tier (voice sprites + artwork + big vendor libs). MUST run after
+# pack-voice (it hashes that output) and before staging: a stale manifest makes the service worker
+# compare a NEW build against OLD hashes, conclude it already has the media, and skip a real change.
+Write-Host '==> hashing the content-versioned media'
+node (Join-Path $root 'tools\build-asset-manifest.mjs')
+if ($LASTEXITCODE) { throw 'build-asset-manifest failed' }
+
 Write-Host '==> generating sub-hub service workers'
 node (Join-Path $root 'tools\gen-subhub.js')
 if ($LASTEXITCODE) { throw 'gen-subhub failed' }
