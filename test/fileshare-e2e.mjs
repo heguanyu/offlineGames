@@ -17,7 +17,7 @@ function startServer() {
     { env: { ...process.env, PORT: String(PORT) }, stdio: ['ignore', 'pipe', 'pipe'] });
   return new Promise((res) => { s.stdout.on('data', (d) => { if (/listening/.test(d)) res(s); }); setTimeout(() => res(s), 2500); });
 }
-// serverUrl() hardcodes ws://localhost:8090 for localhost, so point the page's signaling at the
+// serverUrl() hardcodes ws://localhost:18012 for localhost, so point the page's signaling at the
 // real port via the ?server= override (same hook the lobby tests use).
 const url = `http://localhost:${PORT}/fileshare/?server=ws://localhost:${PORT}`;
 let srv, browser;

@@ -127,7 +127,7 @@ python -m http.server 8000
 
 Open http://localhost:8000 — `localhost` counts as a secure context, so the
 service worker registers. (For the online lobby, run the server instead:
-`PORT=8090 node server/index.js`, then open http://localhost:8090.)
+`PORT=18012 node server/index.js`, then open http://localhost:18012.)
 
 ## Deploy + install on iPad
 

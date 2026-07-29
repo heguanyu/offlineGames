@@ -15,7 +15,7 @@ export function serverUrl() {
   const override = new URLSearchParams(location.search).get('server');
   if (override) return override;
   const h = location.hostname;
-  if (h === 'localhost' || h === '127.0.0.1') return `ws://${h}:8090`; // dev server (also serves this page)
+  if (h === 'localhost' || h === '127.0.0.1') return `ws://${h}:18012`; // dev server (also serves this page)
   if (h.endsWith('github.io')) return `wss://${ONLINE_SERVER}`;        // Pages mirror → Azure backend
   return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`; // served from the app → same origin
 }

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { startServer, launchBrowser, ROOT as root } from './harness.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOBBY_PORT = 8190, SITE_PORT = 8147; // 8190 (not 8090) so a dev server on 8090 isn't disturbed
+const LOBBY_PORT = 8190, SITE_PORT = 8147; // 8190 (not 18012) so a dev server on 18012 isn't disturbed
 const errors = [];
 
 // start the lobby server (its own process, like in prod)

@@ -10,7 +10,7 @@
 // This same process ALSO serves the static PWA site (the whole repo, staged alongside) for
 // every non-WebSocket request. The client (lobby.js) connects to whichever origin served it.
 //
-// Run locally:  PORT=8090 node index.js   (serves the site at http://localhost:8090/)
+// Run locally:  PORT=18012 node index.js   (serves the site at http://localhost:18012/)
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -46,9 +46,9 @@ const TABLE_GAMES = (process.env.TABLE_GAMES ? process.env.TABLE_GAMES.split(','
 if (!TABLE_GAMES.length) TABLE_GAMES.push('tianjin');
 const seatsOf = (gameType) => (GAMES[gameType] || GAMES.tianjin).seats;
 
-const PORT = process.env.PORT || 8090;
+const PORT = process.env.PORT || 18012;
 const ALLOWED = (process.env.ALLOWED_ORIGINS ||
-  'https://heguanyu.github.io,https://offlinegames.azurewebsites.net,http://localhost:8090,http://127.0.0.1:8090,http://localhost:8137')
+  'https://heguanyu.github.io,https://offlinegames.azurewebsites.net,http://localhost:18012,http://127.0.0.1:18012,http://localhost:8137')
   .split(',').map((s) => s.trim());
 
 // The static site root. The server lives at <root>/server/index.js, so the publishable site
