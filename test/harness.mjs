@@ -23,9 +23,12 @@ export function startServer(port) {
   return new Promise((resolve) => server.listen(port, () => resolve(server)));
 }
 
-export async function launchBrowser(extraArgs = []) {
+// `opts` is passed through to puppeteer.launch — notably protocolTimeout, which the
+// demo recorder raises: several WebGL pages rendering through SwiftShader at once can
+// starve the CPU long enough for a routine CDP call to blow the default deadline.
+export async function launchBrowser(extraArgs = [], opts = {}) {
   const browser = await puppeteer.launch({
-    executablePath: EDGE, headless: 'new',
+    executablePath: EDGE, headless: 'new', ...opts,
     // --mute-audio silences the browser's WebAudio output; the localStorage seed below
     // also mutes the game's Sound class (incl. TTS voices) so test runs are SILENT.
     args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader', '--enable-webgl', '--mute-audio', ...extraArgs],
