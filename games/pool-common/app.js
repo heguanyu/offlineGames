@@ -7,12 +7,18 @@ import { norm, clampToRegion, spotFree } from './geometry.js';
 import { planShot, planPlacement } from './ai.js';
 import { sfx, unlock, isMuted, setMuted } from './sound.js';
 import { useFlatRenderer, mountPowerControl } from '../../shared/power-mode.js';
+import { t, applyDom } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
-const NAMES = ['你', 'AI'];
+const NAMES = [t('player.you'), t('player.ai')];
 
 export async function startPool(rules) {
+  // Translate the static markup first: the HTML ships Chinese labels as its default,
+  // and this swaps them when ?lang=en (or a stored preference) is in effect. Done
+  // before anything renders so the overlay never flashes the wrong language.
+  applyDom();
+
   const FLAT = (() => {
     const p = new URLSearchParams(location.search);
     if (p.has('d3')) return false;
@@ -63,7 +69,7 @@ export async function startPool(rules) {
   function refreshHud() {
     const on = G.state.winner == null ? rules.ballOn(G.state, G.balls) : null;
     $('round-info').textContent = on
-      ? `${NAMES[G.state.turn]}${G.state.turn === 0 ? '的回合' : ' 回合'} · 目标：${on.label}`
+      ? `${G.state.turn === 0 ? t('turn.you') : t('turn.ai')} · ${t('turn.target', on.label)}`
       : rules.title;
     $('scores').innerHTML = rules.scoreboard(G.state, G.balls, NAMES)
       .map((s, i) => `<div class="sc${G.state.turn === i ? ' on' : ''}"><b>${s.name}</b> ${s.info}</div>`)
@@ -98,7 +104,7 @@ export async function startPool(rules) {
     G.placePos = p;
     G.scene.syncBalls();
     G.scene.setGhost({ ...p, ok: true });
-    toast(region === 'D' ? '自由球：拖动白球在 D 区内放置' : region === 'kitchen' ? '开球：可在开球线后拖动白球' : '自由球：拖动白球到任意位置');
+    toast(region === 'D' ? t('hint.ballInHandD') : region === 'kitchen' ? t('hint.breakKitchen') : t('hint.ballInHandAny'));
   }
   function tryPlace(w) {
     const p = clampToRegion(spec, G.state.inHand, w.x, w.y);
@@ -120,7 +126,7 @@ export async function startPool(rules) {
     G.phase = 'aim';
     G.power = 0;
     setControls('aim');
-    if (!hinted) { hinted = true; toast('拉杆击球：按住拖动，越拉越远力度越大，松手击球（拖回白球取消）', 3600); }
+    if (!hinted) { hinted = true; toast(t('hint.cue'), 3600); }
     // default: point at the nearest legal target
     const on = rules.ballOn(G.state, G.balls);
     const c = cue();
@@ -204,9 +210,9 @@ export async function startPool(rules) {
     G.breaker = 1 - G.breaker;                 // alternate the break
     const win = over.winner === 0;
     (win ? sfx.win : sfx.lose)();
-    $('result-title').textContent = win ? '🎉 你赢了！' : 'AI 获胜';
+    $('result-title').textContent = win ? t('result.youWin') : t('result.aiWin');
     $('result-detail').textContent = over.msg || '';
-    $('result-score').textContent = `总比分 ${G.match[0]} : ${G.match[1]}`;
+    $('result-score').textContent = t('result.match', G.match[0], G.match[1]);
     $('result-overlay').hidden = false;
   }
 

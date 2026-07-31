@@ -26,26 +26,26 @@
     <div id="toast"></div>
 
     <div id="controls" hidden>
-      <div id="spin-ctl" aria-label="杆法：上下=高低杆，左右=侧塞，双击复位"><div id="spin-dot"></div></div>
+      <div id="spin-ctl" data-i18n-aria="aria.spin" aria-label="杆法：上下=高低杆，左右=侧塞，双击复位"><div id="spin-dot"></div></div>
       <div id="fine">
-        <button id="fine-left" type="button" aria-label="微调左">⟲</button>
-        <button id="fine-right" type="button" aria-label="微调右">⟳</button>
+        <button id="fine-left" type="button" data-i18n-aria="aria.fineLeft" aria-label="微调左">⟲</button>
+        <button id="fine-right" type="button" data-i18n-aria="aria.fineRight" aria-label="微调右">⟳</button>
       </div>
     </div>
-    <button id="place-done" type="button" hidden>放好了 ✓</button>
+    <button id="place-done" type="button" data-i18n="btn.placeDone" hidden>放好了 ✓</button>
   </div>
 
   <!-- start: difficulty pick -->
   <div id="start-overlay" class="overlay">
     <div class="panel">
-      <h1 id="start-title">黑八台球</h1>
-      <p class="sub" id="start-sub">15 球 · 你 vs AI · 犯规自由球</p>
+      <h1 id="start-title" data-i18n="pool8.title" data-i18n-title="pool8.title">黑八台球</h1>
+      <p class="sub" id="start-sub" data-i18n="pool8.subtitle">15 球 · 你 vs AI · 犯规自由球</p>
       <div class="diff-row" id="diff-row">
-        <button class="diff-btn" data-level="0" type="button">新手</button>
-        <button class="diff-btn sel" data-level="1" type="button">普通</button>
-        <button class="diff-btn" data-level="2" type="button">高手</button>
+        <button class="diff-btn" data-level="0" type="button" data-i18n="diff.0">新手</button>
+        <button class="diff-btn sel" data-level="1" type="button" data-i18n="diff.1">普通</button>
+        <button class="diff-btn" data-level="2" type="button" data-i18n="diff.2">高手</button>
       </div>
-      <button class="act-btn" id="start-btn" type="button" style="width:100%">开始</button>
+      <button class="act-btn" id="start-btn" type="button" data-i18n="btn.start" style="width:100%">开始</button>
     </div>
   </div>
 
@@ -55,18 +55,18 @@
       <div id="result-title"></div>
       <div id="result-detail"></div>
       <div id="result-score"></div>
-      <button class="act-btn" id="next-btn" type="button" style="width:100%;margin-bottom:10px">再来一局</button>
-      <button class="act-btn ghost" id="result-home" type="button" style="width:100%">← 返回大厅</button>
+      <button class="act-btn" id="next-btn" type="button" data-i18n="result.again" style="width:100%;margin-bottom:10px">再来一局</button>
+      <button class="act-btn ghost" id="result-home" type="button" data-i18n="menu.home" style="width:100%">← 返回大厅</button>
     </div>
   </div>
 
   <!-- menu -->
   <div id="menu-overlay" class="overlay" hidden>
     <div class="panel">
-      <h1>菜单</h1>
-      <button class="act-btn" id="menu-continue" type="button" style="width:100%;margin-bottom:10px">继续</button>
-      <button class="act-btn no" id="menu-restart" type="button" style="width:100%;margin-bottom:10px">重开（清零比分）</button>
-      <button class="act-btn ghost" id="menu-home" type="button" style="width:100%">← 返回大厅</button>
+      <h1 data-i18n="menu.title">菜单</h1>
+      <button class="act-btn" id="menu-continue" type="button" data-i18n="menu.continue" style="width:100%;margin-bottom:10px">继续</button>
+      <button class="act-btn no" id="menu-restart" type="button" data-i18n="menu.restart" style="width:100%;margin-bottom:10px">重开（清零比分）</button>
+      <button class="act-btn ghost" id="menu-home" type="button" data-i18n="menu.home" style="width:100%">← 返回大厅</button>
     </div>
   </div>
 

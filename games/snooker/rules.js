@@ -6,6 +6,7 @@
 //     from where the balls lie; a potted cue ball returns IN-HAND IN THE D
 //   · no "free ball" nomination and no miss-rule re-plays (casual)
 //   · tie after the black → black respots, next pot wins
+import { t } from '../pool-common/i18n.js';
 import { buildTable } from '../pool-common/geometry.js';
 
 const L = 3.569, W = 1.778, R = 0.02625;     // 12-ft table, 52.5 mm balls
@@ -14,20 +15,20 @@ const PINK_X = L / 4, BLACK_X = L / 2 - 0.324;
 
 // colours: id → {value, color, label, spot}
 const COLOURS = {
-  16: { value: 2, color: '#f2c235', label: '黄', spot: { x: BAULK_X, y: +D_R } },
-  17: { value: 3, color: '#1f7a33', label: '绿', spot: { x: BAULK_X, y: -D_R } },
-  18: { value: 4, color: '#7b4a21', label: '棕', spot: { x: BAULK_X, y: 0 } },
-  19: { value: 5, color: '#1c56c7', label: '蓝', spot: { x: 0, y: 0 } },
-  20: { value: 6, color: '#e0559b', label: '粉', spot: { x: PINK_X, y: 0 } },
-  21: { value: 7, color: '#181818', label: '黑', spot: { x: BLACK_X, y: 0 } },
+  16: { value: 2, color: '#f2c235', label: t('sn.yellow'), spot: { x: BAULK_X, y: +D_R } },
+  17: { value: 3, color: '#1f7a33', label: t('sn.green'), spot: { x: BAULK_X, y: -D_R } },
+  18: { value: 4, color: '#7b4a21', label: t('sn.brown'), spot: { x: BAULK_X, y: 0 } },
+  19: { value: 5, color: '#1c56c7', label: t('sn.blue'), spot: { x: 0, y: 0 } },
+  20: { value: 6, color: '#e0559b', label: t('sn.pink'), spot: { x: PINK_X, y: 0 } },
+  21: { value: 7, color: '#181818', label: t('sn.black'), spot: { x: BLACK_X, y: 0 } },
 };
 const isRed = (id) => id >= 1 && id <= 15;
 const val = (id) => (isRed(id) ? 1 : (COLOURS[id] ? COLOURS[id].value : 0));
 
 export const rules = {
   id: 'snooker',
-  title: '斯诺克',
-  subtitle: '15 红球 + 6 彩球 · 你 vs AI',
+  title: t('snooker.title'),
+  subtitle: t('snooker.subtitle'),
   maxSpeed: 6.5,
   spec: buildTable({
     L, W, ballR: R,
@@ -66,10 +67,10 @@ export const rules = {
 
   ballOn(state, balls) {
     if (state.phase === 'reds') {
-      if (state.mustColour) return { ids: Object.keys(COLOURS).map(Number).filter((id) => balls.find((b) => b.id === id).inPlay), label: '彩球' };
-      return { ids: this.redsLeft(balls).map((b) => b.id), label: '红球' };
+      if (state.mustColour) return { ids: Object.keys(COLOURS).map(Number).filter((id) => balls.find((b) => b.id === id).inPlay), label: t('sn.colours') };
+      return { ids: this.redsLeft(balls).map((b) => b.id), label: t('sn.reds') };
     }
-    return { ids: [state.colourIdx], label: COLOURS[state.colourIdx].label + '球' };
+    return { ids: [state.colourIdx], label: t('sn.ball', COLOURS[state.colourIdx].label) };
   },
 
   aiWeight(state) { return (id) => val(id); },  // when a colour is on, prefer the big ones
@@ -80,16 +81,16 @@ export const rules = {
     let foulVal = 0;
     const reasons = [];
 
-    if (ev.firstHit === null) { foulVal = Math.max(4, onValue); reasons.push('未击中任何球'); }
+    if (ev.firstHit === null) { foulVal = Math.max(4, onValue); reasons.push(t('foul.noHit')); }
     else if (!on.ids.includes(ev.firstHit)) {
       foulVal = Math.max(4, onValue, val(ev.firstHit));
-      reasons.push(`首先击中了${isRed(ev.firstHit) ? '红球' : COLOURS[ev.firstHit]?.label + '球'}（应打${on.label}）`);
+      reasons.push(t('foul.wrongFirstBall', isRed(ev.firstHit) ? t('sn.reds') : t('sn.ball', COLOURS[ev.firstHit]?.label), on.label));
     }
-    if (ev.cuePotted) { foulVal = Math.max(foulVal, 4, onValue); reasons.push('白球落袋'); }
+    if (ev.cuePotted) { foulVal = Math.max(foulVal, 4, onValue); reasons.push(t('foul.cuePotted')); }
     const wrongPots = ev.potted.filter((id) => id !== 0 && !on.ids.includes(id));
     if (wrongPots.length) {
       foulVal = Math.max(foulVal, 4, ...wrongPots.map(val));
-      reasons.push('打进了非目标球');
+      reasons.push(t('foul.pottedWrong'));
     }
     const foul = foulVal > 0;
 
@@ -121,7 +122,7 @@ export const rules = {
         }
       }
       state.scores[me] += points;
-      if (points) msg = `+${points} 分`;
+      if (points) msg = t('sn.plusPoints', points);
     } else {
       // foul: reds potted stay down; colours potted come back
       for (const c of pottedColours) respot.push(c);
@@ -129,7 +130,7 @@ export const rules = {
       // reds may have been wiped out by the foul shot — advance the phase
       if (state.phase === 'reds' && !this.redsLeft(balls).length) { state.phase = 'colours'; state.colourIdx = 16; }
       state.scores[opp] += foulVal;
-      msg = `犯规：${reasons.join('，')} → 对方 +${foulVal} 分`;
+      msg = t('foul.points', reasons.join(t('foul.join')), foulVal);
     }
     state.breakShot = false;
 
@@ -137,7 +138,7 @@ export const rules = {
     if (state.phase === 'colours' && state.colourIdx > 21) {
       if (state.scores[0] === state.scores[1]) {           // tie → respot the black, next pot wins
         respot.push(21); state.colourIdx = 21;
-        msg += '（平分：黑球重置）';
+        msg += t('sn.tieBlackRespot');
       } else {
         state.winner = state.scores[0] > state.scores[1] ? 0 : 1;
         return { msg, foul, respot, switchTurn: false, ballInHand: null, gameOver: { winner: state.winner, msg: `${state.scores[0]} : ${state.scores[1]}` } };
@@ -157,11 +158,11 @@ export const rules = {
 
   scoreboard(state, balls, names) {
     const reds = this.redsLeft(balls).length;
-    const on = state.phase === 'reds' ? (state.mustColour ? '彩球' : `红球×${reds}`)
-      : (COLOURS[state.colourIdx] ? COLOURS[state.colourIdx].label + '球' : '');
+    const on = state.phase === 'reds' ? (state.mustColour ? t('sn.colours') : t('sn.redsLeft', reds))
+      : (COLOURS[state.colourIdx] ? t('sn.ball', COLOURS[state.colourIdx].label) : '');
     return [0, 1].map((p) => ({
       name: names[p],
-      info: `${state.scores[p]} 分${state.winner == null && state.turn === p && on ? ' · 打' + on : ''}`,
+      info: state.winner == null && state.turn === p && on ? t('sn.scoreOn', state.scores[p], on) : t('sn.points', state.scores[p]),
     }));
   },
 };

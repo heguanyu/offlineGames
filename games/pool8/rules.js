@@ -5,6 +5,7 @@
 //     → opponent gets BALL IN HAND, free placement ANYWHERE (自由球)
 //   · 8-ball: pot it early → lose; pot it with a scratch → lose; pot it after clearing
 //     your group → win. 8 potted on the break is respotted (casual), no called pockets.
+import { t } from '../pool-common/i18n.js';
 import { buildTable } from '../pool-common/geometry.js';
 
 const L = 2.54, W = 1.27, R = 0.028575;      // 9-ft table, 57.15 mm balls
@@ -17,12 +18,12 @@ const COLORS = {
 const solidOf = (n) => (n > 8 ? n - 8 : n);
 const isSolid = (n) => n >= 1 && n <= 7;
 const isStripe = (n) => n >= 9 && n <= 15;
-const GROUP_LABEL = { solid: '实色球', stripe: '花色球' };
+const GROUP_LABEL = { solid: t('p8.solids'), stripe: t('p8.stripes') };
 
 export const rules = {
   id: 'pool8',
-  title: '黑八台球',
-  subtitle: '15 球 · 你 vs AI · 犯规自由球',
+  title: t('pool8.title'),
+  subtitle: t('pool8.subtitle'),
   maxSpeed: 7,
   spec: buildTable({
     L, W, ballR: R,
@@ -75,9 +76,9 @@ export const rules = {
   ballOn(state, balls) {
     const mine = this.remaining(state, balls, state.turn);
     if (mine.length) {
-      return { ids: mine.map((b) => b.id), label: state.groups ? GROUP_LABEL[this.groupOf(state, state.turn)] : '任意彩球' };
+      return { ids: mine.map((b) => b.id), label: state.groups ? GROUP_LABEL[this.groupOf(state, state.turn)] : t('p8.anyColour') };
     }
-    return { ids: [8], label: '黑8' };
+    return { ids: [8], label: t('p8.black8') };
   },
 
   aiWeight() { return () => 1; },
@@ -90,19 +91,19 @@ export const rules = {
     const pottedObj = ev.potted.filter((id) => id !== 0 && id !== 8);
     let foul = null;
 
-    if (ev.firstHit === null) foul = '未击中任何球';
-    else if (!on.ids.includes(ev.firstHit)) foul = `首先击中了非目标球（应打${on.label}）`;
-    else if (ev.cuePotted) foul = '白球落袋';
-    else if (!ev.potted.length && !ev.railAfter) foul = '击球后无球碰库';
+    if (ev.firstHit === null) foul = t('foul.noHit');
+    else if (!on.ids.includes(ev.firstHit)) foul = t('foul.wrongFirst', on.label);
+    else if (ev.cuePotted) foul = t('foul.cuePotted');
+    else if (!ev.potted.length && !ev.railAfter) foul = t('foul.noRail');
 
     // ---- the 8 ball decides games ----
     if (potted8) {
       if (state.breakShot) {                 // casual: respot, play on
         state.breakShot = false;
-        return this._next(state, balls, { foul, respot: [8], msg: '开球打进黑8：重置黑8' });
+        return this._next(state, balls, { foul, respot: [8], msg: t('p8.breakPotted8') });
       }
       state.winner = (!wasOn8 || foul) ? opp : me;
-      const msg = state.winner === me ? '打进黑8，获胜！' : (wasOn8 ? '打进黑8但犯规，判负' : '提前打进黑8，判负');
+      const msg = state.winner === me ? t('p8.win8') : (wasOn8 ? t('p8.lose8Foul') : t('p8.lose8Early'));
       return { msg, foul: !!foul, gameOver: { winner: state.winner, msg }, respot: [], switchTurn: false, ballInHand: null };
     }
 
@@ -111,8 +112,8 @@ export const rules = {
     if (!state.groups && !state.breakShot && !foul && pottedObj.length) {
       const g = isSolid(pottedObj[0]) ? 'solid' : 'stripe';
       state.groups = { [me]: g, [opp]: g === 'solid' ? 'stripe' : 'solid' };
-      msg = `你方确定为${GROUP_LABEL[g]}`;
-      if (me === 1) msg = `AI 确定为${GROUP_LABEL[g]}`;
+      msg = t('p8.youAre', GROUP_LABEL[g]);
+      if (me === 1) msg = t('p8.aiIs', GROUP_LABEL[g]);
     }
     state.breakShot = false;
 
@@ -126,7 +127,7 @@ export const rules = {
     if (foul) {
       state.turn = 1 - state.turn;
       state.inHand = 'anywhere';
-      return { msg: `犯规：${foul} → 对方自由球`, foul: true, respot, switchTurn: true, ballInHand: 'anywhere', gameOver: null };
+      return { msg: t('foul.line', foul), foul: true, respot, switchTurn: true, ballInHand: 'anywhere', gameOver: null };
     }
     if (!keepTurn) state.turn = 1 - state.turn;
     state.inHand = null;
@@ -142,7 +143,7 @@ export const rules = {
       const g = this.groupOf(state, p);
       const left = this.remaining(state, balls, p).length;
       const on8 = state.groups && left === 0;
-      return { name: names[p], info: g ? `${GROUP_LABEL[g]} 剩${left}${on8 ? ' · 打黑8' : ''}` : '未定组' };
+      return { name: names[p], info: g ? t('p8.groupLeft', GROUP_LABEL[g], left) + (on8 ? t('p8.onBlack') : '') : t('p8.groupUndecided') };
     });
   },
 };

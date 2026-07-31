@@ -111,11 +111,15 @@ function cardLike({ hook, url }) {
   };
 }
 
-/** Billiards: place the cue ball, then slingshot-aim and fire, repeatedly. */
+/**
+ * Billiards: place the cue ball, then slingshot-aim and fire, repeatedly.
+ * These two DO have an English build (games/pool-common/i18n.js), so the demo
+ * asks for it — everything on screen is then English.
+ */
 function cueLike({ url }) {
   return {
     async setup({ page, sitePort }) {
-      await page.goto(`http://localhost:${sitePort}${url}`, { waitUntil: 'networkidle0' });
+      await page.goto(`http://localhost:${sitePort}${url}?lang=en`, { waitUntil: 'networkidle0' });
       await page.waitForSelector('#start-btn', { visible: true, timeout: 20000 });
       await page.click('#start-btn');
       await page.waitForSelector('#place-done', { visible: true, timeout: 20000 });
