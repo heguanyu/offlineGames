@@ -25,8 +25,11 @@ async function clickAction(page, labels) {
 
 export const SCENARIOS = {
   // ------------------------------------------------------------- mahjong --
+  // NOTE: the games have no i18n — every page is lang="zh" with hardcoded Chinese
+  // UI, so there is no English build to record. Titles here are English for the
+  // operator's benefit; the footage itself is necessarily Chinese.
   mahjong: {
-    title: '天津麻将 — 3D table, three AI bots',
+    title: 'Tianjin Mahjong — 3D table, three AI bots',
     seconds: 26,
     async setup(page, port) {
       // ?fast=1 is REQUIRED, not just convenient: window.__mj — the hook this
@@ -72,7 +75,7 @@ export const SCENARIOS = {
 
   // ------------------------------------------------------------ doudizhu --
   doudizhu: {
-    title: '斗地主 — bidding and play vs bots',
+    title: 'Dou Dizhu — bidding and play vs bots',
     seconds: 22,
     async setup(page, port) {
       // ?fast=1 again: window.__dou (awaiting / step / resultShown) only exists
@@ -107,7 +110,7 @@ export const SCENARIOS = {
 
   // --------------------------------------------------------------- pool8 --
   pool8: {
-    title: '黑八 — cue physics',
+    title: 'Eight-ball — cue physics',
     seconds: 22,
     async setup(page, port) {
       await page.goto(`http://localhost:${port}/games/pool8/`, { waitUntil: 'networkidle0' });
