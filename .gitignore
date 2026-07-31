@@ -45,3 +45,7 @@ deploy.zip
 
 # generated sub-hub service workers (tools/gen-subhub.js)
 /sw-*.js
+
+# Recorded demo masters ¡ª near-lossless, kept local only. The low-bitrate
+# web versions are copied into ../panoply/bio/demo/ and deployed from there.
+_demos/
