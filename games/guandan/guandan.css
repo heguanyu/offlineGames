@@ -224,12 +224,6 @@ body.flat .hand-tool { font-size: 0.72rem; padding: 6px 10px; border-radius: 8px
 .panel p.sub { color: #bfe6d8; font-size: 0.9rem; margin-bottom: 20px; }
 .resume-note { color: var(--gold); font-size: 0.92rem; margin: -10px 0 16px; }
 .resume-note b { font-weight: 800; }
-.diff-row { display: flex; gap: 12px; justify-content: center; margin-bottom: 12px; }
-.diff-btn {
-  font: inherit; font-size: 1rem; font-weight: 700; color: var(--ink); background: rgba(255,255,255,0.08);
-  border: 1px solid #2c8160; border-radius: 12px; padding: 14px 20px; cursor: pointer; flex: 1;
-}
-.diff-btn.sel { background: linear-gradient(#f3d785, #e3b94f); color: #06250f; border-color: var(--gold); }
 #result-title { font-size: 1.7rem; font-weight: 900; margin-bottom: 10px; }
 #result-title.win { color: #7ddf8a; } #result-title.lose { color: #ff7a7a; }
 #result-detail { color: #cfe7db; font-size: 0.95rem; margin-bottom: 12px; line-height: 1.6; }

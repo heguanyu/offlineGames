@@ -44,7 +44,7 @@ export function createBackend(config = {}) {
 export class LocalBackend {
   constructor(config = {}) {
     this.rng = config.rng || Math.random;
-    this.level = config.level ?? 1;          // AI difficulty (0/1/2), NOT the card level
+    this.level = config.level ?? 2;          // strongest AI; NOT the card level
     this.thinkDelay = config.thinkDelay ?? 650;
     this.match = null;
     this._handler = null;

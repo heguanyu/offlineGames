@@ -13,6 +13,7 @@ import { sfx, speak, setMuted, isMuted, resume } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const FAST = new URLSearchParams(location.search).has('fast');
+const AI_LEVEL = 2;
 // Renderer choice driven by 省电模式 (shared/power-mode.js); ?flat=1 / ?d3=1 override (tests).
 const FLAT = (() => {
   const p = new URLSearchParams(location.search);
@@ -23,8 +24,6 @@ const FLAT = (() => {
 document.body.classList.toggle('flat', FLAT);
 
 const LS = {
-  get level() { return +(localStorage.getItem('guandan-level') ?? 1); },
-  set level(v) { localStorage.setItem('guandan-level', v); },
   get mute() { return localStorage.getItem('guandan-mute') === '1'; },
   set mute(v) { localStorage.setItem('guandan-mute', v ? '1' : '0'); },
   // Saved level-ladder progress (between rounds) — { teamLevel, hostTeam, lastOrder, roundIndex }.
@@ -36,7 +35,7 @@ const TEAM_NAME = ['你方', '对方'];
 const PLACE = ['头游', '二游', '三游', '末游'];
 
 const state = {
-  scene: null, backend: null, level: 1,
+  scene: null, backend: null,
   sel: new SmartSelection(),
   hint: new Set(),
   cursor: 0,
@@ -77,13 +76,7 @@ function boot() {
   state.scene = new (FLAT ? GuandanScene2D : GuandanScene)($('scene'));
   if (FLAT) forceLandscape((portrait) => { state.scene.setRotated(portrait); state.scene.resize(); if (state.backend) render(); });
   if (FLAT) applyFlatScale($('table')); // 省电 (2D) on a tablet: scale the flat board to fill the screen
-  state.level = LS.level;
   setMuted(LS.mute); $('mute-btn').textContent = LS.mute ? '🔇' : '🔊';
-
-  for (const b of document.querySelectorAll('.diff-btn')) {
-    if (+b.dataset.level === state.level) markDiff(b);
-    b.addEventListener('click', () => { state.level = +b.dataset.level; LS.level = state.level; markDiff(b); });
-  }
   refreshStartOverlay();
   $('start-btn').addEventListener('click', () => { resume(); $('start-overlay').hidden = true; newMatch(!!LS.progress); });
   $('reset-btn').addEventListener('click', () => { LS.progress = null; refreshStartOverlay(); });
@@ -103,7 +96,6 @@ function boot() {
   window.addEventListener('resize', positionOverlays);
   startPadPolling();
 }
-function markDiff(btn) { for (const b of document.querySelectorAll('.diff-btn')) b.classList.toggle('sel', b === btn); }
 
 // Start a match. resume=true continues the saved level ladder; resume=false starts fresh (2/2) and
 // clears any saved progress.
@@ -113,10 +105,10 @@ function newMatch(resume = false) {
   state.lastSettle = null;
   const saved = resume ? LS.progress : null;
   if (!resume) LS.progress = null;
-  state.backend = createBackend({ mode: 'local', aiLevel: state.level, thinkDelay: thinkMs() });
+  state.backend = createBackend({ mode: 'local', aiLevel: AI_LEVEL, thinkDelay: thinkMs() });
   state.backend.onEvent(onEvent);
   clearBubbles();
-  state.backend.newMatch({ aiLevel: state.level, state: saved });
+  state.backend.newMatch({ aiLevel: AI_LEVEL, state: saved });
 }
 // Show the saved-ladder prompt on the start screen (継続 vs fresh 开始).
 function refreshStartOverlay() {
@@ -320,8 +312,7 @@ function updateScoreboard(st) {
   }).join('');
 }
 function updateRoundInfo(st) {
-  const diff = ['新手', '普通', '高手'][state.level] || '';
-  let s = `<b>${diff}</b> · 第 ${st.roundIndex} 局 · 打 <b>${rankLabel(st.level)}</b>`;
+  let s = `第 ${st.roundIndex} 局 · 打 <b>${rankLabel(st.level)}</b>`;
   $('round-info').innerHTML = s;
 }
 
@@ -382,7 +373,7 @@ function autoSelect(g) {
   state.userTouched = false; resetHint();
   state.sel.clear();
   if (g.leadSeat === HUMAN) return;
-  const mv = chooseMove(g, HUMAN, 1, Math.random);
+  const mv = chooseMove(g, HUMAN, AI_LEVEL, Math.random);
   if (mv.pass || !mv.cardIds.length) return;
   const picked = mv.cardIds.map((id) => g.hands[HUMAN].find((c) => c.id === id));
   const d = classify(picked, g.level);
@@ -555,7 +546,7 @@ window.__gd = {
   step() {
     if (state.awaiting !== 'play') return 'wait';
     const g = state.backend.getState().round;
-    const mv = chooseMove(g, HUMAN, 1, Math.random);
+    const mv = chooseMove(g, HUMAN, AI_LEVEL, Math.random);
     if (mv.pass) { if (g.leadSeat !== HUMAN) { doPass(); return 'pass'; } return 'stuck'; }
     state.sel.set(mv.cardIds); doPlay(); return 'play';
   },

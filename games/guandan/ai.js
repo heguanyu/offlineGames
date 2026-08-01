@@ -167,7 +167,7 @@ function strategicAdj(view, move, n, tempo) {
 }
 
 // ---- the policy ------------------------------------------------------------
-export function chooseMove(round, seat, level = 1, rng = Math.random, opts = {}) {
+export function chooseMove(round, seat, level = 2, rng = Math.random, opts = {}) {
   const tempo = opts.tempo ?? TEMPO;                          // exposed so self-play can A/B the aggression
   const view = buildView(round, seat);
   const following = view.against != null;
