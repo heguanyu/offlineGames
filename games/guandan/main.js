@@ -2,12 +2,13 @@
 // through it (async), and reacts to the backend's awaited events — the same UI↔Backend split as the
 // 斗地主 / mahjong games, so this whole layer is offline/online-agnostic.
 import { createBackend, HUMAN } from './backend.js';
-import { legalMoves, classify, rankLabel, isWild, teamOf, partnerOf, isBombType, COMBO } from './engine.js';
+import { classify, rankLabel, isWild, teamOf, partnerOf, isBombType, COMBO } from './engine.js';
 import { chooseMove, orderedHints, cleanestBeat } from './ai.js';
 import { GuandanScene } from './scene.js';
 import { GuandanScene2D } from './scene2d.js';
 import { useFlatRenderer, applyFlatScale, mountPowerControl } from '../../shared/power-mode.js';
 import { SmartSelection } from './select.js';
+import { bestStacks, groupSelection, normalizeStacks, rankStacks, selectionCombo } from './arrange.js';
 import { sfx, speak, setMuted, isMuted, resume } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
@@ -48,6 +49,7 @@ const state = {
   userTouched: false,
   hintMoves: null, hintIdx: -1,
   lastSettle: null,
+  handStacks: [],
 };
 
 // On a phone held PORTRAIT, CSS-rotate <body> 90° so the game fills the screen as landscape.
@@ -93,6 +95,8 @@ function boot() {
   $('menu-continue').addEventListener('click', () => { $('menu-overlay').hidden = true; });
   $('menu-restart').addEventListener('click', () => { LS.progress = null; $('menu-overlay').hidden = true; $('result-overlay').hidden = true; newMatch(false); });
   $('menu-home').addEventListener('click', () => { location.replace('../../index.html'); });
+  $('auto-arrange-btn').addEventListener('click', autoArrange);
+  $('group-btn').addEventListener('click', groupCards);
 
   $('scene').addEventListener('pointerdown', onPointerDown);
   window.addEventListener('keydown', onKey);
@@ -135,6 +139,7 @@ function continueGame() {
 function resetRoundState() {
   state.sel.clear(); state.hint.clear(); state.trick = {}; state.discard = [];
   state.reveal = false; state.places = {}; state.cursor = 0; state.phase = 'idle'; state.awaiting = null;
+  state.handStacks = [];
 }
 function thinkMs() { return FAST ? 70 : 620; }
 
@@ -146,6 +151,7 @@ async function onEvent(ev) {
     case 'deal': {
       resetRoundState(); clearBubbles();
       state.scene.setLevel(ev.level);
+      state.handStacks = rankStacks(g.hands[HUMAN]);
       const dealt = state.scene.beginDeal({ hand: g.hands[HUMAN], counts: g.handCounts, fast: FAST });
       sfx.deal(); render();
       await dealt; render();
@@ -194,9 +200,11 @@ async function onEvent(ev) {
     }
     case 'await': {
       state.awaiting = 'play'; state.cursor = Math.min(state.cursor, g.hands[HUMAN].length - 1);
-      const against = g.leadSeat === HUMAN ? null : g.lead;
       state.sel.setHand(g.hands[HUMAN]);
-      autoSelect(g);
+      const handIds = new Set(g.hands[HUMAN].map((card) => card.id));
+      if (state.sel.ids.length && state.sel.ids.every((id) => handIds.has(id))) {
+        state.userTouched = true; resetHint();
+      } else autoSelect(g);
       showPlayBar(); render(); break;
     }
     case 'over':
@@ -265,9 +273,10 @@ function render() {
   if (!g) return;
   state.scene.setLevel(st.level);
   const hand = g.hands[HUMAN] || [];
+  state.handStacks = normalizeStacks(hand, state.handStacks, st.level);
   const table = Object.entries(state.trick).map(([seat, cards]) => ({ seat: +seat, cards }));
   state.scene.sync({
-    hand, selected: state.sel.selected, hint: state.hint,
+    hand, handStacks: state.handStacks, selected: state.sel.selected, hint: state.hint,
     counts: g.handCounts, turn: g.turn, leadSeat: g.leadSeat, phase: g.phase,
     table, discard: state.discard,
     revealHands: state.reveal ? { 1: g.hands[1], 2: g.hands[2], 3: g.hands[3] } : null,
@@ -275,7 +284,30 @@ function render() {
   positionOverlays();
   updateRoundInfo(st);
   updateScoreboard(st);
+  refreshHandTools(g, st.level);
   if (state.awaiting === 'play') refreshPlayBar();
+}
+
+function refreshHandTools(g, level) {
+  const hand = g.hands[HUMAN] || [];
+  $('auto-arrange-btn').disabled = g.phase !== 'play' || hand.length === 0;
+  $('group-btn').disabled = !selectionCombo(hand, state.sel.ids, level);
+}
+
+function autoArrange() {
+  const st = state.backend && state.backend.getState();
+  const g = st && st.round;
+  if (!g || g.phase !== 'play' || !g.hands[HUMAN].length) return;
+  state.handStacks = bestStacks(g.hands[HUMAN], st.level);
+  state.sel.clear(); state.hint.clear(); state.userTouched = true; resetHint(); render();
+}
+
+function groupCards() {
+  const st = state.backend && state.backend.getState();
+  const g = st && st.round;
+  if (!g || !selectionCombo(g.hands[HUMAN], state.sel.ids, st.level)) return;
+  state.handStacks = groupSelection(g.hands[HUMAN], state.handStacks, state.sel.ids, st.level);
+  state.userTouched = true; resetHint(); render();
 }
 
 // Team-level scoreboard (top-right): each team's grade, 庄 on the host team, current-round level.
@@ -402,7 +434,9 @@ function doHint() {
 
 // ---- input: pointer (tap + swipe paint) ------------------------------------
 function onPointerDown(e) {
-  if (state.awaiting !== 'play') return;
+  const st = state.backend && state.backend.getState();
+  const g = st && st.round;
+  if (!g || g.phase !== 'play' || !g.hands[HUMAN].length) return;
   const startId = state.scene.pick(e.clientX, e.clientY);
   if (startId == null) return;
   let moved = false, mode = null;
@@ -411,18 +445,20 @@ function onPointerDown(e) {
     if (id == null) return;
     if (!moved) {
       if (id === startId) return;
-      moved = true; mode = !state.sel.has(startId);
-      freshTouch(); state.sel.paint(startId, mode);
+      moved = true; freshTouch(); mode = !state.sel.has(startId);
+      state.sel.paint(startId, mode);
     }
     state.sel.paint(id, mode); resetHint(); render();
   };
   const onUp = () => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onUp);
     if (!moved) { freshTouch(); state.sel.tap(startId); cursorTo(startId); resetHint(); render(); }
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onUp);
 }
 // First manual interaction this turn discards the auto-suggestion so the human starts fresh.
 function freshTouch() { if (!state.userTouched) { state.sel.clear(); state.userTouched = true; } }

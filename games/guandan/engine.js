@@ -319,16 +319,14 @@ function genSequence(slot, length, allowAceLow, natRanks, cntOf, takeNat, wilds,
   const lo0 = allowAceLow ? 1 : 2;
   for (let lo = lo0; lo + length - 1 <= 14; lo++) {
     const ranks = []; for (let i = 0; i < length; i++) { const v = lo + i; ranks.push(v === 1 ? 14 : v); }
-    let need = 0, ok = true; const ids = [];
+    let need = 0; const ids = [];
     for (const r of ranks) {
       const have = Math.min(slot, cntOf(r));
       const got = have > 0 ? takeNat(r, have) : [];
       for (const id of got) ids.push(id);
       need += slot - have;
-      if (cntOf(r) > slot && slot === 1) { ok = false; break; } // a straight can't reuse a rank
     }
-    if (!ok || need > W) continue;
-    // ensure no natural in the hand of these ranks is left unused beyond the slot (handled by Math.min)
+    if (need > W) continue;
     add([...ids, ...wilds.slice(0, need).map((c) => c.id)]);
   }
 }

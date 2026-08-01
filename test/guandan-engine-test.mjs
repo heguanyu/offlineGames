@@ -60,6 +60,11 @@ ok(beats(d([C(16, -1), C(16, -1), C(17, -1), C(17, -1)]), flush), '天王炸 bea
   ok(follow.every((m) => m.bomb || (m.type === COMBO.PAIR && m.key > against.key)), 'following a pair yields only higher pairs or bombs');
 }
 {
+  // A duplicate rank elsewhere in the hand must not suppress a perfectly legal straight.
+  const hand = [C(3), C(3, 1), C(4, 1), C(5, 2), C(6, 3), C(7)];
+  ok(legalMoves(hand, null, 2).some((m) => m.type === COMBO.STRAIGHT), 'straight generation tolerates duplicate ranks in hand');
+}
+{
   // following a bomb → only bombs/flushes
   const hand = [C(9), C(9, 1), C(9, 2), C(9, 3), C(4), C(4, 1)];
   const against = classify([C(3), C(3, 1), C(3, 2), C(3, 3)], 2);

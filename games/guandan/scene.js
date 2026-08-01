@@ -152,6 +152,18 @@ function roundedCardGeo() {
   return geo;
 }
 
+function selectionBorderGeo() {
+  const w = CW * 1.15, h = CH * 1.1, r = Math.min(w, h) * 0.095;
+  const x0 = -w / 2, y0 = -h / 2;
+  const s = new THREE.Shape();
+  s.moveTo(x0 + r, y0);
+  s.lineTo(x0 + w - r, y0); s.quadraticCurveTo(x0 + w, y0, x0 + w, y0 + r);
+  s.lineTo(x0 + w, y0 + h - r); s.quadraticCurveTo(x0 + w, y0 + h, x0 + w - r, y0 + h);
+  s.lineTo(x0 + r, y0 + h); s.quadraticCurveTo(x0, y0 + h, x0, y0 + h - r);
+  s.lineTo(x0, y0 + r); s.quadraticCurveTo(x0, y0, x0 + r, y0);
+  return new THREE.ShapeGeometry(s, 8);
+}
+
 export class GuandanScene {
   constructor(canvas) {
     this.canvas = canvas;
@@ -175,6 +187,7 @@ export class GuandanScene {
     this.level = 2;
     this._lights(); this._table(); this._turnRing();
     this.geo = roundedCardGeo();
+    this.borderGeo = selectionBorderGeo();
     this.sideMat = new THREE.MeshStandardMaterial({ color: 0xece9df, roughness: 0.85 });
 
     this.cards = new Map();
@@ -186,6 +199,8 @@ export class GuandanScene {
     this._shake = null;
     this._camPos = this.camBase.clone();
     this._running = false;       // on-demand render loop (battery): runs only while something animates
+    this._selectionTimer = null;
+    this._selectionBright = false;
     this._resize();
     new ResizeObserver(() => { this._resize(); this._kick(); }).observe(canvas.parentElement);
     this._kick();
@@ -250,35 +265,49 @@ export class GuandanScene {
     const back = new THREE.MeshStandardMaterial({ map: backTexture(), roughness: 0.6 });
     const mats = [front, back, this.sideMat];
     const mesh = new THREE.Mesh(this.geo, mats);
+    if (faceCard) {
+      const border = new THREE.Mesh(this.borderGeo, new THREE.MeshBasicMaterial({
+        color: 0xffc400, transparent: true, opacity: 0.78, depthWrite: false, toneMapped: false,
+      }));
+      border.position.z = CD / 2 - 0.001;
+      border.visible = false;
+      border.name = 'selection-border';
+      mesh.add(border);
+      mesh.userData.selectionBorder = border;
+    }
     mesh.castShadow = true; mesh.receiveShadow = true;
     this.group.add(mesh);
     return mesh;
   }
 
   // Compose the desired layout from a plain view and ease meshes toward it. view:
-  //   { hand:[card], selected:Set, hint:Set, counts:[4], turn, leadSeat, phase,
+  //   { hand:[card], handStacks:[[id]], selected:Set, hint:Set, counts:[4], turn, leadSeat, phase,
   //     table:[{seat, cards:[card]}], discard:[card], revealHands:{seat:[card]}|null }
   sync(view) {
     const want = new Map();
     const flatUp = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
     const lv = this.level;
 
-    // human hand — overlapping row along the bottom edge, tilted up to face the camera
+    // Human stacks run left-to-right; cards within each stack fan upward toward the table centre.
     const hand = view.hand || [];
-    const n = hand.length;
-    const step = Math.min(0.52, n > 1 ? 12.4 / (n - 1) : 0);
+    const byId = new Map(hand.map((card) => [card.id, card]));
+    const stacks = (view.handStacks && view.handStacks.length ? view.handStacks : hand.map((card) => [card.id]))
+      .map((ids) => ids.map((id) => byId.get(id)).filter(Boolean)).filter((cards) => cards.length);
+    const n = stacks.length;
+    const step = Math.min(1.02, n > 1 ? 12.4 / (n - 1) : 0);
     const x0 = -step * (n - 1) / 2;
     const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.faceCamRx, 0, 0));
     const cardUp = new THREE.Vector3(0, 1, 0).applyQuaternion(tilt);
-    hand.forEach((card, i) => {
+    const cardFront = new THREE.Vector3(0, 0, 1).applyQuaternion(tilt);
+    stacks.forEach((stack, si) => stack.forEach((card, ci) => {
       const sel = view.selected && view.selected.has(card.id);
       const hint = view.hint && view.hint.has(card.id);
       const wild = isWild(card, lv);
-      const z = 7.1 + i * 0.004;
-      const pos = new THREE.Vector3(x0 + i * step, HAND_Y, z);
-      if (sel) pos.addScaledVector(cardUp, 1.1);
+      const pos = new THREE.Vector3(x0 + si * step, HAND_Y, 7.1);
+      pos.addScaledVector(cardUp, (stack.length - 1 - ci) * 0.28);
+      pos.addScaledVector(cardFront, ci * 0.008);
       want.set('c' + card.id, { faceCard: card, wild, pos, quat: tilt, scale: 1.06, pick: true, id: card.id, hint, sel });
-    });
+    }));
 
     const flatDown = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
 
@@ -356,11 +385,36 @@ export class GuandanScene {
         this.cards.set(key, r);
       }
       r.target = d; r.id = d.id; r.pick = d.pick;
+      if (r.mesh.userData.selectionBorder) r.mesh.userData.selectionBorder.visible = !!d.sel;
       if (r.mesh.material[0] && r.mesh.material[0].emissiveMap) {
-        r.mesh.material[0].emissive.setHex(d.sel ? 0x6a5616 : d.hint ? 0x2a5d3a : d.wild ? 0x4a2168 : 0x3a3a3a);
+        r.mesh.material[0].emissive.setHex(d.hint ? 0x2a5d3a : d.wild ? 0x4a2168 : 0x3a3a3a);
       }
     }
+    this._setSelectionBlink([...want.values()].some((d) => d.sel));
     this._kick(); // re-targeted cards / turn-ring → wake the render loop
+  }
+
+  // Blink at a low cadence and wake WebGL for one frame per change, instead of keeping a permanent
+  // 60fps loop alive while the user considers a selected play.
+  _setSelectionBlink(on) {
+    this._hasSelection = on;
+    if (!on) {
+      if (this._selectionTimer) clearTimeout(this._selectionTimer);
+      this._selectionTimer = null; this._selectionBright = false;
+      return;
+    }
+    if (this._selectionTimer) return;
+    const tick = () => {
+      if (!this._hasSelection) { this._selectionTimer = null; return; }
+      this._selectionBright = !this._selectionBright;
+      for (const card of this.cards.values()) {
+        const border = card.mesh.userData.selectionBorder;
+        if (border && border.visible) border.material.opacity = this._selectionBright ? 1 : 0.72;
+      }
+      this._kick();
+      this._selectionTimer = setTimeout(tick, 360);
+    };
+    tick();
   }
 
   worldToScreen(v) {

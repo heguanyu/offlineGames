@@ -53,13 +53,20 @@ body.flat .c2.mini .rk { font-size: 10px; } body.flat .c2.mini .su { font-size: 
 body.flat .c2.mini.wild::after { display: none; }
 body.flat .c2.play { width: 38px; height: 53px; }
 body.flat .c2.play.lead { box-shadow: 0 0 9px rgba(255,210,80,0.7); }
-body.flat .c2.h { width: 40px; height: 56px; bottom: 5px; transition: bottom 0.12s; }
-body.flat .c2.h.sel { bottom: 24px; box-shadow: 0 0 9px rgba(255,214,90,0.9); }
-body.flat .c2.h.sel.wild { box-shadow: 0 0 0 2px var(--wild), 0 0 9px rgba(255,214,90,0.9); }
+body.flat .c2.h { width: 40px; height: 56px; bottom: 5px; }
+@keyframes selectedGold {
+  0%, 100% { outline-color: #fff2a6; box-shadow: 0 0 5px 2px rgba(255,211,65,0.65); }
+  50% { outline-color: #ffbf00; box-shadow: 0 0 13px 5px rgba(255,211,65,1); }
+}
+body.flat .c2.h.sel {
+  outline: 3px solid #ffcf35; outline-offset: -2px;
+  animation: selectedGold 0.72s ease-in-out infinite;
+}
+body.flat .c2.h.sel.wild { border-color: var(--wild); }
 body.flat .c2.h .rk { font-size: 16px; } body.flat .c2.h .su { font-size: 12px; }
-body.flat .c2.h.hint { outline: 2px solid #2f9a5e; }
+body.flat .c2.h.hint:not(.sel) { outline: 2px solid #2f9a5e; }
 /* flat landscape: the action bar sits just above the hand row, with smaller buttons */
-body.flat #actions.play-bar { bottom: 84px; gap: 8px; }
+body.flat #actions.play-bar { bottom: calc(var(--gd-hand-stack-height, 56px) + 14px); gap: 8px; }
 body.flat .act-btn { font-size: 0.9rem; padding: 8px 16px; border-radius: 11px; }
 
 /* top bar — solid header */
@@ -73,7 +80,9 @@ body.flat .act-btn { font-size: 0.9rem; padding: 8px 16px; border-radius: 11px; 
 #round-info { font-size: 0.82rem; color: #cdeadd; }
 #round-info b { color: var(--gold); }
 #nav .spacer { flex: 1; }
-#mute-btn, #menu-btn { font: inherit; background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
+#mute-btn, #menu-btn, .hand-tool { font: inherit; background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
+.hand-tool { color: #ffe9a8; font-weight: 700; }
+.hand-tool:disabled { opacity: 0.38; cursor: default; }
 
 /* phones: the nav becomes a vertical LEFT rail; the table insets past it */
 body.flat #nav {
@@ -84,6 +93,7 @@ body.flat #nav {
 }
 body.flat #nav #round-info { text-align: center; line-height: 1.32; }
 body.flat #table { left: 84px; }
+body.flat #nav .hand-tool { padding: 6px 3px; font-size: 0.76rem; }
 
 /* team-level scoreboard — top-right corner */
 #scores {

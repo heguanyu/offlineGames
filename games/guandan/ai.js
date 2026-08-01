@@ -227,27 +227,92 @@ function partitionCounts(counts) {
   const c = counts.slice();
   const consider = (grp) => { const sub = partitionCounts(c); const cand = [grp, ...sub]; if (!best || cand.length < best.length) best = cand; };
   // Try the most structural groups first so ties keep big shapes whole (min-count already favors them).
+  if (i === JOKER_S && counts[JOKER_S] >= 2 && counts[JOKER_B] >= 2) {
+    c[JOKER_S] -= 2; c[JOKER_B] -= 2; consider([JOKER_S, JOKER_S, JOKER_B, JOKER_B]); c[JOKER_S] += 2; c[JOKER_B] += 2;
+  }
   for (let s = Math.min(8, counts[i]); s >= 4 && i < 16; s--) { for (let x = 0; x < s; x++) c[i]--; consider(Array(s).fill(i)); for (let x = 0; x < s; x++) c[i]++; }
+  // 三带二. Since i is the first remaining rank, it is either the trip or the pair; checking both
+  // roles makes this a true one-play group instead of a separate trio + pair.
+  if (i < 16 && counts[i] >= 3) {
+    for (let b = i + 1; b <= JOKER_B; b++) if (counts[b] >= 2) {
+      c[i] -= 3; c[b] -= 2; consider([i, i, i, b, b]); c[i] += 3; c[b] += 2;
+    }
+  }
+  if (counts[i] >= 2) {
+    for (let a = i + 1; a <= 14; a++) if (counts[a] >= 3) {
+      c[i] -= 2; c[a] -= 3; consider([a, a, a, i, i]); c[i] += 2; c[a] += 3;
+    }
+  }
+  if (i === 2 && counts[14] && counts[2] && counts[3] && counts[4] && counts[5]) {
+    const g = [14, 2, 3, 4, 5]; for (const r of g) c[r]--; consider(g); for (const r of g) c[r]++;
+  }
   if (i <= 10) { let ok = true; for (let r = i; r < i + 5; r++) if (!counts[r]) { ok = false; break; } if (ok) { const g = []; for (let r = i; r < i + 5; r++) { c[r]--; g.push(r); } consider(g); for (let r = i; r < i + 5; r++) c[r]++; } } // 顺子
   if (i <= 13) { let ok = true; for (let r = i; r < i + 2; r++) if (counts[r] < 3) { ok = false; break; } if (ok) { const g = []; for (let r = i; r < i + 2; r++) { c[r] -= 3; g.push(r, r, r); } consider(g); for (let r = i; r < i + 2; r++) c[r] += 3; } } // 钢板
   if (i <= 12) { let ok = true; for (let r = i; r < i + 3; r++) if (counts[r] < 2) { ok = false; break; } if (ok) { const g = []; for (let r = i; r < i + 3; r++) { c[r] -= 2; g.push(r, r); } consider(g); for (let r = i; r < i + 3; r++) c[r] += 2; } } // 木板
   if (counts[i] >= 3 && i < 16) { c[i] -= 3; consider([i, i, i]); c[i] += 3; }
-  if (counts[i] >= 2 && i < 16) { c[i] -= 2; consider([i, i]); c[i] += 2; }
+  if (counts[i] >= 2) { c[i] -= 2; consider([i, i]); c[i] += 2; }
   c[i]--; consider([i]); c[i]++;
   partCache.set(key, best);
   return best.map((g) => g.slice());
 }
-// Best partition of a hand into groups of CARD IDS (naturals only; wildcards are spare, never "split").
-function bestPartition(cards, level) {
-  const nat = cards.filter((c) => !isWild(c, level));
-  const counts = new Array(18).fill(0); for (const c of nat) counts[c.rank]++;
-  const pool = nat.slice(); const out = [];
-  for (const grp of partitionCounts(counts)) {
-    const ids = [];
-    for (const r of grp) { const i = pool.findIndex((c) => c.rank === r); if (i >= 0) { ids.push(pool[i].id); pool.splice(i, 1); } }
-    out.push(ids);
-  }
-  return out;
+const PART_VALUE = {
+  [COMBO.PAIR]: 4, [COMBO.TRIO]: 9, [COMBO.TRIO_PAIR]: 30,
+  [COMBO.STRAIGHT]: 34, [COMBO.PLATE]: 42, [COMBO.TUBE]: 46,
+  [COMBO.BOMB]: 60, [COMBO.STRAIGHT_FLUSH]: 85, [COMBO.JOKER_BOMB]: 100,
+};
+
+// Best fewest-play partition of a hand into groups of CARD IDS. Wildcards are assigned to every
+// possible natural rank (at most two level hearts exist), then the strongest minimum-count
+// partition wins. This is fast enough for an interactive 自动理牌 click and every emitted stack is
+// verified by the authoritative classifier.
+export function bestPartition(cards, level) {
+  const naturals = cards.filter((c) => !isWild(c, level));
+  const wilds = cards.filter((c) => isWild(c, level));
+  const counts = new Array(18).fill(0); for (const c of naturals) counts[c.rank]++;
+  const assigned = new Array(18).fill(0);
+  let best = null;
+
+  const materialize = () => {
+    const ranks = partitionCounts(counts);
+    const pool = naturals.slice(); const spareWilds = wilds.slice(); const virtual = assigned.slice(); const groups = [];
+    for (const grp of ranks) {
+      const picked = [];
+      // For five distinct sequence ranks, prefer a natural/wild same-suit realization so a real
+      // 同花顺 is not accidentally displayed as an ordinary straight merely due to deck order.
+      const distinctFive = grp.length === 5 && new Set(grp).size === 5;
+      let flushSuit = -1;
+      if (distinctFive) {
+        flushSuit = [0, 1, 2, 3].find((suit) => grp.every((r) => pool.some((card) => card.rank === r && card.suit === suit) || virtual[r] > 0));
+        if (flushSuit == null) flushSuit = -1;
+      }
+      for (const r of grp) {
+        const suited = flushSuit >= 0 ? pool.findIndex((card) => card.rank === r && card.suit === flushSuit) : -1;
+        const any = pool.findIndex((card) => card.rank === r);
+        const i = suited >= 0 ? suited : (flushSuit < 0 ? any : -1);
+        if (i >= 0) picked.push(pool.splice(i, 1)[0]);
+        else if (virtual[r] > 0 && spareWilds.length) { virtual[r]--; picked.push(spareWilds.shift()); }
+        else if (any >= 0) picked.push(pool.splice(any, 1)[0]);
+      }
+      const d = picked.length === grp.length ? classify(picked, level) : null;
+      if (!d) return;
+      groups.push(picked.map((card) => card.id));
+    }
+    if (groups.flat().length !== cards.length) return;
+    const value = groups.reduce((sum, ids) => {
+      const d = classify(ids.map((id) => cards.find((card) => card.id === id)), level);
+      return sum + (PART_VALUE[d.type] || 0) + ids.length;
+    }, 0);
+    if (!best || groups.length < best.groups.length || (groups.length === best.groups.length && value > best.value)) best = { groups, value };
+  };
+
+  const assignWilds = (left) => {
+    if (!left) { materialize(); return; }
+    for (let r = 2; r <= 14; r++) { counts[r]++; assigned[r]++; assignWilds(left - 1); assigned[r]--; counts[r]--; }
+  };
+  assignWilds(wilds.length);
+  // Defensive fallback: singles are always legal, even if a future rules change adds an
+  // assignment shape the count-vector model does not know yet.
+  return best ? best.groups : cards.map((card) => [card.id]);
 }
 // How much a move breaks the hand's structure: for each group it uses SOME-BUT-NOT-ALL of, add the
 // group's size (so splitting a 5-card 顺子 hurts more than a 3-card trip, which hurts more than a pair).

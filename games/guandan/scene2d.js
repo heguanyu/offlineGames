@@ -136,26 +136,36 @@ export class GuandanScene2D {
       });
     }
 
-    // human hand — overlapping row along the bottom; selected cards lift
+    // Human hand: stacks run horizontally, while cards inside a stack fan vertically. The default
+    // controller layout creates one stack per rank; auto/manual arrangements use the same geometry.
     const hand = view.hand || [];
-    const n = hand.length;
+    const byId = new Map(hand.map((card) => [card.id, card]));
+    const stacks = (view.handStacks && view.handStacks.length ? view.handStacks : hand.map((card) => [card.id]))
+      .map((ids) => ids.map((id) => byId.get(id)).filter(Boolean)).filter((cards) => cards.length);
+    const n = stacks.length;
     const avail = W - 16;
-    const cw = 42;
-    const step = Math.min(cw * 0.72, n > 1 ? (avail - cw) / (n - 1) : 0);
-    const x0 = (W - (cw + step * (n - 1))) / 2;
-    hand.forEach((card, i) => {
+    const cw = 40;
+    const step = Math.min(cw + 5, n > 1 ? (avail - cw) / (n - 1) : 0);
+    const x0 = (W - (cw + step * Math.max(0, n - 1))) / 2;
+    const vstep = 13;
+    const maxDepth = Math.max(1, ...stacks.map((stack) => stack.length));
+    this.mount.style.setProperty('--gd-hand-stack-height', (56 + (maxDepth - 1) * vstep) + 'px');
+    stacks.forEach((stack, si) => stack.forEach((card, ci) => {
       const sel = view.selected && view.selected.has(card.id);
       const hint = view.hint && view.hint.has(card.id);
       const el = faceCard(card, isWild(card, lv));
-      el.classList.add('h');
+      el.classList.add('h'); el.dataset.cardId = card.id;
       if (sel) el.classList.add('sel');
       if (hint) el.classList.add('hint');
-      el.style.left = (x0 + i * step) + 'px';
-      el.style.zIndex = 100 + i;
+      el.style.left = (x0 + si * step) + 'px';
+      // Earlier cards sit higher; later cards overlay them below, leaving every index readable.
+      el.style.bottom = (5 + (stack.length - 1 - ci) * vstep) + 'px';
+      el.style.zIndex = 100 + si * 12 + ci;
       b.appendChild(el);
-    });
-    let i = 0;
-    for (const el of b.querySelectorAll('.c2.h')) { this.handRects.push({ id: hand[i].id, rect: el.getBoundingClientRect() }); i++; }
+    }));
+    for (const el of b.querySelectorAll('.c2.h')) {
+      this.handRects.push({ id: +el.dataset.cardId, rect: el.getBoundingClientRect() });
+    }
   }
 
   // no-op FX hooks (the flat board doesn't animate); main.js calls these guarded with ?.
