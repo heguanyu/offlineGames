@@ -1,5 +1,6 @@
-// Computer opponents for Tianjin mahjong, three strengths. Decisions: which tile
-// to discard, whether to claim a 碰/杠 off a discard, and whether to self-kong.
+// Computer opponents for Tianjin mahjong. Production always uses HARD; EASY/NORMAL remain as
+// deterministic baselines for AI regression tests. Decisions: which tile to discard, whether to
+// claim a 碰/杠 off a discard, and whether to self-kong.
 //
 // All levels share one hand evaluator (structScore + tenpai detection); the
 // levels differ in how much they trust it, how aggressively they claim, and
@@ -9,7 +10,6 @@ import {
 } from './engine.js';
 
 export const LEVELS = { EASY: 1, NORMAL: 2, HARD: 3 };
-export const LEVEL_NAMES = { 1: '新手', 2: '普通', 3: '高手' };
 
 // Structure weights — a coarse shanten proxy. A complete meld is worth much more
 // than a partial; a pair (eye) a little more than a generic partial.

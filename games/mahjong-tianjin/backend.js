@@ -36,10 +36,11 @@
 //   { type:'over', result }                     the hand ended
 
 import { Game, PHASE } from './engine.js';
-import { chooseDiscard, chooseClaim, chooseSelfKong } from './ai.js';
+import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS } from './ai.js';
 import { RemoteBackendBase } from '../mahjong-common/remote-backend.js';
 
 export const HUMAN = 0;
+const AI_LEVEL = LEVELS.HARD;
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -67,7 +68,6 @@ export function createBackend(config = {}) {
 export class LocalBackend {
   constructor(config = {}) {
     this.rng = config.rng || Math.random;
-    this.level = config.level ?? 2;
     this.thinkDelay = config.thinkDelay ?? 600; // bot "thinking" (the online latency stand-in)
     this._game = null;
     this._handler = null;
@@ -87,10 +87,9 @@ export class LocalBackend {
   _ask(ev) { return new Promise((res) => { this._lzResolve = res; this._emit(ev); }); }
   decideLaZhuang(yes) { const r = this._lzResolve; this._lzResolve = null; if (r) r(yes); }
 
-  // Deal and play one hand. cfg: { dealer, prevailingWind, scores, seatBase, level }.
+  // Deal and play one hand. cfg: { dealer, prevailingWind, scores, seatBase }.
   async startHand(cfg) {
     const gen = ++this._gen;
-    if (cfg.level != null) this.level = cfg.level;
     // Deal FIRST (the UI refreshes to the new hand); 拉庄 is asked AFTER, still blind — the UI keeps
     // the human's own hand face-down until they answer. Each bot takes a 50% gamble (shouldBotLaZhuang).
     this._game = new Game({
@@ -160,7 +159,7 @@ export class LocalBackend {
       if (g.phase === PHASE.AWAIT_CLAIM) {
         if (g.claim.player === HUMAN) { await this._emit({ type: 'await', who: 'claim' }); return; }
         await delay(this.thinkDelay); if (gen !== this._gen) return;
-        const c = g.claim, dec = chooseClaim(g, c.player, c, this.level, this.rng);
+        const c = g.claim, dec = chooseClaim(g, c.player, c, AI_LEVEL, this.rng);
         if (dec) { const kind = c.kind; g.claimDiscard(dec); await this._emit({ type: 'claim', player: c.player, claimType: dec, kind }); }
         else g.passClaim();
         continue;
@@ -170,9 +169,9 @@ export class LocalBackend {
       await delay(this.thinkDelay); if (gen !== this._gen) return;
       const p = g.turn;
       if (g.selfDrawWin) { g.declareWin(); continue; }                 // bot takes its self-draw win → OVER
-      const kong = chooseSelfKong(g, p, this.level, this.rng);
+      const kong = chooseSelfKong(g, p, AI_LEVEL, this.rng);
       if (kong !== null) { g.selfKong(p, kong); await this._emit({ type: 'selfKong', player: p, kind: kong }); continue; }
-      const dt = chooseDiscard(g, p, this.level, this.rng);
+      const dt = chooseDiscard(g, p, AI_LEVEL, this.rng);
       g.discard(p, dt);
       await this._emit({ type: 'discard', player: p, tile: dt, discardIndex: g.discardLog.length - 1 });
     }

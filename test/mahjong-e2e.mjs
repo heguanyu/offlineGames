@@ -18,8 +18,9 @@ try {
 
   await page.goto(`http://localhost:${PORT}/games/mahjong-tianjin/?fast=1`, { waitUntil: 'networkidle0' });
 
-  // Start a hand on Normal difficulty; the 3D table + action bar should appear.
+  // The offline game has one strongest AI policy; the 3D table + action bar should appear.
   await page.waitForSelector('#start-btn');
+  if (await page.$('#level-row, .level-btn')) throw new Error('Tianjin Mahjong difficulty selector is still present');
   await page.click('#start-btn');
   await page.waitForFunction(() => (window.__mj && window.__mj.humanTurn()) ||
     document.querySelector('#action-bar .act-btn') ||
@@ -36,10 +37,10 @@ try {
   if (timerVis.dom || timerVis.mesh) throw new Error(`offline turn timer is showing (dom=${timerVis.dom}, mesh=${timerVis.mesh})`);
   console.log('offline turn timer correctly hidden');
 
-  // round-info reads 圈 · 庄 · 难度 (座风 fixed for the 锅; no more 第N局).
+  // round-info reads 圈 · 庄 (座风 fixed for the 锅; no difficulty label and no more 第N局).
   const roundInfo = await page.$eval('#round-info', (e) => e.textContent);
-  if (!roundInfo.includes('圈') || !roundInfo.includes('庄') || roundInfo.includes('局'))
-    throw new Error(`round-info should be 圈·庄·难度, got: ${roundInfo}`);
+  if (!roundInfo.includes('圈') || !roundInfo.includes('庄') || roundInfo.includes('局') || roundInfo.includes('难度'))
+    throw new Error(`round-info should be 圈·庄 only, got: ${roundInfo}`);
   console.log('round-info:', roundInfo.replace(/\s+/g, ' ').trim());
 
   // Auto-play: pass every claim, discard on every turn, until a result shows.

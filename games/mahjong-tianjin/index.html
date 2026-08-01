@@ -11,8 +11,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0c2a1e">
 <link rel="stylesheet" href="../mahjong-common/board.css">
-<!-- Online play is driven by the lobby/server (no local difficulty pick). Hide the difficulty
-     start screen BEFORE first paint so it never flashes while the deferred module boots. -->
+<!-- Online play is driven by the lobby/server. Hide the local start screen BEFORE first paint so
+     it never flashes while the deferred module boots. -->
 <script>if (new URLSearchParams(location.search).get('online')) document.documentElement.dataset.online = '1';</script>
 <style>
 html[data-online] #start-overlay { display: none !important; }
@@ -200,16 +200,11 @@ body.flat .lz-arrow-3 { left: -16px; border-top-width: 9px; border-bottom-width:
   </main>
   <div id="ting-center"></div>
 
-  <!-- start / difficulty -->
+  <!-- start -->
   <div class="overlay" id="start-overlay">
     <div class="panel">
       <h2>天津麻将</h2>
       <p class="sub">混儿百搭 · 只能自摸 · 不能吃牌</p>
-      <div class="level-row" id="level-row">
-        <div class="level-btn" data-level="1"><b>新手</b><span>随手出牌，少碰</span></div>
-        <div class="level-btn sel" data-level="2"><b>普通</b><span>看张听牌</span></div>
-        <div class="level-btn" data-level="3"><b>高手</b><span>算番抢混</span></div>
-      </div>
       <button class="big-btn" id="start-btn">开始牌局</button>
       <button class="link-btn" id="rules-link">查看规则 / Rules</button>
       <button class="big-btn hub" id="start-hub-link">← 返回主页</button>

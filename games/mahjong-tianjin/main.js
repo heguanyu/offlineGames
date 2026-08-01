@@ -5,7 +5,6 @@
 // plumbing lives in the base; this file adds 天津's rules-specific UI (混儿 wilds,
 // 拉庄, 起和 2番 scoring, 历史战绩).
 import { PHASE, tileName } from './engine.js';
-import { LEVELS, LEVEL_NAMES } from './ai.js';
 import { createBackend } from './backend.js';
 import { MahjongScene } from '../mahjong-common/scene.js';
 import { MahjongScene2D } from '../mahjong-common/scene2d.js';
@@ -85,7 +84,6 @@ const FAN_MULT = { '素': 2, '混吊': 2, '双混吊': 2, '杠开': 2 };
 class TianjinGame extends MahjongGame {
   constructor() {
     super();
-    this.level = LEVELS.NORMAL;
     this.session = this.loadSession();   // { scores, dealer, prevailingWind, hand }
     this.noSel = VIEWER;          // nothing lifted (set right after you discard; any pick/hover/turn clears it). A
                                   // viewer starts with NOTHING lifted — the selection is local UI, not the watched
@@ -97,8 +95,6 @@ class TianjinGame extends MahjongGame {
     this.lzCallback = null; this.lzFocus = 1; // panel: 0 = 拉庄, 1 = 不拉 (default, no accidental double)
     this.lzTestChoice = false;           // FAST/e2e override for the human's answer (no panel in tests)
     this.histClearArm = false; // 清空历史 needs two clicks to confirm
-    const lv = parseInt(localStorage.getItem('mahjong-level'), 10);
-    if (lv >= 1 && lv <= 3) this.level = lv;
   }
 
   // ---------------------------------------------------------------------------
@@ -125,7 +121,6 @@ class TianjinGame extends MahjongGame {
   saveSession() {
     this.session.scores = this.game ? this.game.scores.slice() : this.session.scores;
     localStorage.setItem('mahjong-session', JSON.stringify(this.session));
-    localStorage.setItem('mahjong-level', String(this.level));
   }
 
   // Persistent 锅 history — one record { at, scores } per FINISHED 锅. Kept under its own
@@ -162,7 +157,7 @@ class TianjinGame extends MahjongGame {
     const watching = VIEWER && this.game.seatNames ? `<span class="viewing">👁 观战 ${esc(this.game.seatNames[HUMAN] || '')}</span> · ` : '';
     $('round-info').innerHTML = watching +
       `<span class="ri-round"><b>${WIND[this.game.prevailingWind]}圈</b> · <b>${WIND[this.game.seatWind(this.game.dealer)]}庄</b></span>` +
-      `<span class="ri-level">${ONLINE ? '联机' : `难度 · <b>${LEVEL_NAMES[this.level]}</b>`}</span>`;
+      (ONLINE ? '<span class="ri-level">联机</span>' : '');
     this.renderScores();
 
     // ---- the round's two 混儿 (e.g. 7万 + 8万), shown with their real faces ----
@@ -746,7 +741,7 @@ class TianjinGame extends MahjongGame {
     // onBackendEvent. The 锅/圈 progression + persistence stay UI-side (nextHand/session).
     this.backend.startHand({
       dealer: this.session.dealer, prevailingWind: this.session.prevailingWind,
-      scores: this.session.scores, seatBase: this.session.seatBase, level: this.level,
+      scores: this.session.scores, seatBase: this.session.seatBase,
     });
   }
 
@@ -1027,18 +1022,6 @@ class TianjinGame extends MahjongGame {
   }
 
   bindUI() {
-    // difficulty selection
-    $('level-row').addEventListener('click', (e) => {
-      const btn = e.target.closest('.level-btn');
-      if (!btn) return;
-      [...$('level-row').children].forEach((c) => c.classList.remove('sel'));
-      btn.classList.add('sel');
-      this.level = parseInt(btn.dataset.level, 10);
-    });
-    // preselect saved level
-    [...$('level-row').children].forEach((c) =>
-      c.classList.toggle('sel', parseInt(c.dataset.level, 10) === this.level));
-
     $('start-btn').addEventListener('click', () => {
       $('start-overlay').classList.add('hidden');
       this.gameStarted = true;
@@ -1046,7 +1029,7 @@ class TianjinGame extends MahjongGame {
       this.startHand();
     });
     $('rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
-    $('start-hub-link').addEventListener('click', () => { location.replace(homeHref()); }); // difficulty screen → hub (or the /mj/ sub-hub)
+    $('start-hub-link').addEventListener('click', () => { location.replace(homeHref()); }); // start screen → hub (or the /mj/ sub-hub)
     $('menu-rules-link').addEventListener('click', () => $('rules-overlay').classList.remove('hidden'));
     $('rules-close').addEventListener('click', () => $('rules-overlay').classList.add('hidden'));
     $('menu-btn').addEventListener('click', () => this.openMenu());
