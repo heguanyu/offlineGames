@@ -45,6 +45,25 @@ try {
     const spread = (values) => Math.max(...values) - Math.min(...values);
     if (spread(samples.turn) > 0.001) throw new Error('turn indicator blinked with selected card');
     if (spread(samples.border) < 0.08) throw new Error('selected-card border did not animate smoothly');
+
+    // An unbeatable lead should explain the forced pass and visually recommend 不要.
+    const forcedPass = await page.evaluate(() => {
+      const round = window.__gd.state().round;
+      const saved = { lead: round.lead, leadSeat: round.leadSeat };
+      round.lead = { type: 'jokerbomb', n: 4, bomb: true, bombScore: 9999, key: 9999 };
+      round.leadSeat = 1;
+      window.__gd.render();
+      const result = {
+        recommended: document.querySelector('#pass-btn').classList.contains('recommended'),
+        note: document.querySelector('#action-hint').textContent,
+        hintDisabled: document.querySelector('#hint-btn').disabled,
+      };
+      round.lead = saved.lead; round.leadSeat = saved.leadSeat; window.__gd.render();
+      return result;
+    });
+    if (!forcedPass.recommended || forcedPass.note !== '无牌可压，只能不要' || !forcedPass.hintDisabled) {
+      throw new Error('forced-pass recommendation missing: ' + JSON.stringify(forcedPass));
+    }
   }
 
   const deadline = Date.now() + 90000;

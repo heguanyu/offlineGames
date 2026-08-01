@@ -2,7 +2,7 @@
 // through it (async), and reacts to the backend's awaited events — the same UI↔Backend split as the
 // 斗地主 / mahjong games, so this whole layer is offline/online-agnostic.
 import { createBackend, HUMAN } from './backend.js';
-import { classify, rankLabel, isWild, teamOf, partnerOf, isBombType, COMBO } from './engine.js';
+import { legalMoves, classify, rankLabel, isWild, teamOf, partnerOf, isBombType, COMBO } from './engine.js';
 import { chooseMove, orderedHints, cleanestBeat } from './ai.js';
 import { GuandanScene } from './scene.js';
 import { GuandanScene2D } from './scene2d.js';
@@ -368,10 +368,11 @@ function clearBubbles() { for (const b of $('overlays').querySelectorAll('.bubbl
 // ---- action bar: play / pass / hint ---------------------------------------
 function showPlayBar() {
   const bar = $('actions'); bar.hidden = false; bar.innerHTML = ''; bar.classList.add('play-bar');
+  const note = document.createElement('div'); note.id = 'action-hint'; note.className = 'action-hint'; note.hidden = true;
   const pass = mkBtn('不要', 'act-btn pass', () => doPass()); pass.id = 'pass-btn';
   const hint = mkBtn('提示', 'act-btn ghost', () => doHint()); hint.id = 'hint-btn';
   const play = mkBtn('出牌', 'act-btn', () => doPlay()); play.id = 'play-btn';
-  bar.append(pass, hint, play);
+  bar.append(note, pass, hint, play);
   refreshPlayBar();
 }
 // Pre-select a sensible default ONLY when following; leave a free lead empty. The bot decides
@@ -393,10 +394,16 @@ function hideActions() { $('actions').hidden = true; $('actions').innerHTML = ''
 
 function refreshPlayBar() {
   const g = state.backend.getState().round;
-  const playBtn = $('play-btn'), passBtn = $('pass-btn');
+  const playBtn = $('play-btn'), passBtn = $('pass-btn'), hintBtn = $('hint-btn'), note = $('action-hint');
   if (!playBtn) return;
+  const following = g.leadSeat !== HUMAN;
+  const noBeat = following && legalMoves(g.hands[HUMAN], g.lead, g.level).length === 0;
   playBtn.disabled = !selectionLegal(g);
-  passBtn.disabled = g.leadSeat === HUMAN;
+  passBtn.disabled = !following;
+  passBtn.classList.toggle('recommended', noBeat);
+  hintBtn.disabled = noBeat;
+  note.hidden = !noBeat;
+  note.textContent = noBeat ? '无牌可压，只能不要' : '';
 }
 function selectionLegal(g) {
   const ids = state.sel.ids;
@@ -544,6 +551,7 @@ window.__gd = {
   resultShown: () => !$('result-overlay').hidden,
   scene: () => state.scene,
   state: () => state.backend && state.backend.getState(),
+  render: () => render(),
   step() {
     if (state.awaiting !== 'play') return 'wait';
     const g = state.backend.getState().round;

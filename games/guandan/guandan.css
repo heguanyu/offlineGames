@@ -182,6 +182,23 @@ body.flat .hand-tool { font-size: 0.72rem; padding: 6px 10px; border-radius: 8px
 #actions.play-bar { bottom: 35%; }
 @keyframes btnGlow { 0%, 100% { filter: drop-shadow(0 0 2px rgba(255,240,200,0.45)); } 50% { filter: drop-shadow(0 0 11px rgba(255,240,200,0.92)); } }
 #actions .act-btn:not(:disabled):not(.ghost) { animation: btnGlow 1.5s ease-in-out infinite; }
+@keyframes recommendedPass {
+  0%, 100% { outline-color: rgba(255,238,150,0.7); filter: drop-shadow(0 0 4px rgba(255,211,65,0.65)); }
+  50% { outline-color: #fff4b0; filter: drop-shadow(0 0 13px rgba(255,211,65,1)); }
+}
+#actions .act-btn.pass.recommended {
+  background: linear-gradient(#ffe991, #e9bd43); color: #302100;
+  outline: 3px solid #ffe074; outline-offset: 2px;
+  animation: recommendedPass 0.8s ease-in-out infinite;
+}
+.action-hint {
+  position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
+  padding: 5px 12px; border-radius: 10px; white-space: nowrap;
+  color: #fff0ac; background: rgba(4,18,12,0.9); border: 1px solid var(--gold);
+  font-size: 0.82rem; font-weight: 750; box-shadow: 0 4px 12px rgba(0,0,0,0.38);
+  pointer-events: none;
+}
+.action-hint[hidden] { display: none; }
 .act-btn {
   font: inherit; font-size: 1.12rem; font-weight: 800; color: #06250f;
   background: linear-gradient(#f3d785, #e3b94f); border: none; border-radius: 14px;
