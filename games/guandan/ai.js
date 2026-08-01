@@ -1,13 +1,7 @@
 // 掼蛋 AI. Pure, no DOM, Node-testable. Built on engine.js's legalMoves()/classify().
 //
-// Difficulty tiers:
-//   level 0 (新手)  — the heuristic with heavy noise; erratic, over-eager.
-//   level 1 (普通)  — the full heuristic: a WILD-AWARE fewest-plays hand value, a steep card-cost
-//                     curve (cheap to spend 2..J, dear to spend the trump/jokers/bombs), an
-//                     initiative (tempo) term so it actively contests opponents' leads, and 队友
-//                     cooperation (let a winning partner keep the lead; race to go out after 接风).
-//   level 2 (高手)  — same model, a touch sharper (fights harder for the lead, conserves control
-//                     a hair more). No Monte-Carlo (27-card 4-hand rollouts are too costly offline).
+// Production always runs the strongest policy (level 2). Levels 0/1 remain only as deterministic
+// baselines for AI regression/self-play tests; there is no player-facing difficulty setting.
 //
 // Design note: an earlier version passed ~60% of the time even when it held a non-bomb beat — it
 // gave taking a trick no value and over-charged every card. This version prices cards by a steep
@@ -17,7 +11,7 @@ import { legalMoves, classify, COMBO, isBombType, isWild, teamOf, partnerOf, str
 
 // ---- fewest-plays hand value (the decomposition engine) --------------------
 // "How few separate plays can empty this hand?" — the dominant strength signal. minSplit() counts
-// the structural Guandan groups (single/pair/trip/bomb/顺子/木板/钢板) over a count-vector of
+// the structural Guandan groups (single/pair/trip/三带二/bomb/顺子/木板/钢板) over a count-vector of
 // NATURAL cards. handPlays() wraps it to be WILD-AWARE: each ♥-level wildcard is assigned to the
 // rank that minimises the play count (逢人配 — it fills the cheapest gap), instead of being frozen
 // at the level rank. This is what lets the bot value "what a play leaves behind" correctly.
@@ -34,7 +28,24 @@ function minSplit(counts) {
   c[i]--; best = Math.min(best, 1 + minSplit(c)); c[i]++;                          // single
   if (k >= 2) { c[i] -= 2; best = Math.min(best, 1 + minSplit(c)); c[i] += 2; }    // pair
   if (k >= 3 && i < 16) { c[i] -= 3; best = Math.min(best, 1 + minSplit(c)); c[i] += 3; } // trip
+  if (i === JOKER_S && counts[JOKER_S] >= 2 && counts[JOKER_B] >= 2) {             // 天王炸
+    c[JOKER_S] -= 2; c[JOKER_B] -= 2; best = Math.min(best, 1 + minSplit(c)); c[JOKER_S] += 2; c[JOKER_B] += 2;
+  }
   for (let s = 4; s <= 8 && k >= s && i < 16; s++) { c[i] -= s; best = Math.min(best, 1 + minSplit(c)); c[i] += s; } // bomb
+  // 三带二. Since i is the lowest remaining rank, it can be either the trip or the pair.
+  if (k >= 3 && i < 16) {
+    for (let b = i + 1; b <= JOKER_B; b++) if (counts[b] >= 2) {
+      c[i] -= 3; c[b] -= 2; best = Math.min(best, 1 + minSplit(c)); c[i] += 3; c[b] += 2;
+    }
+  }
+  if (k >= 2) {
+    for (let a = i + 1; a <= 14; a++) if (counts[a] >= 3) {
+      c[i] -= 2; c[a] -= 3; best = Math.min(best, 1 + minSplit(c)); c[i] += 2; c[a] += 3;
+    }
+  }
+  if (i === 2 && counts[14] && counts[2] && counts[3] && counts[4] && counts[5]) {   // A2345
+    const g = [14, 2, 3, 4, 5]; for (const r of g) c[r]--; best = Math.min(best, 1 + minSplit(c)); for (const r of g) c[r]++;
+  }
   if (i <= 10) {                                                                    // 顺子 (5 consecutive)
     let ok = true; for (let r = i; r < i + 5; r++) if (!counts[r]) { ok = false; break; }
     if (ok) { for (let r = i; r < i + 5; r++) c[r]--; best = Math.min(best, 1 + minSplit(c)); for (let r = i; r < i + 5; r++) c[r]++; }
@@ -87,6 +98,28 @@ function buildView(round, seat) {
   };
 }
 
+function opponentSeats(seat) { return [(seat + 1) % 4, (seat + 3) % 4]; }
+
+// Cheap inventory signal used by the expert policy. Rank bombs and 天王炸 are counted exactly;
+// straight flushes count as one extra resource (overlapping flush windows are deliberately not
+// double-counted). Wildcards are allocated to at most one otherwise-incomplete rank bomb.
+function bombContext(view, legal) {
+  const { counts, wild } = decompose(view.hand, view.level);
+  let count = 0, spareWild = wild;
+  for (let r = 2; r <= 14; r++) if (counts[r] >= 4) count++;
+  const incomplete = [];
+  for (let r = 2; r <= 14; r++) if (counts[r] < 4 && counts[r] + spareWild >= 4) incomplete.push(4 - counts[r]);
+  incomplete.sort((a, b) => a - b);
+  if (incomplete.length && incomplete[0] <= spareWild) { count++; spareWild -= incomplete[0]; }
+  if (counts[JOKER_S] >= 2 && counts[JOKER_B] >= 2) count++;
+  const bombs = legal.filter((m) => m.bomb);
+  if (bombs.some((m) => m.type === COMBO.STRAIGHT_FLUSH)) count++;
+  return {
+    count,
+    minScore: bombs.length ? Math.min(...bombs.map((m) => m.bombScore)) : Infinity,
+  };
+}
+
 // ---- card / bomb pricing ---------------------------------------------------
 // A STEEP curve: 2..J are nearly free to spend (you must shed them anyway), Q/K/A cost a little,
 // and the trump rank / jokers are dear (true control — hoard them). This is the lever that makes the
@@ -132,7 +165,7 @@ function splitsBomb(view, move) {
 // it sits BELOW the trump/joker prices (42+) so the bot still won't dump true control on a big hand —
 // only the closing / stop-a-threat bonuses push it to spend those. Aggressive AND control-aware.
 const TEMPO = 40;
-function scoreMove(view, move, baseCounts, baseWild, basePlays, level, rng, tempo) {
+function scoreMove(view, move, baseCounts, baseWild, basePlays, level, rng, tempo, bombs) {
   const n = move.cardIds.length;
   if (n === view.hand.length) return 1e6;                    // empties the hand → win
   // plays left AFTER this move (wild-aware): the structural cost.
@@ -142,11 +175,14 @@ function scoreMove(view, move, baseCounts, baseWild, basePlays, level, rng, temp
   const frag = (after + 1) - basePlays;                      // 0 = clean group, >0 = broke a sequence/structure
   let s = -frag * 26 + n * 1.5;                              // reward clean groups + shedding cards
   s -= move.bomb ? bombCost(move) : handPrice(view, move);   // spend cheap cards freely, hoard control/bombs
-  s += strategicAdj(view, move, n, tempo);
+  // A small, explicit cost lets the expert consider 拆小炸 when it materially shortens a bad hand,
+  // without treating a bomb as just another pile of cheap low cards.
+  if (level >= 2 && splitsBomb(view, move)) s -= after <= 2 ? 4 : 12;
+  s += strategicAdj(view, move, { n, tempo, after, bombs }, level);
   if (level === 0) s += (rng() - 0.5) * 120;
   return s;
 }
-function strategicAdj(view, move, n, tempo) {
+function baselineStrategicAdj(view, move, n, tempo) {
   const following = view.against != null;
   let adj = 0;
   if (following) {
@@ -166,6 +202,73 @@ function strategicAdj(view, move, n, tempo) {
   return adj;
 }
 
+// Expert policy distilled into observable table decisions:
+// - 牌权 has value even when acquired with a bomb; a bomb is a means, not a trophy.
+// - Use the smallest/redundant bomb to create a one- or two-hand finish, counter a bomb, or stop a
+//   closing opponent; still preserve a lone bomb early when none of those conditions applies.
+// - On a free lead, do not feed an opponent exactly the shape/size needed to go out.
+// - When a partner has 1–2 cards and opponents are not closer, lead a cheap matching single/pair.
+function expertStrategicAdj(view, move, { n, tempo, after, bombs }) {
+  const following = view.against != null;
+  const opponents = opponentSeats(view.seat).filter((s) => view.handCounts[s] > 0);
+  const closestOpp = opponents.length ? Math.min(...opponents.map((s) => view.handCounts[s])) : 99;
+  const partnerLeft = view.handCounts[view.partner];
+  const partnerOut = view.finished.includes(view.partner) || partnerLeft === 0;
+  let adj = 0;
+
+  if (following) {
+    if (view.leadSeat === view.partner) return -300;
+    const leadLeft = view.handCounts[view.leadSeat];
+    const myLeft = view.hand.length;
+    if (!move.bomb) {
+      adj += tempo;
+      if (myLeft <= 12) adj += (13 - myLeft) * 1.7;
+      if (partnerLeft > 0 && partnerLeft <= 2) adj += 10;    // take control, then try to feed the partner
+    } else {
+      adj += 14;                                            // bombs also buy 牌权
+      if (view.against && view.against.bomb) adj += 24;     // counter-bomb: regain the table
+      if (after <= 2) adj += (3 - after) * 20;              // bomb → one/two clean exits
+      if (bombs.count >= 2) adj += 18;                      // spend the lower layer of redundant firepower
+      if (move.bombScore === bombs.minScore) adj += 6;      // use the smallest bomb that does the job
+      if (partnerLeft > 0 && partnerLeft <= 2) adj += 14;   // protect a partner who is reporting out
+      const noPurpose = bombs.count <= 1 && after > 2 && leadLeft > 6 && !(view.against && view.against.bomb);
+      if (noPurpose) adj -= myLeft > 12 ? 20 : 12;          // retain a lone early bomb, but not blindly
+    }
+    if (leadLeft <= 6) adj += (7 - leadLeft) * 10;          // stop the current leader from closing
+    if (closestOpp <= 3) adj += (4 - closestOpp) * 8;       // either opponent near out raises 牌权 value
+  } else {
+    if (partnerOut) adj += n * 4;                           // 接风: unload the largest clean group
+    if (move.bomb) {
+      adj -= 42;                                            // opening bombs still need a concrete payoff
+      if (after === 1) adj += 54;
+      else if (after === 2) adj += 24;
+      if (bombs.count >= 2) adj += 8;
+    } else {
+      // Exact-size denial: with one card left, don't lead a single; with two, don't lead a pair.
+      // For longer last hands the information is weaker, so the penalty tapers quickly.
+      let exactPenalty = 0;
+      for (const s of opponents) if (view.handCounts[s] === n) {
+        exactPenalty = Math.max(exactPenalty, n === 1 ? 72 : n === 2 ? 56 : n <= 4 ? 28 : 16);
+      }
+      adj -= exactPenalty;
+      if (closestOpp === 1 && move.type !== COMBO.SINGLE) adj += 20;
+      else if (closestOpp === 2 && move.type !== COMBO.PAIR) adj += 12;
+      else if (closestOpp <= 5 && n > closestOpp) adj += 6;
+
+      // 送牌: only do this when the partner is closer than either opponent, and use a cheap shape.
+      if (partnerLeft > 0 && partnerLeft <= 2 && partnerLeft < closestOpp && n === partnerLeft && move.key <= 11) {
+        if ((partnerLeft === 1 && move.type === COMBO.SINGLE) || (partnerLeft === 2 && move.type === COMBO.PAIR)) adj += 24;
+      }
+      if (n >= 5) adj += 4;                                 // shed complete long shapes while we own the lead
+    }
+  }
+  return adj;
+}
+
+function strategicAdj(view, move, ctx, level) {
+  return level >= 2 ? expertStrategicAdj(view, move, ctx) : baselineStrategicAdj(view, move, ctx.n, ctx.tempo);
+}
+
 // ---- the policy ------------------------------------------------------------
 export function chooseMove(round, seat, level = 2, rng = Math.random, opts = {}) {
   const tempo = opts.tempo ?? TEMPO;                          // exposed so self-play can A/B the aggression
@@ -178,8 +281,9 @@ export function chooseMove(round, seat, level = 2, rng = Math.random, opts = {})
   const out = all.find((m) => m.cardIds.length === view.hand.length);
   if (out) return { pass: false, cardIds: out.cardIds };
 
-  // Prefer not to fracture a 炸弹 when a cleaner option exists.
-  let moves = all.filter((m) => !splitsBomb(view, m));
+  // The internal baseline refuses to split a bomb. The expert scores every legal move so it can
+  // deliberately 拆小炸 when that is the only way to repair/finish a fragmented hand.
+  let moves = level >= 2 ? all : all.filter((m) => !splitsBomb(view, m));
   if (!moves.length) moves = all;
 
   // Cooperation: if the partner currently holds the lead, pass (we already took any go-out above).
@@ -187,8 +291,9 @@ export function chooseMove(round, seat, level = 2, rng = Math.random, opts = {})
 
   const { counts, wild } = decompose(view.hand, view.level);
   const basePlays = handPlays(counts, wild);
+  const bombs = bombContext(view, all);
   let best = null, bestS = following ? 0 : -Infinity;        // opponent-lead pass baseline = 0; a leader must act
-  for (const m of moves) { const s = scoreMove(view, m, counts, wild, basePlays, level, rng, tempo); if (s > bestS) { bestS = s; best = m; } }
+  for (const m of moves) { const s = scoreMove(view, m, counts, wild, basePlays, level, rng, tempo, bombs); if (s > bestS) { bestS = s; best = m; } }
   if (!best) return { pass: true, cardIds: [] };
   return { pass: false, cardIds: best.cardIds };
 }

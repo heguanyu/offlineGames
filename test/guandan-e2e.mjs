@@ -20,6 +20,7 @@ try {
   await page.goto(`http://localhost:${PORT}/games/guandan/?fast=1&d3=1`, { waitUntil: 'networkidle0' });
 
   await page.waitForSelector('#start-btn');
+  if (await page.$('.diff-row, .diff-btn')) throw new Error('Guandan difficulty selector is still present');
   await page.click('#start-btn');
   await page.waitForFunction(() => window.__gd && (window.__gd.awaiting() || window.__gd.resultShown()), { timeout: 10000 });
   console.log('match started, scene live');
