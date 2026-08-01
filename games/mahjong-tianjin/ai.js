@@ -6,7 +6,7 @@
 // levels differ in how much they trust it, how aggressively they claim, and
 // whether they steer toward high-fan shapes (本混龙 / 捉五).
 import {
-  KINDS, toCounts, isNumberSuit, suitOf, rankOf, groupOf, isWinningHand,
+  KINDS, toCounts, isNumberSuit, suitOf, groupOf, isWinningHand, analyzeWin,
 } from './engine.js';
 
 export const LEVELS = { EASY: 1, NORMAL: 2, HARD: 3 };
@@ -150,18 +150,23 @@ function liveCounts(game, player) {
   return { rem, wilds };
 }
 
-// Tenpai weighted by AVAILABILITY: the number of LIVE tiles (natural outs + 混儿) that complete the
-// hand. A wait whose natural outs are all gone (e.g. 3万-5万 waiting 4万 when every 4万 is visible)
-// keeps only its 混儿 outs, so a live wait always outscores a dead one — the bot stops chasing dead
-// tiles. `kinds` = how many distinct live wait tiles (a two-sided wait beats a closed one).
-function tenpaiLive(natural, jokers, needMelds, wildSet, rem, liveWilds) {
+// Tianjin "tenpai" must be both structurally complete AND worth the 2-fan minimum. A plain hand
+// that uses a 混儿 inside an ordinary meld may be shape-ready but is still 小和 and cannot win.
+// Probe only structural waits with the authoritative scorer, then weight legal waits by remaining
+// live copies. `afterKong` makes the immediate replacement draw eligible for 杠开.
+function scoringTenpaiLive(hand, game, player, melds, rem, afterKong = false) {
+  const needMelds = 4 - melds.length;
   let waits = 0, kinds = 0;
-  if (isWinningHand(natural, jokers + 1, needMelds)) waits += liveWilds; // a 混儿 draw always completes a tenpai
   for (let k = 0; k < KINDS; k++) {
-    if (wildSet.has(k)) continue;
-    natural.push(k);
-    if (isWinningHand(natural, jokers, needMelds)) { waits += rem[k]; if (rem[k] > 0) kinds++; }
-    natural.pop();
+    if (rem[k] <= 0) continue;
+    const drawn = hand.concat(k);
+    const { natural, jokers } = split(drawn, game.wildSet);
+    if (!isWinningHand(natural, jokers, needMelds)) continue;
+    const win = analyzeWin(drawn, melds, {
+      wilds: game.wilds, winningKind: k, wildSuit: game.wildSuit,
+      afterKong, tianOrDi: false, dealerWin: player === game.dealer,
+    });
+    if (win) { waits += rem[k]; kinds++; }
   }
   return { tenpai: waits > 0, waits, kinds };
 }
@@ -183,13 +188,44 @@ function ukeireLive(natural, jokers, needMelds, wildSet, rem, liveWilds) {
   return acc;
 }
 
-// Small "score lean" toward the FAST high-fan Tianjin shapes — standing 混儿 (混吊 / 双混吊, ×2) and a
-// 4万+6万 (捉五). Kept light + only the quick shapes (龙 is too slow to chase without losing the race).
-function scorePotential(natural, jokers) {
+// Small score lean toward Tianjin shapes. 捉五 and standing 混儿 stay the quickest routes to 起和;
+// a 龙 lean only activates with at least seven covered ranks (counting held 混儿), so the bot does
+// not wreck an efficient ordinary hand to chase a remote jackpot.
+function scorePotential(natural, jokers, rem = null, wildSuit = null) {
   let s = jokers * 0.8;
   const counts = toCounts(natural);
   if (counts[3] > 0 && counts[5] > 0) s += 1.2; // 4万 (id 3) + 6万 (id 5) → 捉五
+  for (const base of [0, 9, 18]) {
+    let covered = 0, missingLive = true;
+    for (let k = base; k < base + 9; k++) {
+      if (counts[k] > 0) covered++;
+      else if (rem && rem[k] <= 0) missingLive = false;
+    }
+    const effective = Math.min(9, covered + jokers);
+    if (effective >= 7 && missingLive) {
+      s += (effective - 6) * 0.35;
+      if (wildSuit && suitOf(base) === wildSuit) s += 0.25; // 本混龙 tie-break
+    }
+  }
   return s;
+}
+
+function positionQuality(hand, game, player, melds, live, afterKong = false) {
+  const needMelds = 4 - melds.length;
+  const { natural, jokers } = split(hand, game.wildSet);
+  const base = structScore(toCounts(natural), jokers, needMelds, true, new Map()) + melds.length * W_MELD;
+  const t = scoringTenpaiLive(hand, game, player, melds, live.rem, afterKong);
+  const uke = t.tenpai ? 0 : ukeireLive(natural, jokers, needMelds, game.wildSet, live.rem, live.wilds);
+  return {
+    tenpai: t.tenpai, live: t.waits, kinds: t.kinds, base, uke,
+    sp: scorePotential(natural, jokers, live.rem, game.wildSuit),
+  };
+}
+
+function compareQuality(a, b) {
+  return (a.tenpai - b.tenpai) ||
+    (a.tenpai ? (a.live - b.live) || (a.kinds - b.kinds) || (a.sp - b.sp)
+              : (a.base - b.base) || (a.uke - b.uke) || (a.sp - b.sp));
 }
 
 function rngPick(arr, rng) { return arr[Math.floor(rng() * arr.length)]; }
@@ -240,8 +276,12 @@ export function chooseDiscard(game, player, level, rng = Math.random) {
     const rest = hand.slice(); rest.splice(rest.indexOf(c), 1);
     const { natural, jokers } = split(rest, wildSet);
     const base = structScore(toCounts(natural), jokers, needMelds, true, new Map());
-    const t = tenpaiLive(natural, jokers, needMelds, wildSet, rem, liveWilds);
-    return { c, natural, jokers, base, tenpai: t.tenpai, live: t.waits, kinds: t.kinds, sp: scorePotential(natural, jokers), uke: 0 };
+    const t = scoringTenpaiLive(rest, game, player, game.melds[player], rem, false);
+    return {
+      c, natural, jokers, base, tenpai: t.tenpai, live: t.waits, kinds: t.kinds,
+      sp: scorePotential(natural, jokers, rem, game.wildSuit), uke: 0,
+      claimRisk: rem[c], // fewer unseen copies → less chance this discard feeds a 碰/杠
+    };
   });
   if (!cands.some((x) => x.tenpai)) { // ukeire only matters below tenpai — compute it for the top shapes
     const maxBase = Math.max(...cands.map((x) => x.base));
@@ -250,7 +290,8 @@ export function chooseDiscard(game, player, level, rng = Math.random) {
   cands.sort((a, b) =>
     (b.tenpai - a.tenpai) ||
     (a.tenpai ? (b.live - a.live) || (b.kinds - a.kinds) || (b.sp - a.sp)
-              : (b.base - a.base) || (b.uke - a.uke) || (b.sp - a.sp)));
+              : (b.base - a.base) || (b.uke - a.uke) || (b.sp - a.sp)) ||
+    (a.claimRisk - b.claimRisk));
   return cands[0].c;
 }
 
@@ -263,27 +304,56 @@ export function chooseClaim(game, player, claim, level, rng = Math.random) {
   const hand = game.hands[player];
   const wildSet = game.wildSet;
   const exposed = game.melds[player].length;
-  const before = evalHand(hand, wildSet, 4 - exposed);
 
-  // Simulate the pung: remove two of the kind, gain a meld, then discard best.
-  const after = hand.slice();
-  for (let i = 0; i < 2; i++) after.splice(after.indexOf(claim.kind), 1);
-  const needMelds = 4 - (exposed + 1);
-  // Best residual structure after claiming and discarding our worst tile.
-  let bestAfter = -Infinity;
-  const cands = [...new Set(after.filter((t) => !wildSet.has(t)))];
-  for (const c of cands.length ? cands : [null]) {
-    const rest = after.slice();
-    if (c !== null) rest.splice(rest.indexOf(c), 1);
-    bestAfter = Math.max(bestAfter, evalHand(rest, wildSet, needMelds) + W_MELD);
+  // Keep NORMAL as the stable internal baseline used by the strength tests.
+  if (level < LEVELS.HARD) {
+    const before = evalHand(hand, wildSet, 4 - exposed);
+    const after = hand.slice();
+    for (let i = 0; i < 2; i++) after.splice(after.indexOf(claim.kind), 1);
+    const needMelds = 4 - (exposed + 1);
+    let bestAfter = -Infinity;
+    const cands = [...new Set(after.filter((t) => !wildSet.has(t)))];
+    for (const c of cands.length ? cands : [null]) {
+      const rest = after.slice();
+      if (c !== null) rest.splice(rest.indexOf(c), 1);
+      bestAfter = Math.max(bestAfter, evalHand(rest, wildSet, needMelds) + W_MELD);
+    }
+    if (bestAfter >= before - 0.5) return claim.options.includes('kong') ? 'kong' : 'pung';
+    return null;
   }
 
-  const kong = claim.options.includes('kong');
-  // HARD claims when it strictly improves the position; NORMAL when it doesn't
-  // hurt. A kong also yields a bonus draw, nudging the threshold down.
-  const margin = level >= LEVELS.HARD ? 0.5 : -0.5;
-  if (bestAfter >= before + margin) return kong ? 'kong' : 'pung';
-  if (kong && level >= LEVELS.HARD && rng() < 0.5) return 'kong'; // bonus draw is tempting
+  const live = liveCounts(game, player);
+  const beforeQ = positionQuality(hand, game, player, game.melds[player], live, false);
+
+  // Pung: take two copies, expose the meld, then choose the best mandatory discard.
+  const pungHand = hand.slice();
+  for (let i = 0; i < 2; i++) pungHand.splice(pungHand.indexOf(claim.kind), 1);
+  const pungMelds = game.melds[player].concat({ type: 'pung', kind: claim.kind, tiles: [claim.kind, claim.kind, claim.kind] });
+  let pungQ = null;
+  for (const c of [...new Set(pungHand.filter((t) => !wildSet.has(t)))]) {
+    const rest = pungHand.slice(); rest.splice(rest.indexOf(c), 1);
+    const q = positionQuality(rest, game, player, pungMelds, live, false);
+    if (!pungQ || compareQuality(q, pungQ) > 0) pungQ = q;
+  }
+
+  // Discard-kong is NOT a pung simulation: it consumes all three concealed copies, then receives
+  // a replacement draw. The remaining hand is already at its stable post-discard size.
+  let kongQ = null;
+  if (claim.options.includes('kong')) {
+    const kongHand = hand.slice();
+    for (let i = 0; i < 3; i++) kongHand.splice(kongHand.indexOf(claim.kind), 1);
+    const kongMelds = game.melds[player].concat({ type: 'kong', kind: claim.kind, tiles: [claim.kind, claim.kind, claim.kind, claim.kind] });
+    kongQ = positionQuality(kongHand, game, player, kongMelds, live, true);
+  }
+
+  const keepsTenpai = (q) => !beforeQ.tenpai || !!q?.tenpai;
+  const pungOK = !!pungQ && keepsTenpai(pungQ) && compareQuality(pungQ, beforeQ) > 0;
+  // A kong's guaranteed points + replacement draw justify an equal shape, but not destroying a
+  // ready hand. If both actions work, take the one with the better actual post-claim position.
+  const kongOK = !!kongQ && keepsTenpai(kongQ) && (beforeQ.tenpai || compareQuality(kongQ, beforeQ) >= 0);
+  if (pungOK && kongOK) return compareQuality(kongQ, pungQ) >= 0 ? 'kong' : 'pung';
+  if (kongOK) return 'kong';
+  if (pungOK) return 'pung';
   return null;
 }
 
@@ -294,10 +364,42 @@ export function chooseSelfKong(game, player, level, rng = Math.random) {
   const opts = game.selfKongOptions(player).filter((o) => o.type !== 'gold');
   if (opts.length === 0) return null;
   if (level === LEVELS.EASY) return rng() < 0.5 ? rngPick(opts, rng).kind : null;
-  // NORMAL/HARD: kong unless the hand is already tenpai and the kong would not
-  // keep it so (rare); the replacement draw + 杠开 chance is generally worth it.
-  const wildSet = game.wildSet;
-  const t = tenpaiInfo(game.hands[player], wildSet, 4 - game.melds[player].length);
-  if (!t.tenpai) return opts[0].kind;
-  return level >= LEVELS.HARD ? opts[0].kind : (rng() < 0.5 ? opts[0].kind : null);
+  if (level < LEVELS.HARD) {
+    // Stable internal baseline: usually take the replacement draw and kong points.
+    const t = tenpaiInfo(game.hands[player], game.wildSet, 4 - game.melds[player].length);
+    if (!t.tenpai) return opts[0].kind;
+    return rng() < 0.5 ? opts[0].kind : null;
+  }
+
+  const live = liveCounts(game, player);
+  // Compare against the real 13-tile state after the best ordinary discard; the old code passed
+  // the 14-tile turn hand to tenpaiInfo(), so its supposed "don't break tenpai" guard never worked.
+  const ordinaryDiscard = chooseDiscard(game, player, LEVELS.HARD, rng);
+  const ordinary = game.hands[player].slice();
+  if (ordinaryDiscard != null) ordinary.splice(ordinary.indexOf(ordinaryDiscard), 1);
+  const beforeQ = positionQuality(ordinary, game, player, game.melds[player], live, false);
+
+  let best = null;
+  for (const opt of opts) {
+    const hand = game.hands[player].slice();
+    const melds = game.melds[player].map((m) => ({ ...m, tiles: m.tiles.slice() }));
+    let points;
+    if (opt.type === 'added') {
+      hand.splice(hand.indexOf(opt.kind), 1);
+      const pung = melds.find((m) => m.type === 'pung' && m.kind === opt.kind);
+      if (!pung) continue;
+      pung.type = 'kong'; pung.tiles = [opt.kind, opt.kind, opt.kind, opt.kind]; points = 1;
+    } else {
+      for (let i = 0; i < 4; i++) hand.splice(hand.indexOf(opt.kind), 1);
+      melds.push({ type: 'kong', kind: opt.kind, tiles: [opt.kind, opt.kind, opt.kind, opt.kind], concealed: true });
+      points = 2;
+    }
+    const q = positionQuality(hand, game, player, melds, live, true);
+    // Keep every legal wait when already ready. Outside tenpai, accept only a shape that is no
+    // worse; the fixed kong points and immediate 杠开 draw break an otherwise equal tie.
+    const viable = beforeQ.tenpai ? q.tenpai : compareQuality(q, beforeQ) >= 0;
+    if (!viable) continue;
+    if (!best || compareQuality(q, best.q) > 0 || (compareQuality(q, best.q) === 0 && points > best.points)) best = { opt, q, points };
+  }
+  return best ? best.opt.kind : null;
 }

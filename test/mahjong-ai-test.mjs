@@ -5,6 +5,7 @@ import { Game, PHASE } from '../games/mahjong-tianjin/engine.js';
 import { chooseDiscard, chooseClaim, chooseSelfKong, LEVELS } from '../games/mahjong-tianjin/ai.js';
 
 const seeded = (s0) => { let s = s0 >>> 0; return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }; };
+const GAMES = +(process.env.MJ_AI_HANDS || 200);
 
 function playHand(seed, levels) {
   const rng = seeded(seed);
@@ -30,7 +31,7 @@ function playHand(seed, levels) {
   return g;
 }
 
-function match(label, levels, games = 200) {
+function match(label, levels, games = GAMES) {
   let a = 0, b = 0, wins = [0, 0, 0, 0], draws = 0, bad = 0;
   for (let s = 1; s <= games; s++) {
     const g = playHand(s, levels);
@@ -43,7 +44,7 @@ function match(label, levels, games = 200) {
   return { a, b, bad };
 }
 
-console.log('AI strength (200 hands each, dealer rotates):');
+console.log(`AI strength (${GAMES} hands each, dealer rotates):`);
 const vsEasy = match('HARD,EASY,HARD,EASY', [LEVELS.HARD, LEVELS.EASY, LEVELS.HARD, LEVELS.EASY]);
 const vsNorm = match('HARD,NORMAL,HARD,NORMAL', [LEVELS.HARD, LEVELS.NORMAL, LEVELS.HARD, LEVELS.NORMAL]);
 

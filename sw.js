@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-1.1.7';
+const CACHE = 'offline-games-1.1.8';
 
 // The heavy MEDIA (voice sprites + artwork + oversized vendor libs) lives HERE instead, versioned by
 // content and NOT wiped on a version bump — see the MEDIA list below. One shared bucket across the
