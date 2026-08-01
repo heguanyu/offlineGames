@@ -148,8 +148,9 @@ export class GuandanScene2D {
     const step = Math.min(cw + 5, n > 1 ? (avail - cw) / (n - 1) : 0);
     const x0 = (W - (cw + step * Math.max(0, n - 1))) / 2;
     const vstep = 13;
+    const handBase = 46; // leave a clear row below the cards for 自动理牌 / 组牌
     const maxDepth = Math.max(1, ...stacks.map((stack) => stack.length));
-    this.mount.style.setProperty('--gd-hand-stack-height', (56 + (maxDepth - 1) * vstep) + 'px');
+    this.mount.style.setProperty('--gd-hand-stack-top', (handBase + 56 + (maxDepth - 1) * vstep) + 'px');
     stacks.forEach((stack, si) => stack.forEach((card, ci) => {
       const sel = view.selected && view.selected.has(card.id);
       const hint = view.hint && view.hint.has(card.id);
@@ -159,7 +160,7 @@ export class GuandanScene2D {
       if (hint) el.classList.add('hint');
       el.style.left = (x0 + si * step) + 'px';
       // Earlier cards sit higher; later cards overlay them below, leaving every index readable.
-      el.style.bottom = (5 + (stack.length - 1 - ci) * vstep) + 'px';
+      el.style.bottom = (handBase + (stack.length - 1 - ci) * vstep) + 'px';
       el.style.zIndex = 100 + si * 12 + ci;
       b.appendChild(el);
     }));

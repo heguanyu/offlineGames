@@ -290,6 +290,7 @@ function render() {
 
 function refreshHandTools(g, level) {
   const hand = g.hands[HUMAN] || [];
+  $('hand-tools').hidden = g.phase !== 'play' || hand.length === 0;
   $('auto-arrange-btn').disabled = g.phase !== 'play' || hand.length === 0;
   $('group-btn').disabled = !selectionCombo(hand, state.sel.ids, level);
 }
@@ -332,13 +333,12 @@ function positionOverlays() {
   for (const seat of [0, 1, 2, 3]) {
     let tag = host.querySelector(`.seat-tag[data-seat="${seat}"]`);
     if (!tag) { tag = document.createElement('div'); tag.className = 'seat-tag'; tag.dataset.seat = seat; tag.innerHTML = '<div class="badge"></div><div class="name"></div><div class="count"></div>'; host.appendChild(tag); }
-    // In FLAT, YOUR plate is just a one-line "剩余 xx 张" parked to the RIGHT of the 出牌 row, so it
-    // doesn't block the bottom-left hand area. In 3D it's the usual "你" plate, bottom-centre.
+    // Keep YOUR plate clear of both the raised turn actions and the below-hand arrangement tools.
     const meFlat = seat === HUMAN && FLAT;
     tag.classList.toggle('me', seat === HUMAN);
     tag.classList.toggle('me-flat', meFlat);
-    if (meFlat) { tag.style.left = 'calc(50% + 110px)'; tag.style.right = 'auto'; tag.style.top = 'auto'; tag.style.bottom = '88px'; tag.style.transform = 'none'; }
-    else if (seat === HUMAN) { tag.style.left = '50%'; tag.style.right = 'auto'; tag.style.top = 'auto'; tag.style.bottom = '6px'; tag.style.transform = 'translateX(-50%)'; }
+    if (meFlat) { tag.style.left = 'calc(50% + 110px)'; tag.style.right = 'auto'; tag.style.top = 'auto'; tag.style.bottom = 'calc(var(--gd-hand-stack-top, 102px) + 24px)'; tag.style.transform = 'none'; }
+    else if (seat === HUMAN) { tag.style.left = 'calc(50% + 155px)'; tag.style.right = 'auto'; tag.style.top = 'auto'; tag.style.bottom = '10px'; tag.style.transform = 'translateX(-50%)'; }
     else { const p = state.scene.seatScreen(seat, 2.5); tag.style.left = p.x + 'px'; tag.style.right = 'auto'; tag.style.top = (p.y - 6) + 'px'; tag.style.bottom = 'auto'; tag.style.transform = 'translate(-50%, -50%)'; }
     const partner = seat === partnerOf(HUMAN);
     tag.classList.toggle('partner', partner);

@@ -45,9 +45,8 @@ body.flat .turn2d {
   background: conic-gradient(from 315deg, rgba(255,212,82,0.95), rgba(255,212,82,0) 90deg, rgba(255,212,82,0) 360deg);
   -webkit-mask: radial-gradient(closest-side, transparent 62%, #000 65%, #000 80%, transparent 84%);
   mask: radial-gradient(closest-side, transparent 62%, #000 65%, #000 80%, transparent 84%);
-  animation: turn2dPulse 1.1s ease-in-out infinite;
+  opacity: 0.82;
 }
-@keyframes turn2dPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
 body.flat .c2.mini { width: 22px; height: 31px; padding-top: 1px; }
 body.flat .c2.mini .rk { font-size: 10px; } body.flat .c2.mini .su { font-size: 8px; }
 body.flat .c2.mini.wild::after { display: none; }
@@ -65,8 +64,8 @@ body.flat .c2.h.sel {
 body.flat .c2.h.sel.wild { border-color: var(--wild); }
 body.flat .c2.h .rk { font-size: 16px; } body.flat .c2.h .su { font-size: 12px; }
 body.flat .c2.h.hint:not(.sel) { outline: 2px solid #2f9a5e; }
-/* flat landscape: the action bar sits just above the hand row, with smaller buttons */
-body.flat #actions.play-bar { bottom: calc(var(--gd-hand-stack-height, 56px) + 14px); gap: 8px; }
+/* flat landscape: turn actions sit above the tallest hand stack */
+body.flat #actions.play-bar { bottom: calc(var(--gd-hand-stack-top, 102px) + 18px); gap: 8px; }
 body.flat .act-btn { font-size: 0.9rem; padding: 8px 16px; border-radius: 11px; }
 
 /* top bar — solid header */
@@ -80,9 +79,7 @@ body.flat .act-btn { font-size: 0.9rem; padding: 8px 16px; border-radius: 11px; 
 #round-info { font-size: 0.82rem; color: #cdeadd; }
 #round-info b { color: var(--gold); }
 #nav .spacer { flex: 1; }
-#mute-btn, #menu-btn, .hand-tool { font: inherit; background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
-.hand-tool { color: #ffe9a8; font-weight: 700; }
-.hand-tool:disabled { opacity: 0.38; cursor: default; }
+#mute-btn, #menu-btn { font: inherit; background: #0f3d2e; color: #cdeadd; border: 1px solid #1c5a44; border-radius: 8px; font-size: 1rem; padding: 4px 11px; cursor: pointer; }
 
 /* phones: the nav becomes a vertical LEFT rail; the table insets past it */
 body.flat #nav {
@@ -93,7 +90,6 @@ body.flat #nav {
 }
 body.flat #nav #round-info { text-align: center; line-height: 1.32; }
 body.flat #table { left: 84px; }
-body.flat #nav .hand-tool { padding: 6px 3px; font-size: 0.76rem; }
 
 /* team-level scoreboard — top-right corner */
 #scores {
@@ -162,13 +158,28 @@ body.flat #scores .sb-pt { font-size: 0.72rem; }
 .toast-b { font-size: 0.9rem; color: #e6f3ec; line-height: 1.55; }
 .toast-row b { color: #ffe08a; }
 
-/* bottom action bar */
+/* Hand-management toolbar: below the cards, independent from turn actions. */
+#hand-tools {
+  position: absolute; left: 50%; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 7;
+  transform: translateX(-50%); display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+#hand-tools[hidden] { display: none; }
+.hand-tool {
+  font: inherit; font-size: 0.82rem; font-weight: 750; color: #ffe9a8; cursor: pointer;
+  background: rgba(6,35,26,0.9); border: 1px solid #2c8160; border-radius: 10px;
+  padding: 7px 13px; box-shadow: 0 3px 9px rgba(0,0,0,0.38);
+}
+.hand-tool:disabled { opacity: 0.38; cursor: default; }
+body.flat #hand-tools { bottom: 5px; gap: 6px; }
+body.flat .hand-tool { font-size: 0.72rem; padding: 6px 10px; border-radius: 8px; }
+
+/* turn action bar */
 #actions {
   position: absolute; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 6;
   display: flex; gap: 12px; justify-content: center; align-items: center;
 }
 #actions[hidden] { display: none; }
-#actions.play-bar { bottom: 30%; }
+#actions.play-bar { bottom: 35%; }
 @keyframes btnGlow { 0%, 100% { filter: drop-shadow(0 0 2px rgba(255,240,200,0.45)); } 50% { filter: drop-shadow(0 0 11px rgba(255,240,200,0.92)); } }
 #actions .act-btn:not(:disabled):not(.ghost) { animation: btnGlow 1.5s ease-in-out infinite; }
 .act-btn {

@@ -17,12 +17,35 @@ try {
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
-  await page.goto(`http://localhost:${PORT}/games/guandan/?fast=1`, { waitUntil: 'networkidle0' });
+  await page.goto(`http://localhost:${PORT}/games/guandan/?fast=1&d3=1`, { waitUntil: 'networkidle0' });
 
   await page.waitForSelector('#start-btn');
   await page.click('#start-btn');
   await page.waitForFunction(() => window.__gd && (window.__gd.awaiting() || window.__gd.resultShown()), { timeout: 10000 });
   console.log('match started, scene live');
+
+  // Selecting a card must pulse its gold border smoothly without making the turn ring blink too.
+  if (await page.evaluate(() => window.__gd.awaiting())) {
+    const point = await page.evaluate(() => {
+      const scene = window.__gd.scene();
+      const card = [...scene.cards.values()].find((entry) => entry.pick);
+      return scene.worldToScreen(card.mesh.position.clone());
+    });
+    await page.mouse.click(point.x, point.y);
+    const samples = await page.evaluate(async () => {
+      const scene = window.__gd.scene(); const turn = [], border = [];
+      for (let i = 0; i < 7; i++) {
+        turn.push(scene.turnRing.material.opacity);
+        const selected = [...scene.cards.values()].find((entry) => entry.mesh.userData.selectionBorder?.visible);
+        border.push(selected?.mesh.userData.selectionBorder.material.opacity ?? 0);
+        await new Promise((resolve) => setTimeout(resolve, 70));
+      }
+      return { turn, border };
+    });
+    const spread = (values) => Math.max(...values) - Math.min(...values);
+    if (spread(samples.turn) > 0.001) throw new Error('turn indicator blinked with selected card');
+    if (spread(samples.border) < 0.08) throw new Error('selected-card border did not animate smoothly');
+  }
 
   const deadline = Date.now() + 90000;
   let resolved = 0;

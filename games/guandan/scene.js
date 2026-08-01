@@ -199,8 +199,7 @@ export class GuandanScene {
     this._shake = null;
     this._camPos = this.camBase.clone();
     this._running = false;       // on-demand render loop (battery): runs only while something animates
-    this._selectionTimer = null;
-    this._selectionBright = false;
+    this._hasSelection = false;
     this._resize();
     new ResizeObserver(() => { this._resize(); this._kick(); }).observe(canvas.parentElement);
     this._kick();
@@ -394,27 +393,10 @@ export class GuandanScene {
     this._kick(); // re-targeted cards / turn-ring → wake the render loop
   }
 
-  // Blink at a low cadence and wake WebGL for one frame per change, instead of keeping a permanent
-  // 60fps loop alive while the user considers a selected play.
+  // Selection borders animate inside the render loop so their pulse stays smooth.
   _setSelectionBlink(on) {
     this._hasSelection = on;
-    if (!on) {
-      if (this._selectionTimer) clearTimeout(this._selectionTimer);
-      this._selectionTimer = null; this._selectionBright = false;
-      return;
-    }
-    if (this._selectionTimer) return;
-    const tick = () => {
-      if (!this._hasSelection) { this._selectionTimer = null; return; }
-      this._selectionBright = !this._selectionBright;
-      for (const card of this.cards.values()) {
-        const border = card.mesh.userData.selectionBorder;
-        if (border && border.visible) border.material.opacity = this._selectionBright ? 1 : 0.72;
-      }
-      this._kick();
-      this._selectionTimer = setTimeout(tick, 360);
-    };
-    tick();
+    if (on) this._kick();
   }
 
   worldToScreen(v) {
@@ -459,6 +441,11 @@ export class GuandanScene {
     let active = false;
     for (const r of this.cards.values()) {
       if (!r.target) continue;
+      const border = r.mesh.userData.selectionBorder;
+      if (this._hasSelection && border && border.visible) {
+        border.material.opacity = 0.62 + 0.38 * (0.5 + 0.5 * Math.sin(now * Math.PI * 2 / 720));
+        active = true;
+      }
       if (dealing && r.key && this._deal.serveAt.has(r.key) && now < this._deal.serveAt.get(r.key)) {
         const s = Math.min((this._deal.idx.get(r.key) || 0), 60) * 0.004;
         r.mesh.position.set(this._deal.deck.x, this._deal.deck.y + s, this._deal.deck.z);
@@ -484,7 +471,8 @@ export class GuandanScene {
       d = Math.atan2(Math.sin(d), Math.cos(d));
       if (Math.abs(d) > 1e-4) { this.turnRing.rotation.z += d * a; active = true; }
       else this.turnRing.rotation.z = target;
-      this.turnRing.material.opacity = 0.55 + 0.35 * Math.sin(now / 320);
+      // Keep the turn indicator steady. Selection redraws must never make it appear to blink.
+      this.turnRing.material.opacity = 0.82;
     }
     if (this._fx.length) { this._fx = this._fx.filter((fx) => fx(now, dt)); if (this._fx.length) active = true; }
     if (this._shake) {

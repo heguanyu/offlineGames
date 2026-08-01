@@ -16,8 +16,6 @@
   <!-- nav: a top bar in 3D/desktop, a vertical left rail on phones (like the other games) -->
   <header id="nav">
     <div id="round-info"></div>
-    <button id="auto-arrange-btn" class="hand-tool" type="button" disabled>自动理牌</button>
-    <button id="group-btn" class="hand-tool" type="button" disabled>组牌</button>
     <span class="spacer"></span>
     <button id="mute-btn" type="button">🔊</button>
     <button id="menu-btn" type="button">≡</button>
@@ -34,6 +32,12 @@
 
     <!-- bottom action bar (不要 / 提示 / 出牌) -->
     <div id="actions" hidden></div>
+
+    <!-- hand-management tools live below the hand, separate from turn actions -->
+    <div id="hand-tools" hidden>
+      <button id="auto-arrange-btn" class="hand-tool" type="button" disabled>自动理牌</button>
+      <button id="group-btn" class="hand-tool" type="button" disabled>组牌</button>
+    </div>
   </div>
 
   <!-- start screen: difficulty pick -->
