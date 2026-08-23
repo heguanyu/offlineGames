@@ -31,10 +31,19 @@ let linkWatch = 0;        // watchdog: P2P must open within this timer or it cou
 // ---- helpers --------------------------------------------------------------
 const onlyCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 9);
 const groupCode = (c) => c.replace(/(.{3})(.{3})(.{3})/, '$1-$2-$3');
-// pull a 9-char code out of a scanned URL/text (#r=CODE, ?r=CODE, or a bare code)
+// Pull a 9-char code out of a scanned URL/text (#r=CODE, ?r=CODE, or a bare code).
+// A scanned string that IS a URL is judged ONLY by its r= parameter: stripping the punctuation out of
+// "https://example.com/" happens to leave nine characters ("HTTPSEXAM"), and treating that as a pairing
+// code would send the user chasing a room that never existed.
 function extractCode(text) {
-  try { const u = new URL(text); const h = onlyCode(new URLSearchParams(u.hash.slice(1)).get('r') || u.searchParams.get('r')); if (h.length === 9) return h; } catch {}
-  const c = onlyCode(text); return c.length === 9 ? c : '';
+  const raw = String(text || '').trim();
+  try {
+    const u = new URL(raw);
+    const h = onlyCode(new URLSearchParams(u.hash.slice(1)).get('r') || u.searchParams.get('r'));
+    return h.length === 9 ? h : '';
+  } catch { /* not a URL — fall through to the bare-code reading */ }
+  const c = onlyCode(raw);
+  return c.length === 9 ? c : '';
 }
 function fmtBytes(n) {
   if (n < 1024) return n + ' B';
