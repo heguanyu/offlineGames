@@ -2,7 +2,7 @@
 // from a few in-memory blobs, then parses the bytes back (local headers → central directory → EOCD)
 // and asserts the framing is valid, names de-dupe, and every file's bytes survive intact.
 // Usage: node test/fileshare-zip-test.mjs
-import { makeZip } from '../fileshare/zip.js';
+import { makeZip, writeZip } from '../fileshare/zip.js';
 
 let failed = 0;
 const ok = (cond, msg) => { if (!cond) { console.log('  FAIL:', msg); failed++; } };
@@ -71,6 +71,69 @@ const eocd = buf.length - 22;
 ok(dv.getUint32(eocd, true) === 0x06054b50, 'end-of-central-directory record present');
 ok(dv.getUint16(eocd + 10, true) === files.length, 'EOCD total-entries count matches');
 ok(dv.getUint32(eocd + 16, true) === off, 'EOCD central-directory offset points at the central dir');
+
+// Streaming variant: sources arrive in small chunks and the ZIP writer must emit each entry without
+// ever needing an aggregate Blob. Bit 3 moves CRC/sizes into a post-data descriptor.
+const chunks = [];
+let maxWrite = 0;
+const writable = new WritableStream({
+  write(value) {
+    const u = value instanceof Uint8Array ? value : new Uint8Array(value);
+    maxWrite = Math.max(maxWrite, u.byteLength);
+    chunks.push(u.slice());
+  },
+});
+await writeZip(files.map((f, index) => ({
+  name: f.name,
+  size: f.bytes.length,
+  stream: () => new ReadableStream({
+    start(controller) {
+      const step = 37 + index * 11;
+      for (let p = 0; p < f.bytes.length; p += step) controller.enqueue(f.bytes.subarray(p, p + step));
+      controller.close();
+    },
+  }),
+})), writable);
+
+const streamLen = chunks.reduce((n, c) => n + c.length, 0);
+const streamBuf = new Uint8Array(streamLen);
+for (let p = 0, i = 0; i < chunks.length; i++) { streamBuf.set(chunks[i], p); p += chunks[i].length; }
+const streamDv = new DataView(streamBuf.buffer);
+let streamOff = 0;
+const streamNames = [];
+for (const f of files) {
+  ok(streamDv.getUint32(streamOff, true) === 0x04034b50, 'stream ZIP local-header signature');
+  ok(streamDv.getUint16(streamOff + 6, true) === 0x0808, 'stream ZIP uses UTF-8 + data-descriptor flags');
+  const nlen = streamDv.getUint16(streamOff + 26, true);
+  streamNames.push(td.decode(streamBuf.slice(streamOff + 30, streamOff + 30 + nlen)));
+  const dataStart = streamOff + 30 + nlen;
+  const data = streamBuf.slice(dataStart, dataStart + f.bytes.length);
+  ok(data.length === f.bytes.length && data.every((b, i) => b === f.bytes[i]), `stream entry ${f.name} bytes intact`);
+  const desc = dataStart + f.bytes.length;
+  ok(streamDv.getUint32(desc, true) === 0x08074b50, 'stream ZIP data-descriptor signature');
+  ok(streamDv.getUint32(desc + 4, true) === crc32(f.bytes), `stream entry ${f.name} crc correct`);
+  ok(streamDv.getUint32(desc + 8, true) === f.bytes.length && streamDv.getUint32(desc + 12, true) === f.bytes.length,
+    `stream entry ${f.name} descriptor sizes correct`);
+  streamOff = desc + 16;
+}
+ok(streamNames[0] === 'photo.jpg' && streamNames[2] === 'photo (1).jpg', 'stream ZIP de-duplicates names');
+ok(streamDv.getUint32(streamOff, true) === 0x02014b50, 'stream ZIP central directory follows entries');
+ok(streamDv.getUint32(streamBuf.length - 22, true) === 0x06054b50, 'stream ZIP ends with EOCD');
+ok(maxWrite <= Math.max(...files.map((f) => f.bytes.length), 100), `stream writer emits bounded pieces (largest ${maxWrite})`);
+
+let shortRejected = false, shortAborted = false;
+try {
+  await writeZip([{ name: 'short.bin', size: 2, stream: () => new Blob([new Uint8Array(1)]).stream() }],
+    new WritableStream({ abort() { shortAborted = true; } }));
+} catch { shortRejected = true; }
+ok(shortRejected && shortAborted, 'stream ZIP rejects a short source and aborts the destination');
+
+let hugeRejected = false, hugeAborted = false;
+try {
+  await writeZip([{ name: 'zip64.bin', size: 0xFFFFFFFF, stream: () => new Blob([]).stream() }],
+    new WritableStream({ abort() { hugeAborted = true; } }));
+} catch { hugeRejected = true; }
+ok(hugeRejected && hugeAborted, 'stream ZIP rejects ZIP64-sized output before writing and aborts the destination');
 
 if (failed) { console.log(`FILESHARE ZIP TEST FAIL (${failed})`); process.exit(1); }
 console.log('FILESHARE ZIP TEST PASS');

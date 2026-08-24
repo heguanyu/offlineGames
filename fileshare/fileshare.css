@@ -138,5 +138,6 @@ button.secondary:active { background: var(--accent-dim); }
 .in-actions .sel-all input { width: 16px; height: 16px; accent-color: var(--accent); }
 .in-actions button { flex: 1; min-width: 96px; padding: 9px 12px; font-size: 0.85rem; }
 .in-actions button:disabled { opacity: 0.5; }
+.in-actions button.save-fail { color: var(--bad); border-color: var(--bad); }
 
 @media (max-width: 460px) { .lists { flex-direction: column; gap: 14px; } }

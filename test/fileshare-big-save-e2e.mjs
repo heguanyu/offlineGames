@@ -36,7 +36,10 @@ const guest = await browser.newPage();
 await guest.evaluateOnNewDocument(() => {
   Object.defineProperty(window, 'showSaveFilePicker', {
     configurable: true,
-    value: async () => (await navigator.storage.getDirectory()).getFileHandle('__fileshare_big_save__', { create: true }),
+    value: async (opts) => (await navigator.storage.getDirectory()).getFileHandle(
+      opts?.suggestedName?.endsWith('.zip') ? '__fileshare_big_zip__' : '__fileshare_big_save__',
+      { create: true },
+    ),
   });
 });
 let crashed = null;
@@ -106,4 +109,64 @@ console.log('  saved file:', saved.size, 'bytes | row:', saved.label);
 if (saved.label !== '已保存 ✓') fail(`the save did not complete (row=${saved.label})`);
 if (saved.size !== SIZE) fail(`wrong size on disk (${saved.size} vs ${SIZE})`);
 if (!saved.first.every((b, i) => b === i) || !saved.last.every((b, i) => b === ((SIZE - 16 + i) & 0xff))) fail('saved bytes are corrupt');
-done(0, '\nPASS: the large-file 保存 completed without crashing the page');
+
+// A second, small Blob-backed file makes the batch action appear. Re-select the already-saved large
+// row and exercise the real mixed-source ZIP button: big entry from SW/IndexedDB, small entry from Blob.
+const SMALL = 8192;
+const smallTmp = path.join(os.tmpdir(), 'fs-small-zip-sample.bin');
+const smallBuf = Buffer.alloc(SMALL);
+for (let i = 0; i < SMALL; i++) smallBuf[i] = (i * 7 + 3) & 0xff;
+fs.writeFileSync(smallTmp, smallBuf);
+await (await host.$('#file-input')).uploadFile(smallTmp);
+await guest.waitForFunction(() => document.querySelectorAll('#in-list li.item').length === 2, { timeout: 30000 });
+await guest.evaluate(() => {
+  const first = document.querySelector('#in-list li.item .pick');
+  first.checked = true;
+  first.dispatchEvent(new Event('change', { bubbles: true }));
+});
+await guest.waitForFunction(() => {
+  const button = document.getElementById('save-selected');
+  return !document.getElementById('in-actions').hidden && !button.disabled && button.textContent.includes('(2)');
+}, { timeout: 5000 });
+
+console.log('  clicking 打包 .zip for one large + one small file …');
+await guest.click('#save-selected');
+const zipped = await guest.waitForFunction(
+  () => [...document.querySelectorAll('#in-list a.dl')].every((a) => a.textContent === '已保存 ✓'),
+  { timeout: 120000, polling: 250 },
+).then(() => true).catch(() => false);
+if (!zipped) fail('the streamed ZIP write did not finish');
+
+const zip = await guest.evaluate(async ({ bigSize, smallSize }) => {
+  const root = await navigator.storage.getDirectory();
+  const file = await (await root.getFileHandle('__fileshare_big_zip__')).getFile();
+  const td = new TextDecoder();
+  const read = async (start, length) => new Uint8Array(await file.slice(start, start + length).arrayBuffer());
+  const u16 = (u, p) => u[p] | (u[p + 1] << 8);
+  const u32 = (u, p) => (u[p] | (u[p + 1] << 8) | (u[p + 2] << 16) | (u[p + 3] << 24)) >>> 0;
+
+  const h1 = await read(0, 256);
+  const n1 = u16(h1, 26), name1 = td.decode(h1.slice(30, 30 + n1)), data1 = 30 + n1;
+  const first1 = await read(data1, 16), last1 = await read(data1 + bigSize - 16, 16);
+  const d1 = await read(data1 + bigSize, 16);
+  const secondOffset = data1 + bigSize + 16;
+  const h2 = await read(secondOffset, 256);
+  const n2 = u16(h2, 26), name2 = td.decode(h2.slice(30, 30 + n2)), data2 = secondOffset + 30 + n2;
+  const bytes2 = await read(data2, smallSize), d2 = await read(data2 + smallSize, 16);
+  const central = await read(data2 + smallSize + 16, 4);
+  const end = await read(file.size - 22, 22);
+  return {
+    size: file.size, name1, name2,
+    first1: [...first1], last1: [...last1], bytes2: [...bytes2],
+    descriptor1: u32(d1, 0), size1: u32(d1, 8),
+    descriptor2: u32(d2, 0), size2: u32(d2, 8),
+    central: u32(central, 0), eocd: u32(end, 0), entries: u16(end, 10),
+  };
+}, { bigSize: SIZE, smallSize: SMALL });
+console.log('  streamed ZIP:', zip.size, 'bytes | entries:', zip.name1, '+', zip.name2);
+if (zip.name1 !== path.basename(tmp) || zip.name2 !== path.basename(smallTmp)) fail('ZIP entry names are wrong');
+if (zip.descriptor1 !== 0x08074b50 || zip.descriptor2 !== 0x08074b50 || zip.size1 !== SIZE || zip.size2 !== SMALL) fail('ZIP data descriptors are wrong');
+if (zip.central !== 0x02014b50 || zip.eocd !== 0x06054b50 || zip.entries !== 2) fail('ZIP directory framing is wrong');
+if (!zip.first1.every((b, i) => b === i) || !zip.last1.every((b, i) => b === ((SIZE - 16 + i) & 0xff))) fail('large ZIP entry bytes are corrupt');
+if (!zip.bytes2.every((b, i) => b === ((i * 7 + 3) & 0xff))) fail('small ZIP entry bytes are corrupt');
+done(0, '\nPASS: direct save and mixed large-file ZIP both completed without crashing the page');

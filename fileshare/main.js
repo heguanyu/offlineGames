@@ -6,7 +6,7 @@ import { Signaling } from './signaling.js';
 import { PeerLink } from './rtc.js';
 import { RelayLink } from './relay.js';
 import { drawQR } from './qr.js';
-import { makeZip } from './zip.js';
+import { makeZip, writeZip } from './zip.js';
 import { deleteFile, pruneOld } from './recv-store.js';
 
 const $ = (id) => document.getElementById(id);
@@ -287,7 +287,7 @@ function setPickersEnabled(on) { $('pick-files').disabled = !on; $('dropzone').c
 
 // ---- transfer list rendering ---------------------------------------------
 const itemEls = { out: new Map(), in: new Map() };
-const received = new Map(); // id → { name, blob } for every SMALL received file (the batch-save pool)
+const received = new Map(); // id → { name, size, blob|null } for every received file (batch-save pool)
 const savedIds = new Set(); // received ids the user has already saved (→ dim the row, uncheck it)
 const rateStats = new Map(); // `${dir}:${id}` → { last, lastDone, bps } for live speed/ETA
 const idbIds = new Set();    // ids of LARGE received files streamed to IndexedDB (for cleanup)
@@ -355,6 +355,7 @@ function failItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; c
 const dlUrl = (id) => new URL('dl/' + id, import.meta.url).href;   // resolved against this module, so a
 // page reached without its trailing slash can't turn dl/<id> into /dl/<id>, which the route would miss.
 const PLAIN_DOWNLOAD_REACHES_SW = /^((?!chrome|chromium|crios|edg|android).)*safari/i.test(navigator.userAgent);
+const CAN_STREAM_ZIP = typeof window.showSaveFilePicker === 'function';
 
 // Resolves true if the file was written, false if the user dismissed the save dialog; throws if the
 // worker could not serve the file, so the row can say so instead of silently doing nothing.
@@ -371,25 +372,37 @@ async function saveToDisk(picked, id) {
   return true;
 }
 
-function receiveItem({ id, name, blob, error }) {
+function receiveItem({ id, name, size, blob, error }) {
   const li = itemEls.in.get(id); if (!li) return;
   clearRate('in', id);
   if (error) { li.querySelector('.pct').textContent = '接收失败'; li.classList.add('recv-fail'); return; }
   li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已接收';
 
-  // Large files streamed to IndexedDB have no in-memory blob: save them via the service-worker
-  // attachment stream (memory-safe, writes straight to disk), and skip the batch checkbox — batching
-  // zips/shares in memory, which is exactly what we avoid for big files.
+  received.set(id, { name, size: Number(size) || (blob && blob.size) || 0, blob: blob || null });
+
+  // All small files, plus streamed files wherever a writable file picker exists, participate in batch
+  // selection. A streamed ZIP writes each service-worker body into the archive incrementally; browsers
+  // without a writable picker keep the memory-only small-file ZIP and per-row large-file save.
+  if (blob || CAN_STREAM_ZIP) {
+    const fname = li.querySelector('.fname');
+    const head = document.createElement('label'); head.className = 'recv-head';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'pick'; cb.checked = true;
+    cb.addEventListener('change', refreshInActions);
+    li.insertBefore(head, fname); head.appendChild(cb); head.appendChild(fname);
+  }
+
+  // Large files streamed to IndexedDB have no in-memory blob: keep their per-row service-worker save
+  // and, on picker-capable browsers, also expose them to the streaming ZIP batch path above.
   if (!blob) {
     idbIds.add(id);
     const a = document.createElement('a'); a.className = 'dl'; a.href = dlUrl(id); a.textContent = '保存';
     // Safari's original <a download> path reaches the worker. Elsewhere without a file picker (for
     // example Chromium on Android), leave `download` off: a normal navigation reaches the worker and
     // its Content-Disposition header turns that navigation into a download without leaving the page.
-    if (window.showSaveFilePicker || PLAIN_DOWNLOAD_REACHES_SW) a.download = name;
+    if (CAN_STREAM_ZIP || PLAIN_DOWNLOAD_REACHES_SW) a.download = name;
     a.addEventListener('click', (e) => {
       // No picker: allow either Safari's known-good download link or the normal-navigation fallback.
-      if (!window.showSaveFilePicker) { markSaved(id); return; }
+      if (!CAN_STREAM_ZIP) { markSaved(id); return; }
       e.preventDefault();
       a.classList.remove('save-fail');
       // Called synchronously so it still counts as inside the click gesture.
@@ -402,17 +415,9 @@ function receiveItem({ id, name, blob, error }) {
         .catch(() => { a.textContent = '保存失败'; a.classList.add('save-fail'); });
     });
     li.appendChild(a);
+    refreshInActions();
     return;
   }
-
-  received.set(id, { name, blob });
-
-  // checkbox + filename in one tappable row → drives the multi-select batch download
-  const fname = li.querySelector('.fname');
-  const head = document.createElement('label'); head.className = 'recv-head';
-  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'pick'; cb.checked = true;
-  cb.addEventListener('change', refreshInActions);
-  li.insertBefore(head, fname); head.appendChild(cb); head.appendChild(fname);
 
   // keep a per-file one-tap save too (single download within the click gesture — iOS-safe)
   const a = document.createElement('a'); a.className = 'dl'; a.href = URL.createObjectURL(blob); a.download = name; a.textContent = '保存';
@@ -454,15 +459,19 @@ function refreshInActions() {
   // The batch bar earns its place only when it does something a single row's 保存 can't: bundle ≥2
   // files into one .zip (desktop) or reach Photos via the share sheet (mobile). A lone received file
   // on desktop is handled entirely by its own 保存 — so no duplicate 下载 button appears.
-  const showBatch = received.size > 0 && (received.size >= 2 || canShareFiles);
+  const picks = [...received.keys()].map((id) => itemEls.in.get(id)?.querySelector('.pick')).filter(Boolean);
+  const showBatch = picks.length > 0 && (picks.length >= 2 || canShareFiles);
   actions.hidden = !showBatch;
   if (!showBatch) return;
-  const picks = [...received.keys()].map((id) => itemEls.in.get(id)?.querySelector('.pick')).filter(Boolean);
   const checked = picks.filter((c) => c.checked).length;
   const all = $('sel-all'); all.checked = checked > 0 && checked === picks.length; all.indeterminate = checked > 0 && checked < picks.length;
   const n = checked > 1 ? ` (${checked})` : '';
-  const zip = $('save-selected'); zip.disabled = checked < 2; zip.textContent = '打包 .zip' + n; // only bundles ≥2
-  const share = $('share-selected'); share.disabled = checked === 0; share.textContent = '保存到相册 / 分享' + n;
+  const selected = selectedIds().map((id) => received.get(id));
+  const hasStreamed = selected.some((f) => !f.blob);
+  const zip = $('save-selected');
+  zip.disabled = checked < 2;
+  zip.textContent = zip.classList.contains('save-fail') ? '打包失败，重试' : '打包 .zip' + n;
+  const share = $('share-selected'); share.disabled = checked === 0 || hasStreamed; share.textContent = '保存到相册 / 分享' + n;
 }
 function selectedIds() {
   const out = [];
@@ -479,6 +488,31 @@ function zipName() {
   const d = new Date(); const p = (n) => String(n).padStart(2, '0');
   return `文件共享_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.zip`;
 }
+function zipEntries(ids) {
+  return ids.map((id) => {
+    const file = received.get(id);
+    return {
+      name: file.name,
+      size: file.size,
+      stream: async () => {
+        if (file.blob) return file.blob.stream();
+        const res = await fetch(dlUrl(id));
+        if (!res.ok || !res.body) throw new Error('zip entry ' + id + ': dl ' + res.status);
+        return res.body;
+      },
+    };
+  });
+}
+async function saveZipToDisk(picked, entries) {
+  let handle;
+  try { handle = await picked; }
+  catch (e) {
+    if (e && e.name === 'AbortError') return false;
+    throw e;
+  }
+  await writeZip(entries, await handle.createWritable());
+  return true;
+}
 $('sel-all').addEventListener('change', (e) => {
   for (const id of received.keys()) { const cb = itemEls.in.get(id)?.querySelector('.pick'); if (cb) cb.checked = e.target.checked; }
   refreshInActions();
@@ -489,6 +523,7 @@ $('share-selected').addEventListener('click', async () => {
   const ids = selectedIds();
   if (!ids.length) return;
   const picks = ids.map((id) => received.get(id));
+  if (picks.some((f) => !f.blob)) return; // large files use streamed ZIP or their per-row save
   const files = picks.map((f) => new File([f.blob], f.name, { type: f.blob.type || 'application/octet-stream' }));
   try { await navigator.share({ files }); ids.forEach(markSaved); }
   catch (e) { if (e && e.name !== 'AbortError') { triggerDownload(picks.length === 1 ? picks[0].blob : await makeZip(picks), picks.length === 1 ? picks[0].name : zipName()); ids.forEach(markSaved); } }
@@ -498,10 +533,31 @@ $('save-selected').addEventListener('click', async () => {
   const ids = selectedIds();
   if (ids.length < 2) return; // a lone file uses its row's 保存 — this button only bundles
   const picks = ids.map((id) => received.get(id));
-  const btn = $('save-selected'); const label = btn.textContent;
+  const btn = $('save-selected');
+  btn.classList.remove('save-fail');
   btn.disabled = true; btn.textContent = '打包中…';
-  try { triggerDownload(await makeZip(picks), zipName()); ids.forEach(markSaved); }
-  finally { btn.textContent = label; refreshInActions(); }
+  try {
+    let saved;
+    if (CAN_STREAM_ZIP) {
+      // The picker must be invoked synchronously inside the trusted click; ZIP generation may take
+      // minutes and must not rely on transient user activation still existing when it finishes.
+      let picked;
+      try { picked = window.showSaveFilePicker({
+        suggestedName: zipName(),
+        types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }],
+      }); } catch (e) { picked = Promise.reject(e); }
+      saved = await saveZipToDisk(picked, zipEntries(ids));
+    } else {
+      // No writable picker: only small Blob-backed files have checkboxes, so the legacy one-Blob
+      // download remains bounded by INLINE_MAX and preserves the Safari/iOS path.
+      triggerDownload(await makeZip(picks), zipName());
+      saved = true;
+    }
+    if (saved) ids.forEach(markSaved);
+  } catch (e) {
+    console.error('fileshare: ZIP save failed', e);
+    btn.classList.add('save-fail');
+  } finally { refreshInActions(); }
 });
 
 // ---- file picking / drag-drop --------------------------------------------
