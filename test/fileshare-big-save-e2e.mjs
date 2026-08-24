@@ -109,8 +109,10 @@ console.log('  saved file:', saved.size, 'bytes | row:', saved.label);
 if (saved.label !== '已保存 ✓') fail(`the save did not complete (row=${saved.label})`);
 if (saved.size !== SIZE) fail(`wrong size on disk (${saved.size} vs ${SIZE})`);
 if (!saved.first.every((b, i) => b === i) || !saved.last.every((b, i) => b === ((SIZE - 16 + i) & 0xff))) fail('saved bytes are corrupt');
-const singleUiHidden = await guest.evaluate(() =>
-  !document.querySelector('#in-list .pick') && document.getElementById('in-actions').hidden);
+const singleUiHidden = await guest.evaluate(() => {
+  const bar = document.getElementById('in-actions');
+  return !document.querySelector('#in-list .pick') && bar.hidden && getComputedStyle(bar).display === 'none';
+});
 if (!singleUiHidden) fail('a lone received file should not show batch checkboxes or toolbar');
 
 // A second, small Blob-backed file makes the batch action appear. Re-select the already-saved large
@@ -122,7 +124,8 @@ for (let i = 0; i < SMALL; i++) smallBuf[i] = (i * 7 + 3) & 0xff;
 fs.writeFileSync(smallTmp, smallBuf);
 await (await host.$('#file-input')).uploadFile(smallTmp);
 await guest.waitForFunction(() => document.querySelectorAll('#in-list li.item').length === 2 &&
-  document.querySelectorAll('#in-list .pick').length === 2 && !document.getElementById('in-actions').hidden,
+  document.querySelectorAll('#in-list .pick').length === 2 &&
+  !document.getElementById('in-actions').hidden && getComputedStyle(document.getElementById('in-actions')).display !== 'none',
 { timeout: 30000 });
 await guest.evaluate(() => {
   const first = document.querySelector('#in-list li.item .pick');

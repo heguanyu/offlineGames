@@ -42,6 +42,11 @@ async function run() {
   // landing view visible on both
   await host.waitForSelector('#view-landing:not([hidden])', { timeout: 5000 });
   console.log('  landing visible');
+  const emptyBatchHidden = await host.evaluate(() => {
+    const bar = document.getElementById('in-actions');
+    return bar.hidden && getComputedStyle(bar).display === 'none';
+  });
+  if (!emptyBatchHidden) return fail('batch toolbar is rendered before any file is received');
   const themeIconFits = await host.evaluate(() => {
     const button = document.getElementById('btn-theme');
     const box = button.getBoundingClientRect();
@@ -111,6 +116,11 @@ async function run() {
   if (got.name !== 'fs-e2e-sample.txt') return fail('received filename wrong: ' + got.name);
   if (got.len !== payload.length) return fail(`received size ${got.len} != sent ${payload.length}`);
   if (got.head !== payload.slice(0, 34)) return fail('received content mismatch');
+  const singleBatchHidden = await guest.evaluate(() => {
+    const bar = document.getElementById('in-actions');
+    return !document.querySelector('#in-list .pick') && bar.hidden && getComputedStyle(bar).display === 'none';
+  });
+  if (!singleBatchHidden) return fail('one received file renders batch controls');
 
   // sender shows it completed
   const sentOk = await host.evaluate(() => [...document.querySelectorAll('#out-list .pct')].some((e) => e.textContent.includes('已发送')));
