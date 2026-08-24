@@ -340,42 +340,66 @@ function updateProgress(dir, id, done, total) {
 function clearRate(dir, id) { rateStats.delete(dir + ':' + id); const li = itemEls[dir].get(id); const r = li && li.querySelector('.rate'); if (r) r.textContent = ''; }
 function completeItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; clearRate(dir, id); li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已发送'; if (dir === 'out') { li.classList.add('finished'); refreshClearSent(); } }
 function failItem(dir, id) { const li = itemEls[dir].get(id); if (!li) return; clearRate(dir, id); li.querySelector('.pct').textContent = '失败'; if (dir === 'out') { li.classList.add('finished'); refreshClearSent(); } }
+// ---- saving a LARGE received file ----------------------------------------------------------------
+// A file over INLINE_MAX has no blob: its bytes are in IndexedDB and only the service worker can serve
+// them back, at /fileshare/dl/<id>. How the page ASKS for that URL decides whether the worker is
+// consulted at all — Chromium issues an <a download> from the browser-process download manager, which
+// never consults the service worker, so the request reached the origin server, took its 404, and the
+// browser reported "No file" on a transfer that plainly succeeded. WebKit routes the same link through
+// the worker, which is why this shipped working on iPad and broken on every desktop Chromium browser.
+//
+// So where the File System Access API exists — desktop Chromium, exactly where the link is broken — the
+// download manager is skipped entirely: ask for a real save location, then stream the worker's response
+// body to disk. The bytes never accumulate in memory, nothing is handed to a background download, and
+// on a PC it is the plain "save this file" the user wants rather than a share sheet.
+const dlUrl = (id) => new URL('dl/' + id, import.meta.url).href;   // resolved against this module, so a
+// page reached without its trailing slash can't turn dl/<id> into /dl/<id>, which the route would miss.
+const PLAIN_DOWNLOAD_REACHES_SW = /^((?!chrome|chromium|crios|edg|android).)*safari/i.test(navigator.userAgent);
+
+// Resolves true if the file was written, false if the user dismissed the save dialog; throws if the
+// worker could not serve the file, so the row can say so instead of silently doing nothing.
+async function saveToDisk(picked, id) {
+  let handle;
+  try { handle = await picked; }
+  catch (e) {
+    if (e && e.name === 'AbortError') return false;        // dialog dismissed
+    throw e;
+  }
+  const res = await fetch(dlUrl(id));
+  if (!res.ok || !res.body) throw new Error('dl ' + res.status);
+  await res.body.pipeTo(await handle.createWritable());
+  return true;
+}
+
 function receiveItem({ id, name, blob, error }) {
   const li = itemEls.in.get(id); if (!li) return;
   clearRate('in', id);
   if (error) { li.querySelector('.pct').textContent = '接收失败'; li.classList.add('recv-fail'); return; }
   li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已接收';
 
-  // Saving a LARGE received file means asking the service worker for /fileshare/dl/<id> — and HOW you
-// ask decides whether the worker ever sees it. Chromium issues an <a download> from the browser-process
-// download manager, which does not consult the service worker at all: the request goes straight to the
-// origin server, gets its 404, and the browser reports "No file" on a transfer that plainly succeeded.
-// A NAVIGATION does run through the worker, and the response's Content-Disposition: attachment turns it
-// into a download without leaving the page (the technique StreamSaver uses). WebKit routes the plain
-// link correctly and restricts iframe-initiated downloads, so it keeps the link it was built for.
-// Guarded by test/fileshare-dl-click-e2e.mjs, which clicks the real element in a real browser.
-const LINK_REACHES_SW = /^((?!chrome|chromium|crios|edg|android).)*safari/i.test(navigator.userAgent);
-// Resolved against this module, not the page: `dl/<id>` as a page-relative URL silently becomes /dl/<id>
-// if the page is ever reached without its trailing slash, which the worker's route would not match.
-const dlUrl = (id) => new URL('dl/' + id, import.meta.url).href;
-function streamSave(id) {
-  const f = document.createElement('iframe');
-  f.hidden = true; f.src = dlUrl(id);
-  document.body.appendChild(f);
-  // The navigation is replaced by a download the browser now owns, so the frame has done its job; keep
-  // it around briefly anyway rather than racing the hand-off.
-  setTimeout(() => f.remove(), 60_000);
-}
-
-// Large files streamed to IndexedDB have no in-memory blob: save them via the service-worker
+  // Large files streamed to IndexedDB have no in-memory blob: save them via the service-worker
   // attachment stream (memory-safe, writes straight to disk), and skip the batch checkbox — batching
   // zips/shares in memory, which is exactly what we avoid for big files.
   if (!blob) {
     idbIds.add(id);
-    const a = document.createElement('a'); a.className = 'dl'; a.href = dlUrl(id); a.download = name; a.textContent = '保存';
+    const a = document.createElement('a'); a.className = 'dl'; a.href = dlUrl(id); a.textContent = '保存';
+    // Safari's original <a download> path reaches the worker. Elsewhere without a file picker (for
+    // example Chromium on Android), leave `download` off: a normal navigation reaches the worker and
+    // its Content-Disposition header turns that navigation into a download without leaving the page.
+    if (window.showSaveFilePicker || PLAIN_DOWNLOAD_REACHES_SW) a.download = name;
     a.addEventListener('click', (e) => {
-      markSaved(id);
-      if (!LINK_REACHES_SW) { e.preventDefault(); streamSave(id); }
+      // No picker: allow either Safari's known-good download link or the normal-navigation fallback.
+      if (!window.showSaveFilePicker) { markSaved(id); return; }
+      e.preventDefault();
+      a.classList.remove('save-fail');
+      // Called synchronously so it still counts as inside the click gesture.
+      let picked;
+      try { picked = window.showSaveFilePicker({ suggestedName: name }); }
+      catch (err) { picked = Promise.reject(err); }
+      a.textContent = '保存中…';
+      saveToDisk(picked, id)
+        .then((saved) => { a.textContent = '保存'; if (saved) markSaved(id); })
+        .catch(() => { a.textContent = '保存失败'; a.classList.add('save-fail'); });
     });
     li.appendChild(a);
     return;

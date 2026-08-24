@@ -1,14 +1,15 @@
 // Saving a LARGE received file, exercised the way a user does it — in a real browser, against a real
 // service worker. Files over INLINE_MAX are not blobs; their 保存 goes to /fileshare/dl/<id>, which only
 // the service worker can answer. How the page ASKS for that URL decides whether the worker is consulted
-// at all, and Chromium and WebKit disagree — so this asserts BOTH branches of that choice:
+// at all, and Chromium and WebKit disagree — so this asserts both Chromium download mechanisms:
 //
 //   <a download>  → Chromium hands it to the browser-process download manager, which never consults the
 //                   service worker. The request reaches the origin server, 404s, and the download fails
 //                   with "No file" on a transfer that plainly succeeded. This is the shipped bug.
-//   iframe nav    → runs through the worker; Content-Disposition: attachment makes it a download.
+//   top-level nav → runs through the worker; Content-Disposition: attachment makes it a download.
 //
-// fileshare/main.js picks between them on LINK_REACHES_SW. Usage: node test/fileshare-dl-click-e2e.mjs
+// Desktop Chromium normally takes the safer File System Access path; the navigation is its fallback on
+// platforms without showSaveFilePicker. Usage: node test/fileshare-dl-click-e2e.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -67,8 +68,8 @@ async function download(how, id) {
   });
   await page.evaluate((how, id) => {
     const url = new URL('dl/' + id, location.href).href;
-    if (how === 'iframe') {
-      const f = document.createElement('iframe'); f.hidden = true; f.src = url; document.body.appendChild(f);
+    if (how === 'navigate') {
+      location.replace(url);
     } else {
       const a = document.createElement('a'); a.href = url; a.download = 'video.mp4'; document.body.appendChild(a); a.click();
     }
@@ -83,13 +84,14 @@ const viaLink = await download('link', 515151);
 ok(viaLink.state !== 'completed' || !viaLink.sizes.includes(SIZE),
   `<a download> does NOT reach the service worker in this browser (state=${viaLink.state}) — the bug this guards`);
 
-const viaFrame = await download('iframe', 626262);
-ok(viaFrame.state === 'completed', `an iframe navigation completes the download (state=${viaFrame.state})`);
-ok(viaFrame.sizes.includes(SIZE), `and writes the whole ${SIZE}-byte file (${viaFrame.sizes})`);
+const viaNavigation = await download('navigate', 626262);
+ok(viaNavigation.state === 'completed', `a top-level navigation completes the download (state=${viaNavigation.state})`);
+ok(viaNavigation.sizes.includes(SIZE), `and writes the whole ${SIZE}-byte file (${viaNavigation.sizes})`);
 
 // the shipping code must be the one that works here
 const src = fs.readFileSync(path.join(ROOT, 'fileshare', 'main.js'), 'utf8');
-ok(/LINK_REACHES_SW/.test(src) && /streamSave/.test(src), 'main.js routes the streamed save through streamSave()');
+ok(/showSaveFilePicker/.test(src) && /res\.body\.pipeTo/.test(src), 'main.js streams desktop Chromium saves into a picked file');
+ok(!/streamSave/.test(src) && !/createElement\(['"]iframe['"]\)/.test(src), 'main.js no longer uses the crash-prone hidden iframe');
 ok(!/a\.href = 'dl\/' \+ id/.test(src), 'main.js no longer builds a page-relative dl/<id> href');
 
 done();

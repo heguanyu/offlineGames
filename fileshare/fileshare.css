@@ -125,6 +125,7 @@ button.secondary:active { background: var(--accent-dim); }
 /* once a received file has been saved, dim its row + flip the action to a confirmed state */
 .xfer-list li.item.saved { opacity: 0.55; }
 .xfer-list a.dl.saved { color: var(--good); border-color: var(--good); }
+.xfer-list a.dl.save-fail { color: var(--bad); border-color: var(--bad); }
 
 /* received item: checkbox + filename on one tappable row */
 .recv-head { display: flex; align-items: center; gap: 8px; cursor: pointer; }

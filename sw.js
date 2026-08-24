@@ -1,7 +1,7 @@
 ﻿// Semantic app version — the single source of truth, displayed on the hub.
 // Bump it whenever any cached file changes: it triggers a fresh re-download
 // of everything in ASSETS on the next online visit.
-const CACHE = 'offline-games-1.2.0';
+const CACHE = 'offline-games-1.2.1';
 
 // The heavy MEDIA (voice sprites + artwork + oversized vendor libs) lives HERE instead, versioned by
 // content and NOT wiped on a version bump — see the MEDIA list below. One shared bucket across the
@@ -330,12 +330,23 @@ function crossOriginIsolate(res) {
 // body is a ReadableStream pulled block-by-block from IndexedDB — so the browser writes to disk as it
 // streams and the whole file never has to live in memory at once (which is what produced a 0-byte
 // save on iOS). Content-Length drives the browser's own download progress.
+// Memoized: this used to open a fresh connection for EVERY block and close none of them, so a 1 GB
+// save leaked ~250 of them into the storage process.
+let _fsDb = null;
 function fsRecvDb() {
-  return new Promise((resolve, reject) => {
-    const r = indexedDB.open('offlinegames-fileshare');
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
+  if (!_fsDb) {
+    _fsDb = new Promise((resolve, reject) => {
+      const r = indexedDB.open('offlinegames-fileshare');
+      r.onsuccess = () => {
+        const d = r.result;
+        d.onclose = () => { _fsDb = null; };
+        d.onversionchange = () => d.close();
+        resolve(d);
+      };
+      r.onerror = () => reject(r.error);
+    }).catch((e) => { _fsDb = null; throw e; });
+  }
+  return _fsDb;
 }
 function fsGet(store, key) {
   return fsRecvDb().then((d) => new Promise((resolve, reject) => {
@@ -349,13 +360,19 @@ function fsGet(store, key) {
 async function streamRecvFile(id) {
   const meta = await fsGet('files', id).catch(() => null);
   if (!meta) return new Response('not found', { status: 404 });
+  // Number(): a record without a usable block count must end the stream, not leave `seq >= undefined`
+  // false forever — that spins pull() in a tight loop that enqueues nothing and never terminates.
+  const blocks = Number(meta.blocks) || 0;
   let seq = 0;
   const stream = new ReadableStream({
     async pull(controller) {
-      if (seq >= meta.blocks) { controller.close(); return; }
+      if (seq >= blocks) { controller.close(); return; }
       const block = await fsGet('blocks', [id, seq++]);
-      if (block) controller.enqueue(new Uint8Array(block));
-      if (seq >= meta.blocks) controller.close();
+      // A missing block means the file can no longer be reassembled; failing loudly beats handing the
+      // browser a body that silently stops short of the Content-Length we promised.
+      if (!block) { controller.error(new Error('fileshare: block ' + (seq - 1) + ' of ' + id + ' is gone')); return; }
+      controller.enqueue(new Uint8Array(block));
+      if (seq >= blocks) controller.close();
     },
   });
   const fn = encodeURIComponent(meta.name || ('file-' + id)).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16));
