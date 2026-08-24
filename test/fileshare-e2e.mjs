@@ -42,6 +42,16 @@ async function run() {
   // landing view visible on both
   await host.waitForSelector('#view-landing:not([hidden])', { timeout: 5000 });
   console.log('  landing visible');
+  const themeIconFits = await host.evaluate(() => {
+    const button = document.getElementById('btn-theme');
+    const box = button.getBoundingClientRect();
+    const range = document.createRange(); range.selectNodeContents(button);
+    const glyph = range.getBoundingClientRect();
+    const style = getComputedStyle(button);
+    return style.paddingLeft === '0px' && style.paddingRight === '0px' &&
+      glyph.left >= box.left && glyph.right <= box.right && glyph.top >= box.top && glyph.bottom <= box.bottom;
+  });
+  if (!themeIconFits) return fail('theme palette icon overflows its circular button');
 
   // host creates a share → a 9-char code appears
   await host.evaluate(() => document.getElementById('btn-host').click());

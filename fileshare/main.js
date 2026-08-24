@@ -372,6 +372,27 @@ async function saveToDisk(picked, id) {
   return true;
 }
 
+// Batch controls are intentionally a multi-file affordance. Keep a single received row clean; once a
+// second batch-eligible file exists, add checkboxes to both rows and reveal 全选 / 打包 .zip together.
+function syncBatchPickers() {
+  const eligible = [...received].filter(([, file]) => file.blob || CAN_STREAM_ZIP);
+  const show = eligible.length >= 2;
+  for (const [id] of eligible) {
+    const li = itemEls.in.get(id); if (!li) continue;
+    const existing = li.querySelector('.recv-head');
+    if (show && !existing) {
+      const fname = li.querySelector('.fname');
+      const head = document.createElement('label'); head.className = 'recv-head';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'pick'; cb.checked = !savedIds.has(id);
+      cb.addEventListener('change', refreshInActions);
+      li.insertBefore(head, fname); head.appendChild(cb); head.appendChild(fname);
+    } else if (!show && existing) {
+      const fname = existing.querySelector('.fname');
+      li.insertBefore(fname, existing); existing.remove();
+    }
+  }
+}
+
 function receiveItem({ id, name, size, blob, error }) {
   const li = itemEls.in.get(id); if (!li) return;
   clearRate('in', id);
@@ -380,19 +401,8 @@ function receiveItem({ id, name, size, blob, error }) {
 
   received.set(id, { name, size: Number(size) || (blob && blob.size) || 0, blob: blob || null });
 
-  // All small files, plus streamed files wherever a writable file picker exists, participate in batch
-  // selection. A streamed ZIP writes each service-worker body into the archive incrementally; browsers
-  // without a writable picker keep the memory-only small-file ZIP and per-row large-file save.
-  if (blob || CAN_STREAM_ZIP) {
-    const fname = li.querySelector('.fname');
-    const head = document.createElement('label'); head.className = 'recv-head';
-    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'pick'; cb.checked = true;
-    cb.addEventListener('change', refreshInActions);
-    li.insertBefore(head, fname); head.appendChild(cb); head.appendChild(fname);
-  }
-
   // Large files streamed to IndexedDB have no in-memory blob: keep their per-row service-worker save
-  // and, on picker-capable browsers, also expose them to the streaming ZIP batch path above.
+  // and, on picker-capable browsers, let syncBatchPickers expose them once a second file exists.
   if (!blob) {
     idbIds.add(id);
     const a = document.createElement('a'); a.className = 'dl'; a.href = dlUrl(id); a.textContent = '保存';
@@ -415,6 +425,7 @@ function receiveItem({ id, name, size, blob, error }) {
         .catch(() => { a.textContent = '保存失败'; a.classList.add('save-fail'); });
     });
     li.appendChild(a);
+    syncBatchPickers();
     refreshInActions();
     return;
   }
@@ -423,6 +434,7 @@ function receiveItem({ id, name, size, blob, error }) {
   const a = document.createElement('a'); a.className = 'dl'; a.href = URL.createObjectURL(blob); a.download = name; a.textContent = '保存';
   a.addEventListener('click', () => markSaved(id)); // the download still proceeds; just flag it saved
   li.appendChild(a);
+  syncBatchPickers();
   refreshInActions();
 }
 
@@ -456,11 +468,9 @@ if (canShareFiles) $('share-selected').hidden = false;
 
 function refreshInActions() {
   const actions = $('in-actions');
-  // The batch bar earns its place only when it does something a single row's 保存 can't: bundle ≥2
-  // files into one .zip (desktop) or reach Photos via the share sheet (mobile). A lone received file
-  // on desktop is handled entirely by its own 保存 — so no duplicate 下载 button appears.
+  // Checkbox rows and this toolbar appear as one unit only after a second batch-eligible file arrives.
   const picks = [...received.keys()].map((id) => itemEls.in.get(id)?.querySelector('.pick')).filter(Boolean);
-  const showBatch = picks.length > 0 && (picks.length >= 2 || canShareFiles);
+  const showBatch = picks.length >= 2;
   actions.hidden = !showBatch;
   if (!showBatch) return;
   const checked = picks.filter((c) => c.checked).length;
@@ -528,10 +538,10 @@ $('share-selected').addEventListener('click', async () => {
   try { await navigator.share({ files }); ids.forEach(markSaved); }
   catch (e) { if (e && e.name !== 'AbortError') { triggerDownload(picks.length === 1 ? picks[0].blob : await makeZip(picks), picks.length === 1 ? picks[0].name : zipName()); ids.forEach(markSaved); } }
 });
-// Desktop: bundle the selected files into one .zip (single files are saved from their own row).
+// Desktop: stream multiple selected files into one .zip; a lone file uses its per-row save action.
 $('save-selected').addEventListener('click', async () => {
   const ids = selectedIds();
-  if (ids.length < 2) return; // a lone file uses its row's 保存 — this button only bundles
+  if (ids.length < 2) return;
   const picks = ids.map((id) => received.get(id));
   const btn = $('save-selected');
   btn.classList.remove('save-fail');
