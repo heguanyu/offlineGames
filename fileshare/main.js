@@ -346,13 +346,37 @@ function receiveItem({ id, name, blob, error }) {
   if (error) { li.querySelector('.pct').textContent = '接收失败'; li.classList.add('recv-fail'); return; }
   li.querySelector('.bar').classList.add('done'); li.querySelector('.bar > span').style.width = '100%'; li.querySelector('.pct').textContent = '已接收';
 
-  // Large files streamed to IndexedDB have no in-memory blob: save them via the service-worker
+  // Saving a LARGE received file means asking the service worker for /fileshare/dl/<id> — and HOW you
+// ask decides whether the worker ever sees it. Chromium issues an <a download> from the browser-process
+// download manager, which does not consult the service worker at all: the request goes straight to the
+// origin server, gets its 404, and the browser reports "No file" on a transfer that plainly succeeded.
+// A NAVIGATION does run through the worker, and the response's Content-Disposition: attachment turns it
+// into a download without leaving the page (the technique StreamSaver uses). WebKit routes the plain
+// link correctly and restricts iframe-initiated downloads, so it keeps the link it was built for.
+// Guarded by test/fileshare-dl-click-e2e.mjs, which clicks the real element in a real browser.
+const LINK_REACHES_SW = /^((?!chrome|chromium|crios|edg|android).)*safari/i.test(navigator.userAgent);
+// Resolved against this module, not the page: `dl/<id>` as a page-relative URL silently becomes /dl/<id>
+// if the page is ever reached without its trailing slash, which the worker's route would not match.
+const dlUrl = (id) => new URL('dl/' + id, import.meta.url).href;
+function streamSave(id) {
+  const f = document.createElement('iframe');
+  f.hidden = true; f.src = dlUrl(id);
+  document.body.appendChild(f);
+  // The navigation is replaced by a download the browser now owns, so the frame has done its job; keep
+  // it around briefly anyway rather than racing the hand-off.
+  setTimeout(() => f.remove(), 60_000);
+}
+
+// Large files streamed to IndexedDB have no in-memory blob: save them via the service-worker
   // attachment stream (memory-safe, writes straight to disk), and skip the batch checkbox — batching
   // zips/shares in memory, which is exactly what we avoid for big files.
   if (!blob) {
     idbIds.add(id);
-    const a = document.createElement('a'); a.className = 'dl'; a.href = 'dl/' + id; a.download = name; a.textContent = '保存';
-    a.addEventListener('click', () => markSaved(id));
+    const a = document.createElement('a'); a.className = 'dl'; a.href = dlUrl(id); a.download = name; a.textContent = '保存';
+    a.addEventListener('click', (e) => {
+      markSaved(id);
+      if (!LINK_REACHES_SW) { e.preventDefault(); streamSave(id); }
+    });
     li.appendChild(a);
     return;
   }
@@ -390,7 +414,12 @@ function markSaved(id) {
 // and offers "存储 N 张图像" (→ Photos) for images and "存储到文件" for the rest — i.e. the files arrive
 // separately, in one tap. So we prefer Web Share where it can share files (mobile), and fall back to a
 // single .zip on desktop, where Photos doesn't exist and one download beats N.
-const canShareFiles = (() => {
+// Desktop Chromium also reports canShare({files}) === true — Windows has a share sheet — but on a PC
+// "保存到相册 / 分享" is the wrong offer: there is no photo library, and the user wants the file on disk.
+// So the share path is limited to touch devices, where it is the ONLY way to reach Photos; a PC gets
+// the plain save (each row's 保存, or 打包 .zip for a multi-file selection).
+const isHandheld = matchMedia('(pointer: coarse) and (hover: none)').matches;
+const canShareFiles = isHandheld && (() => {
   try { return !!(navigator.canShare && navigator.canShare({ files: [new File([new Blob([1])], 'p.bin')] })); }
   catch { return false; }
 })();
