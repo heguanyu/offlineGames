@@ -76,6 +76,7 @@ ok(dv.getUint32(eocd + 16, true) === off, 'EOCD central-directory offset points 
 // ever needing an aggregate Blob. Bit 3 moves CRC/sizes into a post-data descriptor.
 const chunks = [];
 let maxWrite = 0;
+const progress = [];
 const writable = new WritableStream({
   write(value) {
     const u = value instanceof Uint8Array ? value : new Uint8Array(value);
@@ -93,7 +94,7 @@ await writeZip(files.map((f, index) => ({
       controller.close();
     },
   }),
-})), writable);
+})), writable, { onProgress: (done, total, complete) => progress.push({ done, total, complete }) });
 
 const streamLen = chunks.reduce((n, c) => n + c.length, 0);
 const streamBuf = new Uint8Array(streamLen);
@@ -120,6 +121,10 @@ ok(streamNames[0] === 'photo.jpg' && streamNames[2] === 'photo (1).jpg', 'stream
 ok(streamDv.getUint32(streamOff, true) === 0x02014b50, 'stream ZIP central directory follows entries');
 ok(streamDv.getUint32(streamBuf.length - 22, true) === 0x06054b50, 'stream ZIP ends with EOCD');
 ok(maxWrite <= Math.max(...files.map((f) => f.bytes.length), 100), `stream writer emits bounded pieces (largest ${maxWrite})`);
+const payloadTotal = files.reduce((n, f) => n + f.bytes.length, 0);
+ok(progress[0]?.done === 0 && progress[0]?.total === payloadTotal, 'stream ZIP reports progress from zero with the correct total');
+ok(progress.every((p, i) => i === 0 || p.done >= progress[i - 1].done), 'stream ZIP progress is monotonic');
+ok(progress.at(-1)?.done === payloadTotal && progress.at(-1)?.complete === true, 'stream ZIP reports completion at 100%');
 
 let shortRejected = false, shortAborted = false;
 try {

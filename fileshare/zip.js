@@ -111,7 +111,7 @@ export async function makeZip(files) {
 // an entry (or the finished archive) as one ArrayBuffer/Blob, so it is safe for IndexedDB-backed files.
 // Each entry is { name, size, stream: () => ReadableStream }. Sizes must fit classic ZIP fields; ZIP64
 // is rejected before the first byte and the destination is aborted rather than left subtly corrupt.
-export async function writeZip(files, writable) {
+export async function writeZip(files, writable, { onProgress } = {}) {
   const MAX32 = 0xFFFFFFFF;
   let writer = null;
   try {
@@ -136,6 +136,15 @@ export async function writeZip(files, writable) {
       if (predicted >= MAX32) throw new Error('zip: archive is too large (ZIP64 required)');
     }
     if (predictedCd >= MAX32) throw new Error('zip: central directory is too large (ZIP64 required)');
+
+    const totalBytes = entries.reduce((total, entry) => total + entry.size, 0);
+    let completedBytes = 0;
+    const report = (complete = false) => {
+      if (typeof onProgress === 'function') {
+        try { onProgress(completedBytes, totalBytes, complete); } catch {}
+      }
+    };
+    report();
 
     writer = writable.getWriter();
     const central = [];
@@ -168,6 +177,8 @@ export async function writeZip(files, writable) {
           for (let i = 0; i < chunk.length; i++) crc = CRC_TABLE[(crc ^ chunk[i]) & 0xFF] ^ (crc >>> 8);
           await writer.write(chunk);
           written += chunk.byteLength;
+          completedBytes += chunk.byteLength;
+          report();
         }
       } catch (e) {
         try { await reader.cancel(e); } catch {}
@@ -217,6 +228,7 @@ export async function writeZip(files, writable) {
     ev.setUint32(16, cdStart, true);
     await writer.write(end);
     await writer.close();
+    report(true);
   } catch (e) {
     try {
       if (writer) await writer.abort(e);

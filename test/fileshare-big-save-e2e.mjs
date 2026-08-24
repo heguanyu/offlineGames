@@ -36,10 +36,22 @@ const guest = await browser.newPage();
 await guest.evaluateOnNewDocument(() => {
   Object.defineProperty(window, 'showSaveFilePicker', {
     configurable: true,
-    value: async (opts) => (await navigator.storage.getDirectory()).getFileHandle(
-      opts?.suggestedName?.endsWith('.zip') ? '__fileshare_big_zip__' : '__fileshare_big_save__',
-      { create: true },
-    ),
+    value: async (opts) => {
+      const zipped = opts?.suggestedName?.endsWith('.zip');
+      const handle = await (await navigator.storage.getDirectory()).getFileHandle(
+        zipped ? '__fileshare_big_zip__' : '__fileshare_big_save__', { create: true });
+      if (!zipped) return handle;
+      // Slow the test ZIP sink slightly so the modal lifecycle is observable while still writing to a
+      // real OPFS FileSystemWritableFileStream.
+      return { createWritable: async () => {
+        const writer = (await handle.createWritable()).getWriter();
+        return new WritableStream({
+          async write(chunk) { await new Promise((r) => setTimeout(r, 20)); await writer.write(chunk); },
+          close() { return writer.close(); },
+          abort(reason) { return writer.abort(reason); },
+        });
+      } };
+    },
   });
 });
 let crashed = null;
@@ -138,12 +150,40 @@ await guest.waitForFunction(() => {
 }, { timeout: 5000 });
 
 console.log('  clicking 打包 .zip for one large + one small file …');
+await guest.evaluate(() => {
+  const dialog = document.getElementById('zip-progress-modal');
+  const ring = document.getElementById('zip-progress-ring');
+  window.__zipModalTest = { opened: false, values: [] };
+  const sample = () => {
+    if (dialog.open) window.__zipModalTest.opened = true;
+    window.__zipModalTest.values.push(Number(ring.getAttribute('aria-valuenow')));
+  };
+  new MutationObserver(sample).observe(dialog, { subtree: true, attributes: true, attributeFilter: ['open', 'aria-valuenow'] });
+  sample();
+});
 await guest.click('#save-selected');
+const modalOpened = await guest.waitForFunction(() => window.__zipModalTest?.opened &&
+  document.getElementById('zip-progress-modal').matches(':modal'), { timeout: 5000 }).then(() => true).catch(() => false);
+if (!modalOpened) fail('ZIP progress did not open as a blocking modal');
+const exitGuarded = await guest.evaluate(() => {
+  const event = new Event('beforeunload', { cancelable: true });
+  dispatchEvent(event);
+  return event.defaultPrevented;
+});
+if (!exitGuarded) fail('ZIP progress did not guard against leaving the page');
 const zipped = await guest.waitForFunction(
   () => [...document.querySelectorAll('#in-list a.dl')].every((a) => a.textContent === '已保存 ✓'),
   { timeout: 120000, polling: 250 },
 ).then(() => true).catch(() => false);
 if (!zipped) fail('the streamed ZIP write did not finish');
+const modalState = await guest.evaluate(() => ({
+  ...window.__zipModalTest,
+  open: document.getElementById('zip-progress-modal').open,
+  final: Number(document.getElementById('zip-progress-ring').getAttribute('aria-valuenow')),
+}));
+if (!modalState.opened || modalState.open || modalState.final !== 100 || Math.max(...modalState.values) < 1) {
+  fail('ZIP progress modal did not advance to 100% and close');
+}
 
 const zip = await guest.evaluate(async ({ bigSize, smallSize }) => {
   const root = await navigator.storage.getDirectory();

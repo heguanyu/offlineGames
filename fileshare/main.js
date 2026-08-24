@@ -513,6 +513,43 @@ function zipEntries(ids) {
     };
   });
 }
+const zipProgressModal = $('zip-progress-modal');
+const zipProgressRing = $('zip-progress-ring');
+const zipProgressPct = $('zip-progress-pct');
+const zipProgressDetail = $('zip-progress-detail');
+let zipPackaging = false;
+let zipProgressLastPct = -1;
+function updateZipProgress(done, total, complete = false) {
+  const pct = complete ? 100 : (total ? Math.min(99, Math.floor(done / total * 100)) : 0);
+  if (pct === zipProgressLastPct && !complete) return;
+  zipProgressLastPct = pct;
+  zipProgressRing.style.setProperty('--zip-angle', (pct * 3.6) + 'deg');
+  zipProgressRing.setAttribute('aria-valuenow', String(pct));
+  zipProgressPct.textContent = pct + '%';
+  zipProgressDetail.textContent = total ? `${fmtBytes(Math.min(done, total))} / ${fmtBytes(total)}` : '准备中…';
+}
+function openZipProgress(total) {
+  zipPackaging = true;
+  zipProgressLastPct = -1;
+  updateZipProgress(0, total);
+  if (!zipProgressModal.open) {
+    if (typeof zipProgressModal.showModal === 'function') zipProgressModal.showModal();
+    else zipProgressModal.setAttribute('open', '');
+  }
+}
+function closeZipProgress() {
+  zipPackaging = false;
+  if (zipProgressModal.open) {
+    if (typeof zipProgressModal.close === 'function') zipProgressModal.close();
+    else zipProgressModal.removeAttribute('open');
+  }
+}
+zipProgressModal.addEventListener('cancel', (e) => e.preventDefault()); // Escape must not abandon a write
+addEventListener('beforeunload', (e) => {
+  if (!zipPackaging) return;
+  e.preventDefault();
+  e.returnValue = ''; // Chromium/Firefox show their standard "leave site?" confirmation
+});
 async function saveZipToDisk(picked, entries) {
   let handle;
   try { handle = await picked; }
@@ -520,7 +557,13 @@ async function saveZipToDisk(picked, entries) {
     if (e && e.name === 'AbortError') return false;
     throw e;
   }
-  await writeZip(entries, await handle.createWritable());
+  const total = entries.reduce((sum, entry) => sum + entry.size, 0);
+  openZipProgress(total);
+  try {
+    await writeZip(entries, await handle.createWritable(), { onProgress: updateZipProgress });
+  } finally {
+    closeZipProgress();
+  }
   return true;
 }
 $('sel-all').addEventListener('change', (e) => {
